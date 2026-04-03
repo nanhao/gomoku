@@ -1,0 +1,2081 @@
+"""五子棋图形界面主程序
+
+支持三种游戏模式：
+1. 人人对战（PvP）- 传统双人对战
+2. 人机对战（PvE）- 玩家 vs AI
+3. AI 内战（AI vs AI）- AI 自动对战
+"""
+
+import sys
+import os
+import json
+
+# 添加项目根目录到路径
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+import tkinter as tk
+from tkinter import messagebox, simpledialog, ttk
+from game import GomokuController
+from ai import AIGameManager, AIEngine
+from ai.random import RandomModel
+
+
+class GameModeSelector:
+    """游戏模式选择器 - 启动时显示"""
+    
+    # 配色方案
+    COLOR_BG = "#F5F5DC"           # 背景色（米色）
+    COLOR_BEAR = "#D2691E"         # 小熊棕
+    COLOR_BUNNY = "#FFB6C1"        # 小兔粉
+    COLOR_TEXT = "#5D4E37"         # 文字颜色（深棕）
+    COLOR_BUTTON_BG = "#FFE4B5"    # 按钮背景色（暖黄）
+    
+    def __init__(self, root):
+        """初始化模式选择器"""
+        self.root = root
+        self.root.title("🐻 森林五子棋 - 选择游戏模式 🐰")
+        self.root.geometry("400x600")
+        self.root.resizable(False, False)
+        self.root.configure(bg=self.COLOR_BG)
+        
+        # 选择结果
+        self.result = None
+        
+        # 创建界面
+        self._create_widgets()
+        
+        # 居中显示
+        self.root.update_idletasks()
+        width = self.root.winfo_width()
+        height = self.root.winfo_height()
+        x = (self.root.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.root.winfo_screenheight() // 2) - (height // 2)
+        self.root.geometry(f'{width}x{height}+{x}+{y}')
+    
+    def _create_widgets(self):
+        """创建界面元素"""
+        # 标题
+        title_frame = tk.Frame(self.root, bg=self.COLOR_BG)
+        title_frame.pack(pady=30)
+        
+        tk.Label(
+            title_frame,
+            text="🐻",
+            font=("微软雅黑", 36),
+            bg=self.COLOR_BG
+        ).pack(side=tk.LEFT, padx=10)
+        
+        tk.Label(
+            title_frame,
+            text="森林五子棋",
+            font=("微软雅黑", 24, "bold"),
+            bg=self.COLOR_BG,
+            fg=self.COLOR_BEAR
+        ).pack(side=tk.LEFT)
+        
+        tk.Label(
+            title_frame,
+            text="🐰",
+            font=("微软雅黑", 36),
+            bg=self.COLOR_BG
+        ).pack(side=tk.LEFT, padx=10)
+        
+        # 副标题
+        tk.Label(
+            self.root,
+            text="请选择游戏模式",
+            font=("微软雅黑", 14),
+            bg=self.COLOR_BG,
+            fg=self.COLOR_TEXT
+        ).pack(pady=20)
+        
+        # 模式选择按钮
+        modes = [
+            {
+                "text": "👥 人人对战",
+                "desc": "两位玩家轮流对弈",
+                "command": self._select_pvp,
+                "color": "#90EE90"
+            },
+            {
+                "text": "🤖 人机对战",
+                "desc": "玩家 vs AI 电脑",
+                "command": self._select_pve,
+                "color": "#87CEEB"
+            },
+            {
+                "text": "⚔️ AI 内战",
+                "desc": "AI 自动对战模式",
+                "command": self._select_ai_vs_ai,
+                "color": "#DDA0DD"
+            }
+        ]
+        
+        for mode in modes:
+            self._create_mode_button(mode)
+        
+        # 分隔线
+        tk.Frame(self.root, height=2, bg="#8B4513").pack(fill=tk.X, padx=40, pady=15)
+        
+        # 查看回放按钮
+        replay_frame = tk.Frame(self.root, bg=self.COLOR_BG)
+        replay_frame.pack(pady=10, padx=40, fill=tk.X)
+        
+        tk.Button(
+            replay_frame,
+            text="📺 查看回放",
+            font=("微软雅黑", 12, "bold"),
+            bg="#F0E68C",
+            fg=self.COLOR_TEXT,
+            activebackground=self.COLOR_BEAR,
+            activeforeground="white",
+            relief=tk.RAISED,
+            bd=3,
+            cursor="hand2",
+            command=self._select_replay
+        ).pack(fill=tk.X, pady=5)
+        
+        tk.Label(
+            replay_frame,
+            text="查看历史 AI 对战记录",
+            font=("微软雅黑", 10),
+            bg=self.COLOR_BG,
+            fg="gray"
+        ).pack()
+    
+    def _create_mode_button(self, mode):
+        """创建模式选择按钮"""
+        frame = tk.Frame(self.root, bg=self.COLOR_BG)
+        frame.pack(pady=10, padx=40, fill=tk.X)
+        
+        btn = tk.Button(
+            frame,
+            text=mode["text"],
+            font=("微软雅黑", 14, "bold"),
+            bg=mode["color"],
+            fg=self.COLOR_TEXT,
+            activebackground=self.COLOR_BEAR,
+            activeforeground="white",
+            relief=tk.RAISED,
+            bd=3,
+            cursor="hand2",
+            command=mode["command"]
+        )
+        btn.pack(fill=tk.X, pady=5)
+        
+        tk.Label(
+            frame,
+            text=mode["desc"],
+            font=("微软雅黑", 10),
+            bg=self.COLOR_BG,
+            fg="gray"
+        ).pack()
+    
+    def _select_pvp(self):
+        """选择人人对战"""
+        self.result = {"mode": "pvp"}
+        self.root.destroy()
+    
+    def _select_replay(self):
+        """选择查看回放"""
+        self.result = {"mode": "replay"}
+        self.root.destroy()
+    
+    def _select_pve(self):
+        """选择人机对战，弹出颜色选择"""
+        self._show_color_selection()
+    
+    def _show_color_selection(self):
+        """显示执棋颜色选择对话框"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("选择执棋颜色")
+        dialog.geometry("300x200")
+        dialog.resizable(False, False)
+        dialog.configure(bg=self.COLOR_BG)
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        tk.Label(
+            dialog,
+            text="请选择您要执的棋子颜色",
+            font=("微软雅黑", 12),
+            bg=self.COLOR_BG,
+            fg=self.COLOR_TEXT
+        ).pack(pady=20)
+        
+        def select_color(color):
+            self.result = {"mode": "pve", "player_color": color}
+            dialog.destroy()
+            self.root.destroy()
+        
+        # 黑棋按钮
+        tk.Button(
+            dialog,
+            text="🐻 执黑棋（先手）",
+            font=("微软雅黑", 11, "bold"),
+            bg=self.COLOR_BEAR,
+            fg="white",
+            width=20,
+            command=lambda: select_color("black")
+        ).pack(pady=10)
+        
+        # 白棋按钮
+        tk.Button(
+            dialog,
+            text="🐰 执白棋（后手）",
+            font=("微软雅黑", 11, "bold"),
+            bg=self.COLOR_BUNNY,
+            fg=self.COLOR_TEXT,
+            width=20,
+            command=lambda: select_color("white")
+        ).pack(pady=10)
+    
+    def _select_ai_vs_ai(self):
+        """选择 AI 内战，弹出局数设置"""
+        self._show_ai_vs_ai_config()
+    
+    def _show_ai_vs_ai_config(self):
+        """显示 AI 内战配置对话框"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("AI 内战配置")
+        dialog.geometry("400x400")
+        dialog.resizable(False, False)
+        dialog.configure(bg=self.COLOR_BG)
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        tk.Label(
+            dialog,
+            text="⚔️ AI 内战模式",
+            font=("微软雅黑", 16, "bold"),
+            bg=self.COLOR_BG,
+            fg=self.COLOR_TEXT
+        ).pack(pady=15)
+        
+        # 获取可用 AI 列表
+        available_ais = self._get_available_ais()
+        
+        # 黑方 AI 选择
+        tk.Label(
+            dialog,
+            text="🐻 黑方 AI:",
+            font=("微软雅黑", 11),
+            bg=self.COLOR_BG,
+            fg=self.COLOR_TEXT
+        ).pack(pady=(15, 5))
+        
+        ai1_var = tk.StringVar(value=available_ais[0] if available_ais else "random")
+        ai1_combo = ttk.Combobox(
+            dialog,
+            textvariable=ai1_var,
+            values=available_ais,
+            font=("微软雅黑", 11),
+            width=20,
+            state="readonly"
+        )
+        ai1_combo.pack()
+        
+        # 白方 AI 选择
+        tk.Label(
+            dialog,
+            text="🐰 白方 AI:",
+            font=("微软雅黑", 11),
+            bg=self.COLOR_BG,
+            fg=self.COLOR_TEXT
+        ).pack(pady=(15, 5))
+        
+        ai2_var = tk.StringVar(value=available_ais[0] if available_ais else "random")
+        ai2_combo = ttk.Combobox(
+            dialog,
+            textvariable=ai2_var,
+            values=available_ais,
+            font=("微软雅黑", 11),
+            width=20,
+            state="readonly"
+        )
+        ai2_combo.pack()
+        
+        # 局数选择
+        tk.Label(
+            dialog,
+            text="对战局数:",
+            font=("微软雅黑", 11),
+            bg=self.COLOR_BG,
+            fg=self.COLOR_TEXT
+        ).pack(pady=(20, 5))
+        
+        num_games_var = tk.StringVar(value="1")
+        spinbox = tk.Spinbox(
+            dialog,
+            from_=1,
+            to=100,
+            textvariable=num_games_var,
+            font=("微软雅黑", 12),
+            width=10,
+            justify=tk.CENTER
+        )
+        spinbox.pack()
+        
+        def start_battle():
+            try:
+                num_games = int(num_games_var.get())
+                if 1 <= num_games <= 100:
+                    self.result = {
+                        "mode": "ai_vs_ai",
+                        "num_games": num_games,
+                        "ai1": ai1_var.get(),
+                        "ai2": ai2_var.get()
+                    }
+                    dialog.destroy()
+                    self.root.destroy()
+                else:
+                    messagebox.showwarning("提示", "局数必须在 1-100 之间")
+            except ValueError:
+                messagebox.showwarning("提示", "请输入有效的数字")
+        
+        tk.Button(
+            dialog,
+            text="开始对战",
+            font=("微软雅黑", 12, "bold"),
+            bg=self.COLOR_BUTTON_BG,
+            fg=self.COLOR_TEXT,
+            width=15,
+            command=start_battle
+        ).pack(pady=25)
+    
+    def _get_available_ais(self):
+        """获取可用的 AI 列表"""
+        # 目前只有 random AI，未来可以扩展
+        return ["random"]
+    
+    def get_result(self):
+        """获取选择结果"""
+        return self.result
+
+
+class GomokuGUI:
+    """五子棋图形界面类 - 可爱小动物风格"""
+    
+    # 棋盘配置
+    BOARD_SIZE = 15
+    CELL_SIZE = 42
+    BOARD_MARGIN = 50
+    
+    # 配色方案 - 自然清新风格
+    COLOR_BG = "#F5F5DC"           # 背景色（米色）
+    COLOR_BOARD = "#E3C16F"        # 棋盘背景色（木质原色）
+    COLOR_LINE = "#8B4513"         # 线条颜色（深棕色）
+    COLOR_BLACK = "#2C2C2C"        # 黑子颜色
+    COLOR_WHITE = "#FFFAF0"        # 白子颜色
+    COLOR_LAST_MOVE = "#FF6B35"    # 最后落子标记颜色（橙色）
+    
+    # 动物主题配色
+    COLOR_BEAR = "#D2691E"         # 小熊棕
+    COLOR_BUNNY = "#FFB6C1"        # 小兔粉
+    COLOR_CAT = "#FFA500"          # 小猫橙
+    COLOR_DOG = "#DEB887"          # 小狗棕
+    COLOR_TEXT = "#5D4E37"         # 文字颜色（深棕）
+    COLOR_BUTTON_BG = "#FFE4B5"    # 按钮背景色（暖黄）
+    COLOR_BUTTON_ACTIVE = "#DEB887"  # 按钮激活色
+    
+    # 动物表情符号
+    ANIMAL_BLACK = "🐻"            # 黑子 - 小熊
+    ANIMAL_WHITE = "🐰"            # 白子 - 小兔
+    ANIMAL_LAST = "🐾"             # 最后落子标记 - 爪印
+    
+    def __init__(self, root, game_mode="pvp", ai_player=None):
+        """
+        初始化图形界面
+        
+        Args:
+            root: Tkinter 根窗口
+            game_mode: 游戏模式，"pvp"/"pve"/"ai_vs_ai"
+            ai_player: AI 执棋颜色（人机对战模式），1=黑, 2=白
+        """
+        self.root = root
+        self.root.title("🐻 森林五子棋 🐰")
+        self.root.resizable(False, False)
+        self.root.configure(bg=self.COLOR_BG)
+        
+        # 设置窗口图标和样式
+        self._set_animal_style()
+        
+        # 游戏模式
+        self.game_mode = game_mode
+        self.ai_player = ai_player
+        self.ai_manager = None
+        
+        # 初始化游戏控制器
+        self.controller = GomokuController()
+        
+        # 如果是人机对战模式，创建 AI 管理器
+        if game_mode == "pve" and ai_player is not None:
+            engine = AIEngine(RandomModel())
+            self.ai_manager = AIGameManager(self.controller, engine, ai_player)
+        
+        # 游戏状态
+        self.current_save_name = None
+        
+        # 创建界面
+        self._create_menu()
+        self._create_main_frame()
+        self._create_board_canvas()
+        self._create_info_panel()
+        self._create_control_buttons()
+        
+        # 绑定点击事件
+        self.canvas.bind("<Button-1>", self._on_canvas_click)
+        
+        # 更新显示
+        self._update_display()
+        
+        # 如果是人机对战且 AI 执黑，自动开始游戏
+        if game_mode == "pve" and ai_player == 1:
+            self.root.after(500, self._start_pve_game)
+    
+    def _set_animal_style(self):
+        """设置小动物风格样式"""
+        # 设置全局字体
+        self.FONT_TITLE = ("微软雅黑", 22, "bold")
+        self.FONT_LABEL = ("微软雅黑", 12)
+        self.FONT_BUTTON = ("微软雅黑", 11, "bold")
+        self.FONT_SMALL = ("微软雅黑", 10)
+        
+        # 设置 ttk 样式
+        style = ttk.Style()
+        style.theme_use('clam')
+    
+    def _create_menu(self):
+        """创建菜单栏"""
+        menubar = tk.Menu(self.root)
+        self.root.config(menu=menubar)
+        
+        # 游戏菜单
+        game_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="游戏", menu=game_menu)
+        game_menu.add_command(label="新建游戏", command=self._new_game)
+        game_menu.add_command(label="加载游戏", command=self._load_game)
+        game_menu.add_separator()
+        game_menu.add_command(label="退出", command=self.root.quit)
+        
+        # 帮助菜单
+        help_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="帮助", menu=help_menu)
+        help_menu.add_command(label="游戏规则", command=self._show_rules)
+        help_menu.add_command(label="关于", command=self._show_about)
+    
+    def _create_main_frame(self):
+        """创建主框架"""
+        self.main_frame = tk.Frame(self.root, padx=20, pady=20, bg=self.COLOR_BG)
+        self.main_frame.pack()
+    
+    def _create_board_canvas(self):
+        """创建棋盘画布 - 森林原木风格"""
+        canvas_size = self.BOARD_MARGIN * 2 + (self.BOARD_SIZE - 1) * self.CELL_SIZE
+        
+        # 创建木质边框框架
+        self.board_frame = tk.Frame(
+            self.main_frame,
+            bg=self.COLOR_LINE,
+            bd=4,
+            relief=tk.RIDGE
+        )
+        self.board_frame.pack(side=tk.LEFT, padx=10)
+        
+        self.canvas = tk.Canvas(
+            self.board_frame,
+            width=canvas_size,
+            height=canvas_size,
+            bg=self.COLOR_BOARD,
+            highlightthickness=0,
+            relief=tk.FLAT
+        )
+        self.canvas.pack(padx=2, pady=2)
+        
+        self._draw_board()
+    
+    def _draw_board(self):
+        """绘制森林风格棋盘"""
+        # 清空画布
+        self.canvas.delete("all")
+        
+        # 绘制木质背景
+        canvas_size = self.BOARD_MARGIN * 2 + (self.BOARD_SIZE - 1) * self.CELL_SIZE
+        self.canvas.create_rectangle(
+            0, 0, canvas_size, canvas_size,
+            fill=self.COLOR_BOARD, outline=self.COLOR_LINE, width=1
+        )
+        
+        # 绘制网格线
+        for i in range(self.BOARD_SIZE):
+            # 横线
+            y = self.BOARD_MARGIN + i * self.CELL_SIZE
+            self.canvas.create_line(
+                self.BOARD_MARGIN, y,
+                self.BOARD_MARGIN + (self.BOARD_SIZE - 1) * self.CELL_SIZE, y,
+                fill=self.COLOR_LINE, width=1
+            )
+            # 纵线
+            x = self.BOARD_MARGIN + i * self.CELL_SIZE
+            self.canvas.create_line(
+                x, self.BOARD_MARGIN,
+                x, self.BOARD_MARGIN + (self.BOARD_SIZE - 1) * self.CELL_SIZE,
+                fill=self.COLOR_LINE, width=1
+            )
+        
+        # 绘制星位（使用小树叶装饰）
+        star_points = [(3, 3), (3, 11), (7, 7), (11, 3), (11, 11)]
+        for x, y in star_points:
+            cx = self.BOARD_MARGIN + x * self.CELL_SIZE
+            cy = self.BOARD_MARGIN + y * self.CELL_SIZE
+            self._draw_leaf(cx, cy)
+        
+        # 绘制坐标标签
+        for i in range(self.BOARD_SIZE):
+            # 横坐标（数字）
+            x = self.BOARD_MARGIN + i * self.CELL_SIZE
+            self.canvas.create_text(
+                x, self.BOARD_MARGIN - 25,
+                text=str(i), font=("微软雅黑", 10),
+                fill=self.COLOR_TEXT
+            )
+            # 纵坐标（数字）
+            y = self.BOARD_MARGIN + i * self.CELL_SIZE
+            self.canvas.create_text(
+                self.BOARD_MARGIN - 25, y,
+                text=str(i), font=("微软雅黑", 10),
+                fill=self.COLOR_TEXT
+            )
+    
+    def _draw_leaf(self, x, y):
+        """绘制小树叶装饰"""
+        # 绘制小绿叶
+        self.canvas.create_text(x, y, text="🌿", font=("微软雅黑", 8))
+    
+    def _create_info_panel(self):
+        """创建小动物风格信息面板"""
+        self.info_frame = tk.Frame(self.main_frame, padx=15, bg=self.COLOR_BG)
+        self.info_frame.pack(side=tk.LEFT, fill=tk.Y)
+        
+        # 标题（森林动物主题）
+        title_frame = tk.Frame(self.info_frame, bg=self.COLOR_BG)
+        title_frame.pack(pady=10)
+        
+        tk.Label(
+            title_frame,
+            text="🐻",
+            font=("微软雅黑", 24),
+            bg=self.COLOR_BG
+        ).pack(side=tk.LEFT, padx=3)
+        
+        tk.Label(
+            title_frame,
+            text="森林五子棋",
+            font=self.FONT_TITLE,
+            bg=self.COLOR_BG,
+            fg=self.COLOR_BEAR
+        ).pack(side=tk.LEFT)
+        
+        tk.Label(
+            title_frame,
+            text="🐰",
+            font=("微软雅黑", 24),
+            bg=self.COLOR_BG
+        ).pack(side=tk.LEFT, padx=3)
+        
+        # 分隔线
+        tk.Frame(self.info_frame, height=2, bg=self.COLOR_LINE).pack(fill=tk.X, pady=10)
+        
+        # 存档名称
+        self.save_name_label = tk.Label(
+            self.info_frame,
+            text="🌲 当前存档: 无",
+            font=self.FONT_LABEL,
+            bg=self.COLOR_BG,
+            fg=self.COLOR_TEXT
+        )
+        self.save_name_label.pack(pady=8)
+        
+        # 当前玩家（动物棋子）
+        self.player_label = tk.Label(
+            self.info_frame,
+            text="🎯 当前玩家: -",
+            font=("微软雅黑", 14, "bold"),
+            bg=self.COLOR_BG,
+            fg=self.COLOR_TEXT
+        )
+        self.player_label.pack(pady=10)
+        
+        # 游戏状态
+        self.status_label = tk.Label(
+            self.info_frame,
+            text="🌳 游戏状态: 未开始",
+            font=self.FONT_LABEL,
+            bg=self.COLOR_BG,
+            fg="gray"
+        )
+        self.status_label.pack(pady=8)
+        
+        # 分隔线
+        tk.Frame(self.info_frame, height=2, bg=self.COLOR_LINE).pack(fill=tk.X, pady=10)
+        
+        # 历史记录标题
+        tk.Label(
+            self.info_frame,
+            text="📝 对局记录",
+            font=self.FONT_LABEL,
+            bg=self.COLOR_BG,
+            fg=self.COLOR_TEXT
+        ).pack(pady=(10, 5), anchor=tk.W)
+        
+        # 历史记录列表框（木质边框）
+        history_outer_frame = tk.Frame(
+            self.info_frame,
+            bg=self.COLOR_LINE,
+            bd=2,
+            relief=tk.RIDGE
+        )
+        history_outer_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+        
+        history_frame = tk.Frame(history_outer_frame, bg=self.COLOR_BG)
+        history_frame.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
+        
+        scrollbar = tk.Scrollbar(history_frame, bg=self.COLOR_BUTTON_BG)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        self.history_listbox = tk.Listbox(
+            history_frame,
+            height=12,
+            width=22,
+            yscrollcommand=scrollbar.set,
+            font=("Consolas", 10),
+            bg=self.COLOR_BG,
+            fg=self.COLOR_TEXT,
+            selectbackground=self.COLOR_BEAR,
+            selectforeground="white",
+            relief=tk.FLAT,
+            highlightthickness=0
+        )
+        self.history_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=self.history_listbox.yview)
+    
+    def _create_control_buttons(self):
+        """创建森林风格控制按钮"""
+        button_frame = tk.Frame(self.info_frame, bg=self.COLOR_BG)
+        button_frame.pack(pady=15)
+        
+        # 按钮配置（森林动物主题）
+        button_config = [
+            ("🌱 新建游戏", self._new_game, "#90EE90"),
+            ("🌲 加载游戏", self._load_game, "#DEB887"),
+            ("💾 保存游戏", self._save_game, "#87CEEB"),
+            ("📺 回放对局", self._open_replay_browser, "#DDA0DD"),
+            ("🍃 悔棋", self._undo_move, "#F0E68C"),
+        ]
+        
+        for text, command, bg_color in button_config:
+            btn = tk.Button(
+                button_frame,
+                text=text,
+                command=command,
+                width=16,
+                font=self.FONT_BUTTON,
+                bg=bg_color,
+                fg=self.COLOR_TEXT,
+                activebackground=self.COLOR_BEAR,
+                activeforeground="white",
+                relief=tk.RAISED,
+                bd=3,
+                cursor="hand2"
+            )
+            if "悔棋" in text:
+                btn.config(state=tk.DISABLED, bg="#CCCCCC")
+            btn.pack(pady=6)
+            
+            # 添加悬停效果
+            btn.bind("<Enter>", lambda e, b=btn: b.config(bg=self.COLOR_BEAR, fg="white"))
+            btn.bind("<Leave>", lambda e, b=btn, c=bg_color: b.config(bg=c, fg=self.COLOR_TEXT))
+    
+    def _start_pve_game(self):
+        """启动人机对战游戏（AI 执黑时自动调用）"""
+        if self.ai_manager:
+            # 生成存档名称
+            save_name = self.controller._generate_save_name()
+            result = self.ai_manager.start_pve_game(save_name)
+            if "error" in result:
+                messagebox.showerror("错误", result["error"])
+            else:
+                self._update_display()
+    
+    def _on_canvas_click(self, event):
+        """处理画布点击事件"""
+        if self.controller.game is None:
+            messagebox.showinfo("提示", "请先新建或加载游戏")
+            return
+        
+        if self.controller.is_over():
+            messagebox.showinfo("提示", "游戏已结束")
+            return
+        
+        # 计算点击的格子坐标
+        # canvas_x 对应列 y，canvas_y 对应行 x
+        y = round((event.x - self.BOARD_MARGIN) / self.CELL_SIZE)
+        x = round((event.y - self.BOARD_MARGIN) / self.CELL_SIZE)
+        
+        # 检查坐标范围
+        if not (0 <= x < self.BOARD_SIZE and 0 <= y < self.BOARD_SIZE):
+            return
+        
+        # 人机对战模式
+        if self.game_mode == "pve" and self.ai_manager:
+            self._handle_pve_move(x, y)
+        else:
+            # 人人对战模式
+            self._handle_pvp_move(x, y)
+    
+    def _handle_pvp_move(self, x, y):
+        """处理人人对战落子"""
+        result = self.controller.make_move(x, y)
+        
+        if "error" in result:
+            if "已被占用" not in result["error"]:
+                messagebox.showerror("错误", result["error"])
+            return
+        
+        self._update_display()
+        
+        if result.get("game_over"):
+            winner_text = result["result"]
+            messagebox.showinfo("游戏结束", f"{winner_text}！")
+    
+    def _handle_pve_move(self, x, y):
+        """处理人机对战落子"""
+        # 使用 AI 管理器处理落子（会自动触发 AI 落子）
+        result = self.ai_manager.player_move(x, y)
+        
+        # 检查玩家落子错误
+        if "error" in result.get("player_result", {}):
+            error_msg = result["player_result"]["error"]
+            if "已被占用" not in error_msg:
+                messagebox.showerror("错误", error_msg)
+            return
+        
+        # 更新显示
+        self._update_display()
+        
+        # 检查游戏结束
+        player_result = result.get("player_result", {})
+        ai_result = result.get("ai_result", {})
+        
+        if player_result.get("game_over"):
+            winner_text = player_result["result"]
+            messagebox.showinfo("游戏结束", f"{winner_text}！")
+        elif ai_result.get("game_over"):
+            winner_text = ai_result["result"]
+            messagebox.showinfo("游戏结束", f"{winner_text}！")
+    
+    def _update_display(self):
+        """更新显示"""
+        # 重绘棋盘
+        self._draw_board()
+        
+        if self.controller.game is None:
+            self.save_name_label.config(text="💾 当前存档: 无")
+            self.player_label.config(text="🎮 当前玩家: -")
+            self.status_label.config(text="⏳ 游戏状态: 未开始", fg="gray")
+            return
+        
+        # 获取游戏状态
+        state = self.controller.get_state()
+        
+        # 更新存档名称
+        save_name = self.controller.current_save_name or "未知"
+        self.save_name_label.config(text=f"💾 当前存档: {save_name}")
+        
+        # 绘制棋子
+        board = state["board"]
+        last_move = None
+        if state.get("history"):
+            last = state["history"][-1]
+            last_move = (last["x"], last["y"])
+        
+        for x in range(self.BOARD_SIZE):
+            for y in range(self.BOARD_SIZE):
+                if board[x][y] != 0:
+                    self._draw_piece(x, y, board[x][y], (x, y) == last_move)
+        
+        # 更新玩家信息（动物主题）
+        if state["winner"] == 0:
+            if state["current_player"] == 1:
+                player_name = f"小熊 {self.ANIMAL_BLACK}"
+                status_text = "🌲 小熊的回合"
+            else:
+                player_name = f"小兔 {self.ANIMAL_WHITE}"
+                status_text = "🌲 小兔的回合"
+            self.player_label.config(text=f"🎯 当前玩家: {player_name}", fg=self.COLOR_TEXT)
+            self.status_label.config(text=status_text, fg=self.COLOR_BEAR)
+        elif state["winner"] == 3:
+            self.player_label.config(text="🎯 当前玩家: -")
+            self.status_label.config(text="🌳 游戏状态: 平局", fg="#8B4513")
+        else:
+            if state["winner"] == 1:
+                winner_name = f"小熊 {self.ANIMAL_BLACK}"
+                win_emoji = "🐻"
+            else:
+                winner_name = f"小兔 {self.ANIMAL_WHITE}"
+                win_emoji = "🐰"
+            self.player_label.config(text=f"🏆 获胜方: {winner_name}", fg=self.COLOR_BEAR)
+            self.status_label.config(text=f"{win_emoji} {winner_name}获胜！", fg=self.COLOR_BEAR)
+        
+        # 更新历史记录
+        self._update_history(state.get("history", []))
+    
+    def _draw_piece(self, x, y, player, is_last=False):
+        """绘制动物风格棋子 - 使用emoji代替圆形棋子
+        
+        Args:
+            x, y: 棋盘坐标 (x=行, y=列)
+            player: 1=黑子, 2=白子
+            is_last: 是否是最后落子
+        """
+        # x 是行（垂直方向），y 是列（水平方向）
+        cx = self.BOARD_MARGIN + y * self.CELL_SIZE
+        cy = self.BOARD_MARGIN + x * self.CELL_SIZE
+        
+        # 选择动物表情
+        if player == 1:
+            animal = self.ANIMAL_BLACK  # 小熊
+            bg_color = self.COLOR_BEAR
+        else:
+            animal = self.ANIMAL_WHITE  # 小兔
+            bg_color = self.COLOR_BUNNY
+        
+        # 绘制圆形背景
+        r = self.CELL_SIZE // 2 - 2
+        self.canvas.create_oval(
+            cx - r, cy - r, cx + r, cy + r,
+            fill=bg_color, outline=self.COLOR_LINE, width=1,
+            tags=f"piece_bg_{x}_{y}"
+        )
+        
+        # 绘制动物表情
+        self.canvas.create_text(
+            cx, cy, text=animal, font=("微软雅黑", 20),
+            tags=f"piece_{x}_{y}"
+        )
+        
+        # 最后落子标记（爪印）
+        if is_last:
+            # 绘制橙色光环
+            self.canvas.create_oval(
+                cx - r - 3, cy - r - 3, cx + r + 3, cy + r + 3,
+                outline=self.COLOR_LAST_MOVE, width=2,
+                tags="last_move"
+            )
+            # 爪印标记
+            self.canvas.create_text(
+                cx + r + 8, cy - r, text=self.ANIMAL_LAST,
+                font=("微软雅黑", 10), tags="last_move_icon"
+            )
+    
+    def _update_history(self, history):
+        """更新历史记录显示"""
+        self.history_listbox.delete(0, tk.END)
+        
+        for i, move in enumerate(history):
+            player_name = "黑" if move["player"] == 1 else "白"
+            self.history_listbox.insert(
+                tk.END,
+                f"{i+1:3d}. {player_name}: ({move['x']}, {move['y']})"
+            )
+        
+        # 滚动到最后
+        if history:
+            self.history_listbox.see(tk.END)
+    
+    def _new_game(self):
+        """新建游戏"""
+        # 弹出对话框询问存档名称
+        save_name = simpledialog.askstring(
+            "新建游戏",
+            "请输入存档名称（留空使用默认名称）:",
+            parent=self.root
+        )
+        
+        if save_name is None:  # 用户取消
+            return
+        
+        save_name = save_name.strip() if save_name else None
+        
+        result = self.controller.new_game(save_name)
+        
+        if "error" in result:
+            messagebox.showerror("错误", result["error"])
+            return
+        
+        self._update_display()
+        messagebox.showinfo("成功", f"游戏已创建！\n存档名称: {result['state']['name']}")
+    
+    def _load_game(self):
+        """加载游戏"""
+        # 获取所有存档
+        saves = self.controller.list_saves()
+        
+        if not saves:
+            messagebox.showinfo("提示", "暂无存档")
+            return
+        
+        # 弹出选择对话框
+        dialog = tk.Toplevel(self.root)
+        dialog.title("加载游戏")
+        dialog.geometry("300x300")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        tk.Label(dialog, text="选择存档:", font=("微软雅黑", 12)).pack(pady=10)
+        
+        listbox = tk.Listbox(dialog, height=10, font=("微软雅黑", 11))
+        listbox.pack(fill=tk.BOTH, expand=True, padx=20, pady=5)
+        
+        for save in saves:
+            listbox.insert(tk.END, save)
+        
+        def do_load():
+            selection = listbox.curselection()
+            if not selection:
+                messagebox.showwarning("提示", "请选择一个存档")
+                return
+            
+            save_name = listbox.get(selection[0])
+            result = self.controller.load_game(save_name)
+            
+            if "error" in result:
+                messagebox.showerror("错误", result["error"])
+            else:
+                self._update_display()
+                messagebox.showinfo("成功", f"存档 '{save_name}' 已加载！")
+            
+            dialog.destroy()
+        
+        tk.Button(dialog, text="加载", command=do_load, width=15).pack(pady=10)
+    
+    def _save_game(self):
+        """保存游戏"""
+        if self.controller.game is None:
+            messagebox.showwarning("提示", "没有正在进行的游戏")
+            return
+        
+        # 游戏会自动保存，这里只是提示
+        save_name = self.controller.current_save_name or "未知"
+        messagebox.showinfo("提示", f"游戏已自动保存！\n存档名称: {save_name}")
+    
+    def _undo_move(self):
+        """悔棋（暂未实现）"""
+        messagebox.showinfo("提示", "悔棋功能暂未实现")
+    
+    def _open_replay_browser(self):
+        """打开回放浏览器"""
+        # 获取 ai_data 目录路径
+        ai_data_dir = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            "ai_data"
+        )
+        
+        if not os.path.exists(ai_data_dir):
+            messagebox.showinfo("提示", "暂无回放数据\n请先进行 AI 内战对战")
+            return
+        
+        # 显示轮次选择对话框
+        self._show_round_selector(ai_data_dir)
+    
+    def _show_round_selector(self, ai_data_dir):
+        """显示轮次选择对话框"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("选择回放轮次")
+        dialog.geometry("500x400")
+        dialog.resizable(False, False)
+        dialog.configure(bg="#F5F5DC")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        tk.Label(
+            dialog,
+            text="📁 选择回放轮次",
+            font=("微软雅黑", 16, "bold"),
+            bg="#F5F5DC",
+            fg="#5D4E37"
+        ).pack(pady=15)
+        
+        # 获取所有轮次目录
+        rounds = []
+        for round_dir in sorted(os.listdir(ai_data_dir)):
+            round_path = os.path.join(ai_data_dir, round_dir)
+            if os.path.isdir(round_path):
+                # 计算该局数
+                game_count = len([d for d in os.listdir(round_path) 
+                                if os.path.isdir(os.path.join(round_path, d))])
+                rounds.append({
+                    "name": round_dir,
+                    "path": round_path,
+                    "display": f"{round_dir} ({game_count} 局对战)"
+                })
+        
+        if not rounds:
+            tk.Label(
+                dialog,
+                text="没有找到回放数据",
+                font=("微软雅黑", 12),
+                bg="#F5F5DC",
+                fg="gray"
+            ).pack(pady=50)
+            
+            tk.Button(
+                dialog,
+                text="关闭",
+                font=("微软雅黑", 11),
+                width=10,
+                command=dialog.destroy
+            ).pack(pady=20)
+            return
+        
+        # 轮次列表
+        listbox = tk.Listbox(
+            dialog,
+            font=("微软雅黑", 11),
+            height=12,
+            selectmode=tk.SINGLE
+        )
+        listbox.pack(fill=tk.BOTH, expand=True, padx=30, pady=10)
+        
+        for r in rounds:
+            listbox.insert(tk.END, r["display"])
+        
+        def select_round():
+            selection = listbox.curselection()
+            if not selection:
+                messagebox.showwarning("提示", "请选择一个轮次")
+                return
+            
+            round_info = rounds[selection[0]]
+            dialog.destroy()
+            # 打开该轮次的对局浏览器
+            show_replay_browser(round_info["path"])
+        
+        tk.Button(
+            dialog,
+            text="查看对局",
+            font=("微软雅黑", 12, "bold"),
+            bg="#FFE4B5",
+            fg="#5D4E37",
+            width=15,
+            command=select_round
+        ).pack(pady=20)
+    
+    def _show_rules(self):
+        """显示游戏规则"""
+        rules = """
+五子棋游戏规则：
+
+1. 棋盘为 15×15 的方格
+2. 黑方先行，双方轮流落子
+3. 先在横、竖、斜任一方向连成 5 子者获胜
+4. 棋盘下满无胜负则为平局
+
+操作说明：
+- 点击棋盘空白处落子
+- 使用菜单或按钮新建/加载游戏
+        """
+        messagebox.showinfo("游戏规则", rules)
+    
+    def _show_about(self):
+        """显示关于信息"""
+        about = """
+五子棋游戏 v1.0
+
+使用 Python + Tkinter 开发
+
+支持功能：
+- 双人对战
+- 存档/读档
+- 历史记录
+        """
+        messagebox.showinfo("关于", about)
+
+
+def create_ai_engine(ai_name):
+    """根据名称创建 AI 引擎"""
+    if ai_name == "random":
+        return AIEngine(RandomModel())
+    # 未来可以扩展其他 AI
+    raise ValueError(f"未知的 AI: {ai_name}")
+
+
+def run_ai_vs_ai_mode(num_games, ai1_name="random", ai2_name="random"):
+    """运行 AI 内战模式"""
+    from ai.data_recorder import DataRecorder
+    from ai.evaluator import Evaluator
+    
+    # 创建进度窗口
+    progress_root = tk.Tk()
+    progress_root.title("AI 内战进行中...")
+    progress_root.geometry("400x250")
+    progress_root.resizable(False, False)
+    progress_root.configure(bg="#F5F5DC")
+    
+    tk.Label(
+        progress_root,
+        text="⚔️ AI 内战模式",
+        font=("微软雅黑", 16, "bold"),
+        bg="#F5F5DC",
+        fg="#5D4E37"
+    ).pack(pady=15)
+    
+    tk.Label(
+        progress_root,
+        text=f"{ai1_name} (黑) vs {ai2_name} (白)",
+        font=("微软雅黑", 11),
+        bg="#F5F5DC",
+        fg="gray"
+    ).pack()
+    
+    status_label = tk.Label(
+        progress_root,
+        text="准备开始对战...",
+        font=("微软雅黑", 11),
+        bg="#F5F5DC",
+        fg="#5D4E37"
+    )
+    status_label.pack(pady=10)
+    
+    progress_label = tk.Label(
+        progress_root,
+        text=f"0 / {num_games}",
+        font=("微软雅黑", 12),
+        bg="#F5F5DC",
+        fg="#D2691E"
+    )
+    progress_label.pack(pady=10)
+    
+    # 存储 recorder 供后续使用
+    recorder_container = {"recorder": None}
+    
+    def start_battle():
+        """在后台线程中运行对战"""
+        import threading
+        
+        def battle_thread():
+            engine1 = create_ai_engine(ai1_name)
+            engine2 = create_ai_engine(ai2_name)
+            recorder = DataRecorder(f"{ai1_name}_vs_{ai2_name}")
+            recorder_container["recorder"] = recorder
+            
+            for i in range(1, num_games + 1):
+                # 更新状态
+                progress_root.after(0, lambda idx=i: status_label.config(
+                    text=f"正在进行第 {idx} 局对战..."
+                ))
+                progress_root.after(0, lambda idx=i: progress_label.config(
+                    text=f"{idx} / {num_games}"
+                ))
+                
+                # 执行一局对战
+                AIGameManager.start_ai_vs_ai(
+                    engine1, engine2, 1, recorder,
+                    project_root=os.path.dirname(os.path.dirname(__file__))
+                )
+            
+            # 完成
+            progress_root.after(0, lambda: status_label.config(
+                text="✅ 所有对战已完成！",
+                fg="green"
+            ))
+            progress_root.after(0, lambda: progress_label.config(
+                text=f"{num_games} / {num_games}"
+            ))
+            
+            # 自动生成训练样本
+            progress_root.after(0, lambda: status_label.config(
+                text="📝 正在生成训练样本...",
+                fg="blue"
+            ))
+            
+            # 创建评价器并生成样本
+            evaluator = Evaluator(
+                ai_data_dir=os.path.dirname(recorder.get_round_dir()),
+                train_data_dir=os.path.join(
+                    os.path.dirname(os.path.dirname(__file__)),
+                    "train_data"
+                )
+            )
+            evaluator.evaluate_round(recorder.get_round_dir())
+            
+            progress_root.after(0, lambda: status_label.config(
+                text="✅ 训练样本生成完成！",
+                fg="green"
+            ))
+            
+            # 询问是否回放
+            progress_root.after(1500, lambda: ask_replay(progress_root, recorder))
+        
+        thread = threading.Thread(target=battle_thread)
+        thread.daemon = True
+        thread.start()
+    
+    def ask_replay(parent, recorder):
+        """询问是否回放"""
+        if messagebox.askyesno("对战完成", "是否回放对局？"):
+            parent.destroy()
+            # 启动回放浏览器
+            show_replay_browser(recorder.get_round_dir())
+        else:
+            parent.destroy()
+    
+    # 延迟启动对战
+    progress_root.after(500, start_battle)
+    progress_root.mainloop()
+
+
+def show_replay_browser(round_dir):
+    """显示回放浏览器，让用户选择单个对局"""
+    browser_root = tk.Tk()
+    browser_root.title("选择要回放的对局")
+    browser_root.geometry("500x400")
+    browser_root.resizable(False, False)
+    browser_root.configure(bg="#F5F5DC")
+    
+    tk.Label(
+        browser_root,
+        text="📁 选择对局",
+        font=("微软雅黑", 16, "bold"),
+        bg="#F5F5DC",
+        fg="#5D4E37"
+    ).pack(pady=15)
+    
+    # 获取所有对局
+    games = []
+    if os.path.exists(round_dir):
+        for game_dir in sorted(os.listdir(round_dir)):
+            game_path = os.path.join(round_dir, game_dir)
+            record_file = os.path.join(game_path, "record.json")
+            if os.path.isdir(game_path) and os.path.exists(record_file):
+                try:
+                    with open(record_file, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                    winner = data.get("winner", 0)
+                    winner_text = {1: "黑胜", 2: "白胜", 3: "平局", 0: "未完成"}.get(winner, "未知")
+                    moves = len(data.get("history", []))
+                    games.append({
+                        "id": game_dir,
+                        "path": record_file,
+                        "display": f"第 {game_dir} 局 - {winner_text} ({moves} 步)"
+                    })
+                except:
+                    pass
+    
+    if not games:
+        tk.Label(
+            browser_root,
+            text="没有找到可回放的对局",
+            font=("微软雅黑", 12),
+            bg="#F5F5DC",
+            fg="gray"
+        ).pack(pady=50)
+        
+        tk.Button(
+            browser_root,
+            text="关闭",
+            font=("微软雅黑", 11),
+            width=10,
+            command=browser_root.destroy
+        ).pack(pady=20)
+        
+        browser_root.mainloop()
+        return
+    
+    # 对局列表
+    listbox = tk.Listbox(
+        browser_root,
+        font=("微软雅黑", 11),
+        height=12,
+        selectmode=tk.SINGLE
+    )
+    listbox.pack(fill=tk.BOTH, expand=True, padx=30, pady=10)
+    
+    for game in games:
+        listbox.insert(tk.END, game["display"])
+    
+    def start_replay():
+        selection = listbox.curselection()
+        if not selection:
+            messagebox.showwarning("提示", "请选择一个对局")
+            return
+        
+        game = games[selection[0]]
+        browser_root.destroy()
+        show_replay_window(game["path"])
+    
+    tk.Button(
+        browser_root,
+        text="开始回放",
+        font=("微软雅黑", 12, "bold"),
+        bg="#FFE4B5",
+        fg="#5D4E37",
+        width=15,
+        command=start_replay
+    ).pack(pady=20)
+    
+    browser_root.mainloop()
+
+
+def show_replay_window(record_file):
+    """显示回放窗口"""
+    # 加载记录数据
+    with open(record_file, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    
+    history = data.get("history", [])
+    winner = data.get("winner", 0)
+    
+    # 尝试加载对应的 sample.json
+    sample_data = None
+    sample_file = record_file.replace("ai_data", "train_data").replace("record.json", "sample.json")
+    if os.path.exists(sample_file):
+        try:
+            with open(sample_file, 'r', encoding='utf-8') as f:
+                sample_data = json.load(f)
+        except:
+            pass
+    
+    replay_root = tk.Tk()
+    if sample_data:
+        replay_root.title("AI 内战回放 (含 Sample 数据)")
+    else:
+        replay_root.title("AI 内战回放")
+    replay_root.geometry("1100x750")
+    replay_root.resizable(True, True)
+    replay_root.configure(bg="#F5F5DC")
+    
+    # 当前步骤
+    current_step = [0]  # 使用列表以便在闭包中修改
+    
+    # 控制按钮区域
+    control_frame = tk.Frame(replay_root, bg="#F5F5DC")
+    control_frame.pack(fill=tk.X, padx=20, pady=10)
+    
+    def prev_step():
+        if current_step[0] > 0:
+            current_step[0] -= 1
+            update_display()
+    
+    def next_step():
+        if current_step[0] < len(history):
+            current_step[0] += 1
+            update_display()
+    
+    def jump_to_end():
+        current_step[0] = len(history)
+        update_display()
+    
+    def reset():
+        current_step[0] = 0
+        update_display()
+    
+    tk.Button(
+        control_frame,
+        text="⏮ 上一步",
+        font=("微软雅黑", 10),
+        command=prev_step
+    ).pack(side=tk.LEFT, padx=5)
+    
+    tk.Button(
+        control_frame,
+        text="⏭ 下一步",
+        font=("微软雅黑", 10),
+        command=next_step
+    ).pack(side=tk.LEFT, padx=5)
+    
+    tk.Button(
+        control_frame,
+        text="⏩ 跳转到结局",
+        font=("微软雅黑", 10),
+        command=jump_to_end
+    ).pack(side=tk.LEFT, padx=5)
+    
+    tk.Button(
+        control_frame,
+        text="🔄 重置",
+        font=("微软雅黑", 10),
+        command=reset
+    ).pack(side=tk.LEFT, padx=5)
+    
+    step_label = tk.Label(
+        control_frame,
+        text="第 0 / {} 步".format(len(history)),
+        font=("微软雅黑", 11, "bold"),
+        bg="#F5F5DC",
+        fg="#D2691E"
+    )
+    step_label.pack(side=tk.RIGHT, padx=20)
+    
+    # 过滤选项
+    filter_frame = tk.Frame(replay_root, bg="#F5F5DC")
+    filter_frame.pack(fill=tk.X, padx=20, pady=5)
+    
+    tk.Label(
+        filter_frame,
+        text="显示选项:",
+        font=("微软雅黑", 10),
+        bg="#F5F5DC",
+        fg="#5D4E37"
+    ).pack(side=tk.LEFT)
+    
+    show_board = tk.BooleanVar(value=True)
+    show_input = tk.BooleanVar(value=True)
+    show_output = tk.BooleanVar(value=False)
+    show_heatmap = tk.BooleanVar(value=True)
+    show_sample_heatmap = tk.BooleanVar(value=False)
+    
+    tk.Checkbutton(
+        filter_frame,
+        text="棋盘",
+        variable=show_board,
+        bg="#F5F5DC",
+        font=("微软雅黑", 9)
+    ).pack(side=tk.LEFT, padx=5)
+    
+    tk.Checkbutton(
+        filter_frame,
+        text="输入向量",
+        variable=show_input,
+        bg="#F5F5DC",
+        font=("微软雅黑", 9)
+    ).pack(side=tk.LEFT, padx=5)
+    
+    tk.Checkbutton(
+        filter_frame,
+        text="输出向量",
+        variable=show_output,
+        bg="#F5F5DC",
+        font=("微软雅黑", 9)
+    ).pack(side=tk.LEFT, padx=5)
+    
+    # 主显示区域
+    main_frame = tk.Frame(replay_root, bg="#F5F5DC")
+    main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+    
+    # 棋盘区域
+    board_frame = tk.Frame(main_frame, bg="#8B4513", bd=3, relief=tk.RIDGE)
+    board_frame.pack(side=tk.LEFT, padx=10)
+    
+    canvas_size = 500
+    canvas = tk.Canvas(
+        board_frame,
+        width=canvas_size,
+        height=canvas_size,
+        bg="#E3C16F",
+        highlightthickness=0
+    )
+    canvas.pack(padx=2, pady=2)
+    
+    # 右侧面板 - 包含热力图和信息
+    right_frame = tk.Frame(main_frame, bg="#F5F5DC", width=300)
+    right_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=10)
+    right_frame.pack_propagate(False)
+    
+    # ===== 热力图区域 =====
+    heatmap_frame = tk.Frame(right_frame, bg="#F5F5DC")
+    heatmap_frame.pack(fill=tk.X, pady=(0, 10))
+    
+    # AI 热力图
+    ai_heatmap_canvas = tk.Canvas(
+        heatmap_frame,
+        width=280,
+        height=280,
+        bg="#E3C16F",
+        highlightthickness=1,
+        highlightbackground="#8B4513"
+    )
+    ai_heatmap_canvas.pack(side=tk.LEFT, padx=(0, 10))
+    
+    tk.Label(
+        heatmap_frame,
+        text="AI",
+        font=("微软雅黑", 9, "bold"),
+        bg="#F5F5DC",
+        fg="#8B4513"
+    ).pack(side=tk.LEFT, padx=(0, 5))
+    
+    # Sample 热力图（如果有数据）
+    sample_heatmap_canvas = None
+    if sample_data:
+        sample_heatmap_canvas = tk.Canvas(
+            heatmap_frame,
+            width=280,
+            height=280,
+            bg="#E3C16F",
+            highlightthickness=1,
+            highlightbackground="#D2691E"
+        )
+        sample_heatmap_canvas.pack(side=tk.LEFT, padx=(10, 0))
+        
+        tk.Label(
+            heatmap_frame,
+            text="Sample",
+            font=("微软雅黑", 9, "bold"),
+            bg="#F5F5DC",
+            fg="#D2691E"
+        ).pack(side=tk.LEFT, padx=(5, 0))
+    
+    # 颜色标尺
+    legend_frame = tk.Frame(right_frame, bg="#F5F5DC")
+    legend_frame.pack(fill=tk.X, pady=(5, 10))
+    
+    tk.Label(
+        legend_frame,
+        text="颜色标尺 (min → max):",
+        font=("微软雅黑", 9, "bold"),
+        bg="#F5F5DC",
+        fg="#5D4E37"
+    ).pack(anchor=tk.W, pady=(0, 5))
+    
+    # 9种颜色完整渐变标尺
+    colors_full = [
+        ("黑", "#000000"),
+        ("紫", "#800080"),
+        ("蓝", "#0000FF"),
+        ("绿", "#008000"),
+        ("白", "#FFFFFF"),
+        ("黄", "#FFFF00"),
+        ("橙", "#FFA500"),
+        ("粉", "#FFC0CB"),
+        ("红", "#FF0000"),
+    ]
+    
+    # 生成40个渐变颜色块 (9种颜色，每种5个等级)
+    gradient_frame = tk.Frame(legend_frame, bg="#F5F5DC")
+    gradient_frame.pack(fill=tk.X, pady=2)
+    
+    # 基础颜色定义
+    base_colors = [
+        (0, 0, 0),       # 黑
+        (128, 0, 128),   # 紫
+        (0, 0, 255),     # 蓝
+        (0, 128, 0),     # 绿
+        (255, 255, 255), # 白
+        (255, 255, 0),   # 黄
+        (255, 165, 0),   # 橙
+        (255, 192, 203), # 粉
+        (255, 0, 0),     # 红
+    ]
+    
+    # 生成所有渐变颜色
+    all_colors = []
+    for i in range(len(base_colors) - 1):
+        c1 = base_colors[i]
+        c2 = base_colors[i + 1]
+        for level in range(5):
+            t = level / 4.0
+            r = int(c1[0] + (c2[0] - c1[0]) * t)
+            g = int(c1[1] + (c2[1] - c1[1]) * t)
+            b = int(c1[2] + (c2[2] - c1[2]) * t)
+            all_colors.append(f"#{r:02x}{g:02x}{b:02x}")
+    
+    # 显示渐变条
+    gradient_bar = tk.Frame(gradient_frame, bg="#F5F5DC")
+    gradient_bar.pack(fill=tk.X)
+    
+    for color in all_colors:
+        tk.Frame(
+            gradient_bar,
+            bg=color,
+            width=6,
+            height=20
+        ).pack(side=tk.LEFT)
+    
+    # 显示颜色标签
+    labels_frame = tk.Frame(legend_frame, bg="#F5F5DC")
+    labels_frame.pack(fill=tk.X, pady=(2, 0))
+    
+    for name, color in colors_full:
+        label_frame = tk.Frame(labels_frame, bg="#F5F5DC")
+        label_frame.pack(side=tk.LEFT, expand=True)
+        
+        tk.Frame(
+            label_frame,
+            bg=color,
+            width=12,
+            height=12
+        ).pack()
+        
+        tk.Label(
+            label_frame,
+            text=name,
+            font=("微软雅黑", 7),
+            bg="#F5F5DC",
+            fg="#5D4E37"
+        ).pack()
+    
+    # 信息区域
+    info_text = tk.Text(
+        right_frame,
+        font=("Consolas", 9),
+        wrap=tk.WORD,
+        bg="#FFF8DC",
+        fg="#5D4E37",
+        height=12
+    )
+    info_text.pack(fill=tk.BOTH, expand=True)
+    
+    # Tooltip 窗口
+    tooltip_window = None
+    
+    def get_reward_color(reward, max_abs):
+        """
+        根据 reward 值返回颜色
+        9种正色: 黑、紫、蓝、绿、白、黄、橙、粉、红
+        相邻正色之间分5档，共40档
+        reward=0 对应白色，|reward|越小越接近白色
+        """
+        if max_abs == 0:
+            return "#FFFFFF"  # 白色
+        
+        # 9种正色定义 (RGB)
+        primary_colors = [
+            (0, 0, 0),       # 0: 黑
+            (128, 0, 128),   # 1: 紫
+            (0, 0, 255),     # 2: 蓝
+            (0, 128, 0),     # 3: 绿
+            (255, 255, 255), # 4: 白
+            (255, 255, 0),   # 5: 黄
+            (255, 165, 0),   # 6: 橙
+            (255, 192, 203), # 7: 粉
+            (255, 0, 0),     # 8: 红
+        ]
+        
+        # 将 reward 归一化到 [-1, 1]
+        normalized = reward / max_abs
+        
+        # 映射到 40 档 (8个区间 * 5档 = 40档)
+        # -1.0 ~ 1.0 映射到 0 ~ 39
+        level = (normalized + 1) * 20  # [-1,1] -> [0,40]
+        
+        # 限制范围
+        if level < 0:
+            level = 0
+        elif level >= 40:
+            level = 39
+        
+        # 计算在哪个区间和该区间内的位置
+        zone = int(level) // 5  # 0-7，表示8个区间
+        t = (int(level) % 5) / 4.0  # 0.0, 0.25, 0.5, 0.75, 1.0
+        
+        # 获取区间的两个端点颜色
+        c1 = primary_colors[zone]
+        c2 = primary_colors[zone + 1]
+        
+        # 线性插值
+        r = int(c1[0] + (c2[0] - c1[0]) * t)
+        g = int(c1[1] + (c2[1] - c1[1]) * t)
+        b = int(c1[2] + (c2[2] - c1[2]) * t)
+        
+        return f"#{r:02x}{g:02x}{b:02x}"
+    
+    def show_reward_tooltip(canvas, x_root, y_root, reward, col, row, heatmap_type):
+        """显示 reward 值的 tooltip"""
+        nonlocal tooltip_window
+        
+        # 关闭之前的 tooltip
+        if tooltip_window and tooltip_window.winfo_exists():
+            tooltip_window.destroy()
+        
+        # 创建新的 tooltip
+        tooltip_window = tk.Toplevel(replay_root)
+        tooltip_window.wm_overrideredirect(True)  # 无边框窗口
+        tooltip_window.wm_geometry(f"+{x_root + 15}+{y_root + 15}")
+        tooltip_window.configure(bg="#FFF8DC")
+        
+        # 显示信息
+        label = tk.Label(
+            tooltip_window,
+            text=f"{heatmap_type}\n位置: ({row}, {col})\nReward: {reward}",
+            font=("微软雅黑", 9),
+            bg="#FFF8DC",
+            fg="#5D4E37",
+            relief=tk.SOLID,
+            bd=1,
+            padx=8,
+            pady=5
+        )
+        label.pack()
+    
+    def hide_reward_tooltip():
+        """隐藏 tooltip"""
+        nonlocal tooltip_window
+        if tooltip_window and tooltip_window.winfo_exists():
+            tooltip_window.destroy()
+            tooltip_window = None
+    
+    # 历史记录
+    history_frame = tk.Frame(replay_root, bg="#F5F5DC")
+    history_frame.pack(fill=tk.X, padx=20, pady=10)
+    
+    tk.Label(
+        history_frame,
+        text="历史记录:",
+        font=("微软雅黑", 11, "bold"),
+        bg="#F5F5DC",
+        fg="#5D4E37"
+    ).pack(anchor=tk.W)
+    
+    history_listbox = tk.Listbox(
+        history_frame,
+        font=("微软雅黑", 10),
+        height=6
+    )
+    history_listbox.pack(fill=tk.X, pady=5)
+    
+    for i, move in enumerate(history, 1):
+        player = "黑" if i % 2 == 1 else "白"
+        pos = move.get("position", [0, 0])
+        history_listbox.insert(tk.END, f"{i}. {player}: ({pos[0]}, {pos[1]})")
+    
+    def update_display():
+        """更新显示"""
+        step = current_step[0]
+        step_label.config(text=f"第 {step} / {len(history)} 步")
+        
+        # 清空画布
+        canvas.delete("all")
+        
+        # 绘制棋盘网格
+        cell_size = 30
+        margin = 25
+        board_size = 15
+        
+        for i in range(board_size):
+            # 横线
+            y = margin + i * cell_size
+            canvas.create_line(margin, y, margin + (board_size-1)*cell_size, y, fill="#8B4513")
+            # 纵线
+            x = margin + i * cell_size
+            canvas.create_line(x, margin, x, margin + (board_size-1)*cell_size, fill="#8B4513")
+        
+        # 获取当前步骤数据
+        move = None
+        input_vector = []
+        if step > 0:
+            move = history[step - 1]
+            input_vector = move.get("input", [])
+        
+        # ========== 第1层：绘制热力图（在最底层）==========
+        # 热力图显示在右侧面板的小画布中
+        if step > 0:
+            move = history[step - 1]
+            
+            # 热力图参数 - 280x280 画布，15x15 格子
+            cell_size = 16
+            margin = 20
+            
+            # 绘制 AI 热力图
+            ai_heatmap_canvas.delete("all")
+            output_vector = move.get("output", [])
+            ai_rewards = []
+            if len(output_vector) >= 675:
+                ai_rewards = [output_vector[i*3+2] for i in range(225)]
+                # 使用全局固定的 max_abs（评价器的 max_reward=1000000）
+                # 这样不同 step 的颜色才有可比性
+                global_max_abs = 1000000
+                
+                for i in range(225):
+                    row = i // 15
+                    col = i % 15
+                    reward = ai_rewards[i]
+                    
+                    x = margin + col * cell_size
+                    y = margin + row * cell_size
+                    
+                    # 使用新的颜色梯度函数，以 0 为中心对称映射
+                    color = get_reward_color(reward, global_max_abs)
+                    
+                    # 绘制格子并存储 reward 值用于悬停显示
+                    rect = ai_heatmap_canvas.create_rectangle(
+                        x-7, y-7, x+8, y+8,
+                        fill=color, outline="#D2691E", width=1
+                    )
+                    # 绑定鼠标悬停事件
+                    ai_heatmap_canvas.tag_bind(rect, "<Enter>", 
+                        lambda e, r=reward, c=col, rrow=row: show_reward_tooltip(ai_heatmap_canvas, e.x_root, e.y_root, r, c, rrow, "AI"))
+                    ai_heatmap_canvas.tag_bind(rect, "<Leave>", 
+                        lambda e: hide_reward_tooltip())
+            
+            # 绘制 Sample 热力图（如果有数据）
+            if sample_heatmap_canvas and sample_data and step - 1 < len(sample_data):
+                sample_heatmap_canvas.delete("all")
+                sample_step = sample_data[step - 1]
+                output_vector = sample_step.get("output", [])
+                if len(output_vector) >= 675:
+                    rewards = [output_vector[i*3+2] for i in range(225)]
+                    # 使用统一的绝对最大值，以 0 为中心对称
+                    abs_max = max(abs(r) for r in rewards) if rewards else 1
+                    if abs_max == 0:
+                        abs_max = 1
+                    
+                    # 使用全局固定的 max_abs（评价器的 max_reward=1000000）
+                    # 这样不同 step 的颜色才有可比性
+                    global_max_abs = 1000000
+                    
+                    for i in range(225):
+                        row = i // 15
+                        col = i % 15
+                        reward = rewards[i]
+                        
+                        x = margin + col * cell_size
+                        y = margin + row * cell_size
+                        
+                        # 使用新的颜色梯度函数，以 0 为中心对称映射
+                        color = get_reward_color(reward, global_max_abs)
+                        
+                        rect = sample_heatmap_canvas.create_rectangle(
+                            x-7, y-7, x+8, y+8,
+                            fill=color, outline="#D2691E", width=1
+                        )
+                        # 绑定鼠标悬停事件
+                        sample_heatmap_canvas.tag_bind(rect, "<Enter>", 
+                            lambda e, r=reward, c=col, rrow=row: show_reward_tooltip(sample_heatmap_canvas, e.x_root, e.y_root, r, c, rrow, "Sample"))
+                        sample_heatmap_canvas.tag_bind(rect, "<Leave>", 
+                            lambda e: hide_reward_tooltip())
+        
+        # ========== 第2层：绘制棋子（在热力图之上）==========
+        # 使用棋盘专用的参数，不要被热力图参数覆盖
+        board_cell_size = 30
+        board_margin = 25
+        
+        if step > 0 and show_board.get() and len(input_vector) >= 225:
+            # 绘制棋子
+            for i in range(board_size):
+                for j in range(board_size):
+                    idx = i * board_size + j
+                    piece = input_vector[idx]
+                    if piece != 0:
+                        x = board_margin + j * board_cell_size
+                        y = board_margin + i * board_cell_size
+                        color = "#2C2C2C" if piece == 1 else "#FFFAF0"
+                        canvas.create_oval(
+                            x-12, y-12, x+12, y+12,
+                            fill=color, outline="#8B4513"
+                        )
+            
+            # 高亮最后落子位置
+            if move:
+                pos = move.get("position", [0, 0])
+                x = board_margin + pos[1] * board_cell_size
+                y = board_margin + pos[0] * board_cell_size
+                canvas.create_oval(
+                    x-15, y-15, x+15, y+15,
+                    outline="#FF6B35", width=3
+                )
+        
+        # 更新信息文本
+        info_text.delete(1.0, tk.END)
+        if step > 0 and move:
+            info_text.insert(tk.END, f"=== 第 {step} 步 ===\n\n")
+            
+            if show_input.get():
+                input_vec = move.get("input", [])
+                info_text.insert(tk.END, f"输入向量 (前20个):\n")
+                info_text.insert(tk.END, f"{input_vec[:20]}...\n")
+                info_text.insert(tk.END, f"长度: {len(input_vec)}\n\n")
+            
+            if show_output.get():
+                output_vec = move.get("output", [])
+                info_text.insert(tk.END, f"输出向量 (前30个):\n")
+                info_text.insert(tk.END, f"{output_vec[:30]}...\n")
+                info_text.insert(tk.END, f"长度: {len(output_vec)}\n\n")
+            
+            # 显示 Sample 数据信息
+            if sample_data and step <= len(sample_data):
+                sample_step = sample_data[step - 1]
+                info_text.insert(tk.END, f"--- Sample 数据 ---\n")
+                
+                # 找到实际落子位置的 reward
+                pos = move.get("position", [0, 0])
+                output_vec = sample_step.get("output", [])
+                mask = sample_step.get("mask", [])
+                
+                # 查找该位置在 output 中的索引
+                reward_idx = -1
+                for i in range(225):
+                    if output_vec[i*3] == pos[0] and output_vec[i*3+1] == pos[1]:
+                        reward_idx = i*3 + 2
+                        break
+                
+                if reward_idx >= 0:
+                    reward = output_vec[reward_idx]
+                    mask_val = mask[reward_idx // 3] if reward_idx // 3 < len(mask) else 0
+                    info_text.insert(tk.END, f"实际落子 reward: {reward}\n")
+                    info_text.insert(tk.END, f"mask: {mask_val}\n")
+                
+                # 统计正负 reward 数量
+                rewards = [output_vec[i*3+2] for i in range(225)]
+                pos_count = sum(1 for r in rewards if r > 0)
+                neg_count = sum(1 for r in rewards if r < 0)
+                info_text.insert(tk.END, f"正 reward 数量: {pos_count}\n")
+                info_text.insert(tk.END, f"负 reward 数量: {neg_count}\n\n")
+            
+            pos = move.get("position", [0, 0])
+            player = "黑" if step % 2 == 1 else "白"
+            info_text.insert(tk.END, f"落子方: {player}\n")
+            info_text.insert(tk.END, f"落子位置: ({pos[0]}, {pos[1]})\n")
+        else:
+            info_text.insert(tk.END, '点击"下一步"开始回放\n')
+    
+    # 初始显示
+    update_display()
+    
+    replay_root.mainloop()
+
+
+def main():
+    """程序入口"""
+    # 第一步：显示模式选择
+    selector_root = tk.Tk()
+    selector = GameModeSelector(selector_root)
+    selector_root.mainloop()
+    
+    # 获取选择结果
+    result = selector.get_result()
+    
+    # 用户取消或未选择
+    if result is None:
+        return
+    
+    mode = result.get("mode")
+    
+    # AI 内战模式
+    if mode == "ai_vs_ai":
+        num_games = result.get("num_games", 1)
+        ai1 = result.get("ai1", "random")
+        ai2 = result.get("ai2", "random")
+        run_ai_vs_ai_mode(num_games, ai1, ai2)
+        return
+    
+    # 回放模式
+    if mode == "replay":
+        # 获取 ai_data 目录路径
+        ai_data_dir = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "..", "ai_data"
+        )
+        ai_data_dir = os.path.normpath(ai_data_dir)
+        
+        if not os.path.exists(ai_data_dir):
+            messagebox.showinfo("提示", "暂无回放数据\n请先进行 AI 内战对战")
+            return
+        
+        # 显示轮次选择对话框
+        show_round_selector_from_main(ai_data_dir)
+        return
+    
+    # 人人对战或人机对战
+    game_mode = mode
+    ai_player = None
+    
+    if game_mode == "pve":
+        player_color = result.get("player_color")
+        # 玩家执黑 -> AI 执白(2)；玩家执白 -> AI 执黑(1)
+        ai_player = 2 if player_color == "black" else 1
+    
+    # 启动主游戏窗口
+    root = tk.Tk()
+    app = GomokuGUI(root, game_mode=game_mode, ai_player=ai_player)
+    root.mainloop()
+
+
+def show_round_selector_from_main(ai_data_dir):
+    """从主界面显示轮次选择对话框"""
+    selector_root = tk.Tk()
+    selector_root.title("选择回放轮次")
+    selector_root.geometry("500x400")
+    selector_root.resizable(False, False)
+    selector_root.configure(bg="#F5F5DC")
+    
+    tk.Label(
+        selector_root,
+        text="📁 选择回放轮次",
+        font=("微软雅黑", 16, "bold"),
+        bg="#F5F5DC",
+        fg="#5D4E37"
+    ).pack(pady=15)
+    
+    # 获取所有轮次目录
+    rounds = []
+    for round_dir in sorted(os.listdir(ai_data_dir)):
+        round_path = os.path.join(ai_data_dir, round_dir)
+        if os.path.isdir(round_path):
+            # 计算该局数
+            game_count = len([d for d in os.listdir(round_path) 
+                            if os.path.isdir(os.path.join(round_path, d))])
+            rounds.append({
+                "name": round_dir,
+                "path": round_path,
+                "display": f"{round_dir} ({game_count} 局对战)"
+            })
+    
+    if not rounds:
+        tk.Label(
+            selector_root,
+            text="没有找到回放数据",
+            font=("微软雅黑", 12),
+            bg="#F5F5DC",
+            fg="gray"
+        ).pack(pady=50)
+        
+        tk.Button(
+            selector_root,
+            text="关闭",
+            font=("微软雅黑", 11),
+            width=10,
+            command=selector_root.destroy
+        ).pack(pady=20)
+        
+        selector_root.mainloop()
+        return
+    
+    # 轮次列表
+    listbox = tk.Listbox(
+        selector_root,
+        font=("微软雅黑", 11),
+        height=12,
+        selectmode=tk.SINGLE
+    )
+    listbox.pack(fill=tk.BOTH, expand=True, padx=30, pady=10)
+    
+    for r in rounds:
+        listbox.insert(tk.END, r["display"])
+    
+    def select_round():
+        selection = listbox.curselection()
+        if not selection:
+            messagebox.showwarning("提示", "请选择一个轮次")
+            return
+        
+        round_info = rounds[selection[0]]
+        selector_root.destroy()
+        # 打开该轮次的对局浏览器
+        show_replay_browser(round_info["path"])
+    
+    tk.Button(
+        selector_root,
+        text="查看对局",
+        font=("微软雅黑", 12, "bold"),
+        bg="#FFE4B5",
+        fg="#5D4E37",
+        width=15,
+        command=select_round
+    ).pack(pady=20)
+    
+    selector_root.mainloop()
+
+
+if __name__ == "__main__":
+    main()

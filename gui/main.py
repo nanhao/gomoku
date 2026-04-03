@@ -1,0 +1,536 @@
+"""
+五子棋 GUI 主程序 - 重构版
+
+支持三种游戏模式：
+1. 人人对战（PvP）- 传统双人对战
+2. 人机对战（PvE）- 玩家 vs AI
+3. AI 内战（AI vs AI）- AI 自动对战
+"""
+import sys
+import os
+
+# 添加项目根目录到路径
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+import tkinter as tk
+from tkinter import messagebox, simpledialog
+
+from game import GomokuController
+from app import GameSession
+
+from gui.components import GameModeSelector, GameBoard
+from gui.components import ReplayBrowser, ReplayWindow
+from gui.components import AIBattleConfigDialog, AIBattleProgressWindow
+from gui.components.constants import COLORS, FONTS
+
+
+class GomokuGUI:
+    """五子棋主界面 - 使用组件重构版"""
+    
+    # 配色方案 - 森林/小动物主题
+    COLOR_BG = COLORS["bg"]
+    COLOR_TEXT = COLORS["text"]
+    COLOR_BEAR = COLORS["bear"]
+    COLOR_BUNNY = COLORS["rabbit"]
+    COLOR_BORDER = COLORS["border"]
+    
+    # 动物表情符号
+    ANIMAL_BLACK = "🐻"
+    ANIMAL_WHITE = "🐰"
+    ANIMAL_LAST = "🐾"
+    
+    def __init__(self, root, game_mode="pvp", ai_player=None, ai_model="random"):
+        """
+        初始化主界面
+        
+        Args:
+            root: Tkinter 根窗口
+            game_mode: 游戏模式
+            ai_player: AI 执棋颜色（人机对战模式）
+            ai_model: AI 模型名称（人机对战模式）
+        """
+        self.root = root
+        self.root.title("🐻 森林五子棋 🐰")
+        self.root.resizable(False, False)
+        self.root.configure(bg=self.COLOR_BG)
+        
+        # 初始化控制器
+        self.controller = GomokuController()
+
+        # 创建游戏会话（协调游戏流程）
+        self.session = GameSession(
+            mode=game_mode,
+            controller=self.controller,
+            ai_name=ai_model,
+            ai_player=ai_player,
+        )
+        
+        # 创建界面
+        self._create_menu()
+        self._create_main_frame()
+        
+        # 如果是人机对战且 AI 执黑，自动开始
+        if game_mode == "pve" and ai_player == 1:
+            self.root.after(500, self._ai_move)
+    
+    def _create_menu(self):
+        """创建菜单栏"""
+        menubar = tk.Menu(self.root)
+        self.root.config(menu=menubar)
+        
+        # 游戏菜单
+        game_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="游戏", menu=game_menu)
+        game_menu.add_command(label="新建游戏", command=self._new_game)
+        game_menu.add_command(label="保存游戏", command=self._save_game)
+        game_menu.add_command(label="加载游戏", command=self._load_game)
+        game_menu.add_separator()
+        game_menu.add_command(label="退出", command=self.root.quit)
+    
+    def _create_main_frame(self):
+        """创建主框架"""
+        # 主容器
+        main_frame = tk.Frame(self.root, bg=self.COLOR_BG)
+        main_frame.pack(padx=20, pady=20)
+        
+        # 创建棋盘组件
+        self.board = GameBoard(main_frame, on_click_callback=self._on_board_click)
+        self.board.pack(side=tk.LEFT)
+        
+        # 右侧信息面板
+        info_frame = tk.Frame(main_frame, bg=self.COLOR_BG, padx=20)
+        info_frame.pack(side=tk.LEFT, fill=tk.Y)
+        
+        # 标题（动物主题）
+        title_frame = tk.Frame(info_frame, bg=self.COLOR_BG)
+        title_frame.pack(pady=10)
+        
+        tk.Label(
+            title_frame,
+            text=self.ANIMAL_BLACK,
+            font=("微软雅黑", 24),
+            bg=self.COLOR_BG
+        ).pack(side=tk.LEFT, padx=3)
+        
+        tk.Label(
+            title_frame,
+            text="森林五子棋",
+            font=FONTS["title"],
+            bg=self.COLOR_BG,
+            fg=self.COLOR_BEAR
+        ).pack(side=tk.LEFT)
+        
+        tk.Label(
+            title_frame,
+            text=self.ANIMAL_WHITE,
+            font=("微软雅黑", 24),
+            bg=self.COLOR_BG
+        ).pack(side=tk.LEFT, padx=3)
+        
+        # 分隔线
+        tk.Frame(info_frame, height=2, bg=self.COLOR_BORDER).pack(fill=tk.X, pady=10)
+        
+        # 存档名称
+        self.save_name_label = tk.Label(
+            info_frame,
+            text="🌲 当前存档: 无",
+            font=FONTS["normal"],
+            bg=self.COLOR_BG,
+            fg=self.COLOR_TEXT
+        )
+        self.save_name_label.pack(pady=8)
+        
+        # 游戏状态标签
+        self.status_label = tk.Label(
+            info_frame,
+            text="🎯 当前玩家: -",
+            font=("微软雅黑", 14, "bold"),
+            bg=self.COLOR_BG,
+            fg=self.COLOR_TEXT
+        )
+        self.status_label.pack(pady=10)
+        
+        # 游戏状态
+        self.game_status_label = tk.Label(
+            info_frame,
+            text="🌳 游戏状态: 未开始",
+            font=FONTS["normal"],
+            bg=self.COLOR_BG,
+            fg="gray"
+        )
+        self.game_status_label.pack(pady=8)
+        
+        # 分隔线
+        tk.Frame(info_frame, height=2, bg=self.COLOR_BORDER).pack(fill=tk.X, pady=10)
+        
+        # 历史记录
+        tk.Label(
+            info_frame,
+            text="📝 对局记录",
+            font=FONTS["normal"],
+            bg=self.COLOR_BG,
+            fg=self.COLOR_TEXT
+        ).pack(pady=(10, 5), anchor=tk.W)
+        
+        # 历史记录列表框
+        history_outer_frame = tk.Frame(
+            info_frame,
+            bg=self.COLOR_BORDER,
+            bd=2,
+            relief=tk.RIDGE
+        )
+        history_outer_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+        
+        history_frame = tk.Frame(history_outer_frame, bg=self.COLOR_BG)
+        history_frame.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
+        
+        scrollbar = tk.Scrollbar(history_frame, bg="#FFE4B5")
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        self.history_listbox = tk.Listbox(
+            history_frame,
+            height=12,
+            width=22,
+            yscrollcommand=scrollbar.set,
+            font=("Consolas", 10),
+            bg=self.COLOR_BG,
+            fg=self.COLOR_TEXT,
+            selectbackground=self.COLOR_BEAR,
+            selectforeground="white",
+            relief=tk.FLAT,
+            highlightthickness=0
+        )
+        self.history_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=self.history_listbox.yview)
+        
+        # 控制按钮
+        self._create_control_buttons(info_frame)
+    
+    def _on_board_click(self, row, col):
+        """处理棋盘点击"""
+        if self.controller.game is None:
+            messagebox.showinfo("提示", "请先新建游戏")
+            return
+
+        result = self.session.make_player_move(row, col)
+
+        if result["status"] == "success":
+            self._update_board()
+
+            if result["game_over"]:
+                winner = result["winner"]
+                if winner == 0:
+                    messagebox.showinfo("游戏结束", "平局！")
+                else:
+                    winner_text = "黑方" if winner == 1 else "白方"
+                    messagebox.showinfo("游戏结束", f"{winner_text}获胜！")
+                return
+
+            if result["need_ai_move"]:
+                self.root.after(500, self._ai_move)
+    
+    def _ai_move(self):
+        """AI 落子"""
+        if self.controller.game is None or self.controller.is_over():
+            return
+
+        result = self.session.do_ai_move()
+
+        if result.get("status") == "success":
+            self._update_board()
+
+            if result["game_over"]:
+                winner = result["winner"]
+                if winner == 0:
+                    messagebox.showinfo("游戏结束", "平局！")
+                else:
+                    winner_text = "黑方" if winner == 1 else "白方"
+                    messagebox.showinfo("游戏结束", f"{winner_text}获胜！")
+    
+    def _update_display(self):
+        """更新显示"""
+        # 重绘棋盘
+        self.board.draw_board()
+        
+        if self.controller.game is None:
+            self.save_name_label.config(text="🌲 当前存档: 无")
+            self.status_label.config(text="🎯 当前玩家: -")
+            self.game_status_label.config(text="🌳 游戏状态: 未开始", fg="gray")
+            self.history_listbox.delete(0, tk.END)
+            return
+        
+        # 获取游戏状态
+        state = self.controller.get_state()
+        
+        # 更新存档名称
+        save_name = self.controller.current_save_name or "未知"
+        self.save_name_label.config(text=f"🌲 当前存档: {save_name}")
+        
+        # 绘制棋子
+        board = state["board"]
+        last_move = None
+        if state.get("history"):
+            last = state["history"][-1]
+            last_move = (last["x"], last["y"])
+        
+        self.board.draw_pieces(board, last_move)
+        
+        # 更新玩家信息（动物主题）
+        if state["winner"] == 0:
+            if state["current_player"] == 1:
+                player_name = f"小熊 {self.ANIMAL_BLACK}"
+                status_text = "🌲 小熊的回合"
+            else:
+                player_name = f"小兔 {self.ANIMAL_WHITE}"
+                status_text = "🌲 小兔的回合"
+            self.status_label.config(text=f"🎯 当前玩家: {player_name}", fg=self.COLOR_TEXT)
+            self.game_status_label.config(text=status_text, fg=self.COLOR_BEAR)
+        elif state["winner"] == 3:
+            self.status_label.config(text="🎯 当前玩家: -")
+            self.game_status_label.config(text="🌳 游戏状态: 平局", fg="#8B4513")
+        else:
+            if state["winner"] == 1:
+                winner_name = f"小熊 {self.ANIMAL_BLACK}"
+                win_emoji = self.ANIMAL_BLACK
+            else:
+                winner_name = f"小兔 {self.ANIMAL_WHITE}"
+                win_emoji = self.ANIMAL_WHITE
+            self.status_label.config(text=f"🏆 获胜方: {winner_name}", fg=self.COLOR_BEAR)
+            self.game_status_label.config(text=f"{win_emoji} {winner_name}获胜！", fg=self.COLOR_BEAR)
+        
+        # 更新历史记录
+        self._update_history(state.get("history", []))
+    
+    def _update_history(self, history):
+        """更新历史记录显示"""
+        self.history_listbox.delete(0, tk.END)
+        
+        for i, move in enumerate(history):
+            player_name = "黑" if move["player"] == 1 else "白"
+            self.history_listbox.insert(
+                tk.END,
+                f"{i+1:3d}. {player_name}: ({move['x']}, {move['y']})"
+            )
+        
+        # 滚动到最后
+        if history:
+            self.history_listbox.see(tk.END)
+    
+    def _update_board(self):
+        """更新棋盘显示（兼容旧代码）"""
+        self._update_display()
+    
+    def _create_control_buttons(self, parent):
+        """创建控制按钮"""
+        button_frame = tk.Frame(parent, bg=self.COLOR_BG)
+        button_frame.pack(pady=15)
+        
+        # 按钮配置（森林动物主题）
+        button_config = [
+            ("🌱 新建游戏", self._new_game, "#90EE90"),
+            ("🌲 加载游戏", self._load_game, "#DEB887"),
+            ("💾 保存游戏", self._save_game, "#87CEEB"),
+            ("📺 回放对局", self._open_replay, "#DDA0DD"),
+        ]
+        
+        for text, command, bg_color in button_config:
+            btn = tk.Button(
+                button_frame,
+                text=text,
+                command=command,
+                width=16,
+                font=FONTS["button"],
+                bg=bg_color,
+                fg=self.COLOR_TEXT,
+                activebackground=self.COLOR_BEAR,
+                activeforeground="white",
+                relief=tk.RAISED,
+                bd=3,
+                cursor="hand2"
+            )
+            btn.pack(pady=6)
+            
+            # 添加悬停效果
+            btn.bind("<Enter>", lambda e, b=btn: b.config(bg=self.COLOR_BEAR, fg="white"))
+            btn.bind("<Leave>", lambda e, b=btn, c=bg_color: b.config(bg=c, fg=self.COLOR_TEXT))
+
+    def _new_game(self):
+        """新建游戏"""
+        # 弹出对话框询问存档名称
+        save_name = simpledialog.askstring(
+            "新建游戏",
+            "请输入存档名称（留空使用默认名称）:",
+            parent=self.root
+        )
+        
+        if save_name is None:  # 用户取消
+            return
+        
+        save_name = save_name.strip() if save_name else None
+        
+        result = self.controller.new_game(save_name)
+        
+        if "error" in result:
+            messagebox.showerror("错误", result["error"])
+            return
+        
+        self._update_display()
+        messagebox.showinfo("成功", f"游戏已创建！\n存档名称: {result['state']['name']}")
+    
+    def _save_game(self):
+        """保存游戏"""
+        if self.controller.game is None:
+            messagebox.showwarning("提示", "没有正在进行的游戏")
+            return
+        
+        # 游戏会自动保存，这里只是提示
+        save_name = self.controller.current_save_name or "未知"
+        messagebox.showinfo("提示", f"游戏已自动保存！\n存档名称: {save_name}")
+    
+    def _load_game(self):
+        """加载游戏"""
+        # 获取所有存档
+        saves = self.controller.list_saves()
+        
+        if not saves:
+            messagebox.showinfo("提示", "暂无存档")
+            return
+        
+        # 弹出选择对话框
+        dialog = tk.Toplevel(self.root)
+        dialog.title("加载游戏")
+        dialog.geometry("300x300")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        tk.Label(dialog, text="选择存档:", font=("微软雅黑", 12)).pack(pady=10)
+        
+        listbox = tk.Listbox(dialog, height=10, font=("微软雅黑", 11))
+        listbox.pack(fill=tk.BOTH, expand=True, padx=20, pady=5)
+        
+        for save in saves:
+            listbox.insert(tk.END, save)
+        
+        def do_load():
+            selection = listbox.curselection()
+            if not selection:
+                messagebox.showwarning("提示", "请选择一个存档")
+                return
+            
+            save_name = listbox.get(selection[0])
+            result = self.controller.load_game(save_name)
+            
+            if "error" in result:
+                messagebox.showerror("错误", result["error"])
+            else:
+                self._update_display()
+                messagebox.showinfo("成功", f"存档 '{save_name}' 已加载！")
+            
+            dialog.destroy()
+        
+        tk.Button(dialog, text="加载", command=do_load, width=15).pack(pady=10)
+    
+
+    
+    def _open_replay(self):
+        """打开回放浏览器"""
+        # 获取 ai_data 目录路径
+        ai_data_dir = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            "ai_data"
+        )
+        
+        if not os.path.exists(ai_data_dir):
+            messagebox.showinfo("提示", "暂无回放数据\n请先进行 AI 内战对战")
+            return
+        
+        # 使用回放浏览器选择对局
+        result = ReplayBrowser.browse(ai_data_dir, self.root)
+        
+        if result:
+            # 关闭当前窗口，打开回放窗口
+            self.root.destroy()
+            # 显示回放
+            ReplayWindow.show(result["record_file"], result["sample_file"])
+
+
+def run_ai_vs_ai_mode(num_games, ai1_name="random", ai2_name="random"):
+    """运行 AI 内战模式"""
+    progress = AIBattleProgressWindow(num_games, ai1_name, ai2_name)
+    
+    def on_complete(recorder, should_replay):
+        if should_replay and recorder:
+            # 显示回放
+            round_dir = recorder.get_round_dir()
+            # 获取第一局
+            game_dirs = sorted([d for d in os.listdir(round_dir) 
+                               if os.path.isdir(os.path.join(round_dir, d))])
+            if game_dirs:
+                record_file = os.path.join(round_dir, game_dirs[0], "record.json")
+                sample_file = record_file.replace("ai_data", "train_data").replace("record.json", "sample.json")
+                if not os.path.exists(sample_file):
+                    sample_file = None
+                ReplayWindow.show(record_file, sample_file)
+    
+    progress.start_battle(on_complete)
+
+
+def main():
+    """主函数"""
+    # 创建模式选择器
+    selector_root = tk.Tk()
+    selector = GameModeSelector(selector_root)
+    selector_root.mainloop()
+    
+    # 获取选择结果
+    if selector.result is None:
+        return
+    
+    mode = selector.result.get("mode")
+    
+    # AI 内战模式
+    if mode == "ai_vs_ai":
+        num_games = selector.result.get("num_games", 1)
+        ai1 = selector.result.get("ai1", "random")
+        ai2 = selector.result.get("ai2", "random")
+        run_ai_vs_ai_mode(num_games, ai1, ai2)
+        return
+    
+    # 回放模式
+    if mode == "replay":
+        # 获取 ai_data 目录路径
+        ai_data_dir = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "..", "ai_data"
+        )
+        ai_data_dir = os.path.normpath(ai_data_dir)
+        
+        if not os.path.exists(ai_data_dir):
+            messagebox.showinfo("提示", "暂无回放数据\n请先进行 AI 内战对战")
+            return
+        
+        # 使用回放浏览器
+        result = ReplayBrowser.browse(ai_data_dir)
+        if result:
+            ReplayWindow.show(result["record_file"], result["sample_file"])
+        return
+    
+    # 人人对战或人机对战
+    game_mode = mode
+    ai_player = None
+    ai_model = "random"
+    
+    if game_mode == "pve":
+        player_color = selector.result.get("player_color")
+        ai_model = selector.result.get("ai", "random")
+        # 玩家执黑 -> AI 执白(2)；玩家执白 -> AI 执黑(1)
+        ai_player = 2 if player_color == "black" else 1
+    
+    # 创建主游戏窗口
+    root = tk.Tk()
+    app = GomokuGUI(root, game_mode=game_mode, ai_player=ai_player, ai_model=ai_model)
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()
