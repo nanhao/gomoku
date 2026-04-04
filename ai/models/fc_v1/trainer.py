@@ -193,9 +193,9 @@ class FCv1Trainer:
         if project_root is None:
             project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
         
-        # 创建数据目录
-        ai_data_dir = os.path.join(project_root, "ai_data")
-        train_data_dir = os.path.join(project_root, "train_data")
+        # 创建数据目录（位于 ai/ 子目录下）
+        ai_data_dir = os.path.join(project_root, "ai", "ai_data")
+        train_data_dir = os.path.join(project_root, "ai", "train_data")
         os.makedirs(ai_data_dir, exist_ok=True)
         os.makedirs(train_data_dir, exist_ok=True)
         

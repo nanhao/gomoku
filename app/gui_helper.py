@@ -185,12 +185,14 @@ def get_ai_data_dir() -> str:
     """获取 ai_data 目录路径
 
     Returns:
-        ai_data 目录的绝对路径
+        ai_data 目录的绝对路径（位于 ai/ai_data/）
     """
-    # 从 gui/main.py 所在位置计算
-    gui_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(gui_dir)
-    return os.path.join(project_root, "ai_data")
+    # 从 app/gui_helper.py 所在位置计算
+    app_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(app_dir)
+    # 数据目录位于 ai/ 子目录下
+    ai_dir = os.path.join(project_root, "ai")
+    return os.path.join(ai_dir, "ai_data")
 
 
 def create_pve_config(selector_result: dict) -> dict:

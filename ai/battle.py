@@ -145,7 +145,8 @@ def run_battle(ai1_name: str, ai2_name: str, num_games: int):
     # 创建数据记录器，使用组合 AI 名称作为轮次目录前缀
     round_name = f"{ai1_name}_vs_{ai2_name}"
     project_root = os.path.dirname(os.path.dirname(__file__))
-    ai_data_dir = os.path.join(project_root, "ai_data")
+    # 数据目录位于 ai/ai_data/ 下
+    ai_data_dir = os.path.join(project_root, "ai", "ai_data")
     recorder = DataRecorder(round_name, ai_data_dir)
     
     # 执行对战（每局执方随机）

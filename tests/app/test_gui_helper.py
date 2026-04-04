@@ -207,9 +207,10 @@ class TestGUIHelperFunctions(unittest.TestCase):
     """测试 GUIHelper 独立函数"""
 
     def test_get_ai_data_dir(self):
-        """获取 ai_data 目录路径"""
+        """获取 ai_data 目录路径（应位于 ai/ai_data/ 下）"""
         path = get_ai_data_dir()
         self.assertIn("ai_data", path)
+        self.assertIn("ai" + os.sep + "ai_data", path)
         self.assertTrue(os.path.isabs(path))
 
     def test_create_pve_config_ai_black(self):

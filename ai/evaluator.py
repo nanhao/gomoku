@@ -19,15 +19,20 @@ class Evaluator:
     MIN_REWARD = -1000000
     DECAY_RATE = 0.9
     
-    def __init__(self, ai_data_dir: str = "ai_data", train_data_dir: str = "train_data", decay_rate: float = None):
+    def __init__(self, ai_data_dir: str = None, train_data_dir: str = None, decay_rate: float = None):
         """
         初始化评价器
         
         Args:
-            ai_data_dir: AI 数据目录路径
-            train_data_dir: 训练数据目录路径
+            ai_data_dir: AI 数据目录路径，默认为 ai/ai_data
+            train_data_dir: 训练数据目录路径，默认为 ai/train_data
             decay_rate: 奖励衰减率 r，默认使用类常量 DECAY_RATE (0.9)
         """
+        # 默认路径指向 ai/ 子目录
+        if ai_data_dir is None:
+            ai_data_dir = os.path.join("ai", "ai_data")
+        if train_data_dir is None:
+            train_data_dir = os.path.join("ai", "train_data")
         self.ai_data_dir = ai_data_dir
         self.train_data_dir = train_data_dir
         self.decay_rate = decay_rate if decay_rate is not None else self.DECAY_RATE
