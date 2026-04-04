@@ -35,3 +35,7 @@ desktop.ini
 # Logs & temp
 *.log
 *.tmp
+
+tests/app/edge/_test_saves/
+tests/game/save/
+tests/app/primary/_test_saves/

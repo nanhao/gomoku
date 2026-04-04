@@ -221,6 +221,18 @@ class TestBattleModule(unittest.TestCase):
         self.assertIsNotNone(model)
         self.assertEqual(model.name, "random")
 
+    def test_load_model_fc_v1(self):
+        """主流程：加载 fc_v1 模型"""
+        model = battle_module.load_model("fc_v1")
+        self.assertIsNotNone(model)
+        self.assertEqual(model.name, "fc_v1")
+
+    def test_load_model_cnn(self):
+        """主流程：加载 cnn 模型"""
+        model = battle_module.load_model("cnn")
+        self.assertIsNotNone(model)
+        self.assertEqual(model.name, "cnn")
+
     def test_load_model_unknown_raises_value_error(self):
         """边缘：加载未知 AI 名称时抛出 ValueError"""
         with self.assertRaises(ValueError) as ctx:

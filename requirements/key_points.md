@@ -419,3 +419,22 @@ ai/fc_v1/train.py 改为每200个 epoch 才打印一次 loss
 
 # 第十次追加
 在 ai 目录下创建一个子目录 models，然后把 ai/random 和 ai/fc_v1 放到 models 目录下。做完后回归全体测试用例。
+
+# 第十一次追加
+在 ai/models/cnn_v1 目录下实现一个 cnn 网络，然后确保 ai 目录下的脚本，例如 battle.py、data_recorder.py 等脚本都支持参数指定模型。
+
+# 第十二次追加
+把 fc_v1 和 cnn_v1 的 reward 反向传播算法更新为：
+
+## 新的 reward 反向传播算法
+假设一局游戏中黑白双方落子序列：
+- 黑方（获胜）：a1 → a2 → a3 → a4 -> ... -> an（win）
+- 白方（失败）：b1 → b2 → b3 -> ... -> b(n-1)
+
+其中, a(j1)、a(j2)、a(j3)、a(j4)、a(j5) 这五步的落子构成了一条线，则
+- reward(a(j5)) = max_reward
+- reward(a(j4)) = r * reward(j5)
+- reward(a(j3)) = r * reward(j4)
+- reward(a(j2)) = r * reward(j3)
+
+注意，j5=n。j1,j2,j3,j4,j5不一定连续。

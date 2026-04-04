@@ -7,6 +7,7 @@
 用法:
     python ai/battle.py --ai1 random --ai2 fc_v1 --games 10
     python ai/battle.py --ai1 random --ai2 random --games 50
+    python ai/battle.py --ai1 cnn --ai2 fc_v1 --games 10
 """
 
 import sys
@@ -32,6 +33,7 @@ from ai.game_manager import AIGameManager
 _AI_MODEL_MAP = {
     "random": "ai.models.random.model.RandomModel",
     "fc_v1": "ai.models.fc_v1.model.FCv1Model",
+    "cnn": "ai.models.cnn_v1.model.CNNModel",
 }
 
 
@@ -175,6 +177,9 @@ def main():
 
   # random vs fc_v1，对战 50 局
   python ai/battle.py --ai1 random --ai2 fc_v1 --games 50
+
+  # cnn vs fc_v1，对战 10 局
+  python ai/battle.py --ai1 cnn --ai2 fc_v1 --games 10
         """
     )
     
@@ -182,14 +187,14 @@ def main():
         "--ai1",
         type=str,
         required=True,
-        help="第一方 AI 名称（如 random, fc_v1）"
+        help="第一方 AI 名称（如 random, fc_v1, cnn）"
     )
-    
+
     parser.add_argument(
         "--ai2",
         type=str,
         required=True,
-        help="第二方 AI 名称（如 random, fc_v1）"
+        help="第二方 AI 名称（如 random, fc_v1, cnn）"
     )
     
     parser.add_argument(

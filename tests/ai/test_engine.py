@@ -12,7 +12,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from ai.engine import AIEngine
+from ai.engine import AIEngine, create_engine
 from ai.models.random.model import RandomModel
 
 
@@ -146,6 +146,34 @@ class TestRandomModel(unittest.TestCase):
         """测试模型名称"""
         model = RandomModel()
         self.assertEqual(model.name, "random")
+
+
+class TestCreateEngine(unittest.TestCase):
+    """测试 create_engine 函数"""
+
+    def test_create_engine_random(self):
+        """测试创建 random 引擎"""
+        engine = create_engine("random")
+        self.assertIsNotNone(engine)
+        self.assertEqual(engine.model.name, "random")
+
+    def test_create_engine_fc_v1(self):
+        """测试创建 fc_v1 引擎"""
+        engine = create_engine("fc_v1")
+        self.assertIsNotNone(engine)
+        self.assertEqual(engine.model.name, "fc_v1")
+
+    def test_create_engine_cnn(self):
+        """测试创建 cnn 引擎"""
+        engine = create_engine("cnn")
+        self.assertIsNotNone(engine)
+        self.assertEqual(engine.model.name, "cnn")
+
+    def test_create_engine_unknown_uses_random(self):
+        """测试未知模型名称时使用 random 作为兜底"""
+        engine = create_engine("unknown_model")
+        self.assertIsNotNone(engine)
+        self.assertEqual(engine.model.name, "random")
 
 
 if __name__ == "__main__":
