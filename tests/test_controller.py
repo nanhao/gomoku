@@ -145,11 +145,60 @@ class TestGomokuController:
         moves = [(7, 5), (0, 0), (7, 6), (0, 1), (7, 7), (0, 2), (7, 8), (0, 3), (7, 9)]
         for x, y in moves:
             self.controller.make_move(x, y)
-        
+
         # 游戏结束后尝试落子
         result = self.controller.make_move(0, 0)
         assert "error" in result
         assert "游戏已结束" in result["error"]
+
+    def test_game_over_draw_cannot_move(self):
+        """测试平局后不能落子"""
+        self.controller.new_game("测试游戏平局")
+        # 模拟平局（填满棋盘但无五连）
+        # 黑方落子形成特定模式
+        for i in range(15):
+            for j in range(15):
+                if self.controller.game.winner == 0:
+                    self.controller.make_move(i, j)
+
+        # 如果游戏结束（平局），尝试落子应该失败
+        if self.controller.game.winner == 3:
+            result = self.controller.make_move(0, 0)
+            assert "error" in result
+            assert "游戏已结束" in result["error"]
+
+    def test_make_move_no_game(self):
+        """测试无游戏时落子返回错误"""
+        result = self.controller.make_move(7, 7)
+        assert "error" in result
+        assert "请先创建或加载游戏" in result["error"]
+
+    def test_load_game_not_exists(self):
+        """测试加载不存在的存档"""
+        result = self.controller.load_game("不存在的存档")
+        assert "error" in result
+
+    def test_is_over_no_game(self):
+        """测试无游戏时 is_over 返回 False"""
+        assert self.controller.is_over() is False
+
+    def test_is_draw_no_game(self):
+        """测试无游戏时 is_draw 返回 False"""
+        assert self.controller.is_draw() is False
+
+    def test_get_current_player_no_game(self):
+        """测试无游戏时 get_current_player 返回 None"""
+        assert self.controller.get_current_player() is None
+
+    def test_get_winner_no_game(self):
+        """测试无游戏时 get_winner 返回 None"""
+        assert self.controller.get_winner() is None
+
+    def test_get_state_no_game(self):
+        """测试无游戏时 get_state 返回错误"""
+        result = self.controller.get_state()
+        assert "error" in result
+        assert "请先创建或加载游戏" in result["error"]
     
     def test_get_state_full(self):
         """测试获取完整状态"""

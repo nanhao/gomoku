@@ -107,6 +107,32 @@ class TestGameSessionStartGameEdge:
         result = session.do_ai_move()
         assert result["status"] == "error"
 
+    def test_do_ai_move_returns_winner_when_game_over(self):
+        """玩家落子导致游戏结束时，应返回 winner"""
+        import time
+        # 创建一个即将结束的游戏局面（AI 执白）
+        session = GameSession("pve", self.controller, ai_name="random", ai_player=2)
+        unique_name = f"test_ai_wins_{time.time()}"
+        result = session.start_game(unique_name)
+        assert result["status"] == "success", f"启动游戏失败: {result.get('error', '')}"
+
+        # 构造黑棋四连，下一步黑方获胜
+        # 黑棋：(7,5)(7,6)(7,7)(7,8)  下一步 (7,9) 获胜
+        moves = [
+            (7, 5), (0, 0),  # 黑, 白
+            (7, 6), (0, 1),  # 黑, 白
+            (7, 7), (0, 2),  # 黑, 白
+            (7, 8), (0, 3),  # 黑, 白
+        ]
+        for x, y in moves:
+            self.controller.make_move(x, y)
+
+        # 现在轮到黑方，玩家落子获胜
+        result = session.make_player_move(7, 9)
+        assert result["status"] == "success", f"落子失败: {result.get('error', '')}"
+        assert result["game_over"] is True
+        assert result["winner"] == 1  # 黑方胜
+
     def test_start_game_twice_returns_error(self):
         """重复调用 start_game 应返回 error（存档已存在）"""
         import time

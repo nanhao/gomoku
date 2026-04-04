@@ -59,8 +59,15 @@ def run_all_tests():
         from tests.test_save import TestGomokuSave
         from tests.test_game import TestGomokuGame
         from tests.test_controller import TestGomokuController
+        from tests.app.primary.test_session import (
+            TestCreateEngine, TestGameSessionProperties, TestGameSessionEdgeCases,
+            TestGameSessionPvp, TestGameSessionPve
+        )
+        from tests.app.test_gui_helper import TestGUIHelper, TestGUIHelperFunctions
     except ImportError as e:
         print(f"导入测试模块失败: {e}")
+        import traceback
+        traceback.print_exc()
         return False
     
     # 导入 GUI 测试类
@@ -81,6 +88,13 @@ def run_all_tests():
         ("GomokuSave 测试", TestGomokuSave),
         ("GomokuGame 测试", TestGomokuGame),
         ("GomokuController 测试", TestGomokuController),
+        ("App - GameSession 引擎测试", TestCreateEngine),
+        ("App - GameSession 属性测试", TestGameSessionProperties),
+        ("App - GameSession 边缘测试", TestGameSessionEdgeCases),
+        ("App - GameSession PvP 测试", TestGameSessionPvp),
+        ("App - GameSession PvE 测试", TestGameSessionPve),
+        ("App - GUIHelper 测试", TestGUIHelper),
+        ("App - GUIHelper 函数测试", TestGUIHelperFunctions),
     ]
     
     # 添加 GUI 测试

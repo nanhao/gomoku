@@ -60,9 +60,15 @@ class TestFCv1Model(unittest.TestCase):
         """测试前准备"""
         self.temp_dir = tempfile.mkdtemp()
         self.model_path = os.path.join(self.temp_dir, "test_model.pth")
+        # 保存原始 DEFAULT_MODEL_PATH
+        self.original_default_path = FCv1Model.DEFAULT_MODEL_PATH
+        # 设置临时默认路径，防止修改真实模型文件
+        FCv1Model.DEFAULT_MODEL_PATH = os.path.join(self.temp_dir, "fc_v1.pth")
     
     def tearDown(self):
         """测试后清理"""
+        # 恢复原始 DEFAULT_MODEL_PATH
+        FCv1Model.DEFAULT_MODEL_PATH = self.original_default_path
         shutil.rmtree(self.temp_dir, ignore_errors=True)
     
     def test_model_name(self):

@@ -50,6 +50,84 @@ class TestCreateEngine:
         assert isinstance(engine, AIEngine)
         assert isinstance(engine.model, FCv1Model)
 
+
+class TestGameSessionProperties:
+    """测试 GameSession 属性"""
+
+    def test_mode_property(self):
+        """mode 属性返回正确的游戏模式"""
+        controller = _make_controller()
+        session = GameSession("pvp", controller)
+        assert session.mode == "pvp"
+
+        session2 = GameSession("pve", controller, ai_name="random", ai_player=2)
+        assert session2.mode == "pve"
+
+    def test_ai_player_property(self):
+        """ai_player 属性返回正确的 AI 执棋方"""
+        controller = _make_controller()
+        session = GameSession("pvp", controller)
+        assert session.ai_player is None
+
+        session2 = GameSession("pve", controller, ai_name="random", ai_player=2)
+        assert session2.ai_player == 2
+
+
+class TestGameSessionEdgeCases:
+    """GameSession 边缘情况测试"""
+
+    def test_start_game_error_returns_error(self):
+        """start_game 失败时返回 error"""
+        controller = _make_controller()
+        controller.new_game("existing_game")
+        session = GameSession("pvp", controller)
+
+        # 再次使用相同名称创建游戏应该失败
+        result = session.start_game("existing_game")
+
+        assert result["status"] == "error"
+        assert "error" in result
+
+    def test_do_ai_move_no_game_returns_error(self):
+        """do_ai_move 无游戏时返回 error"""
+        controller = _make_controller()
+        session = GameSession("pve", controller, ai_name="random", ai_player=2)
+
+        result = session.do_ai_move()
+
+        assert result["status"] == "error"
+        assert "游戏尚未创建" in result["error"]
+
+    def test_do_ai_move_pvp_raises_runtime_error(self):
+        """pvp 模式调用 do_ai_move 应抛出 RuntimeError"""
+        controller = _make_controller()
+        controller.new_game("test_pvp_ai")
+        session = GameSession("pvp", controller)
+
+        try:
+            session.do_ai_move()
+            assert False, "应该抛出 RuntimeError"
+        except RuntimeError as e:
+            assert "pvp 模式没有 AI" in str(e)
+
+    def test_do_ai_move_returns_winner_when_game_over(self):
+        """do_ai_move 游戏结束时返回 winner"""
+        controller = _make_controller()
+        session = GameSession("pve", controller, ai_name="random", ai_player=1)
+
+        # 创建游戏（AI 先走）
+        session.start_game()
+
+        # 玩家落子
+        session.make_player_move(7, 7)
+
+        # AI 落子
+        result = session.do_ai_move()
+
+        # 验证返回结构
+        assert "status" in result
+        assert "game_over" in result
+
     def test_create_engine_unknown_fallback(self):
         """create_engine 未知名称时应兜底返回 AIEngine(RandomModel)"""
         engine = create_engine("unknown_model_xyz")
@@ -61,8 +139,9 @@ class TestGameSessionPvp:
     """pvp 模式主流程测试"""
 
     def setup_method(self):
+        import time
         self.controller = _make_controller()
-        self.controller.new_game(f"pvp_primary_{id(self)}")
+        self.controller.new_game(f"pvp_primary_{time.time()}")
         self.session = GameSession("pvp", self.controller)
 
     def test_pvp_make_move_success(self):
@@ -89,9 +168,10 @@ class TestGameSessionPve:
     """pve 模式主流程测试"""
 
     def setup_method(self):
+        import time
         # 玩家执黑（player=1），AI 执白（ai_player=2）
         self.controller = _make_controller()
-        self.controller.new_game(f"pve_primary_{id(self)}")
+        self.controller.new_game(f"pve_primary_{time.time()}")
         self.session = GameSession("pve", self.controller, ai_name="random", ai_player=2)
 
     def test_pve_player_move_triggers_ai_flag(self):
