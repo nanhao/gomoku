@@ -438,3 +438,97 @@ ai/fc_v1/train.py 改为每200个 epoch 才打印一次 loss
 - reward(a(j2)) = r * reward(j3)
 
 注意，j5=n。j1,j2,j3,j4,j5不一定连续。
+
+# 第十三次追加
+再次修改 reward 算法。
+新算法称为双向棋型检测法：
+
+对一局对局中的每一步，应用以下计算规则：
+for (position in 棋盘上每一个空位) {
+    shape_list1 = detect_shapes(board, position, player)
+    reward1 = max(shape_list1.each(shape -> shape_to_reward(board, shape1, player, true)))
+    
+    shape_list2 = detect_shapes(board, position, opponent_player)
+    reward2 = max(shape_list2.each(shape -> shape_to_reward(board, shape2, opponent_player, false)))
+
+    position.reward = max(reward1, reward2)
+}
+
+/* 
+棋型检测函数。
+输入：当前棋盘状态、即将落子的位置、落子方
+输出：落子后将形成的棋型
+棋型是一个枚举类型，其值如下：
+- 连五，任意方向上五子相连
+- 活四，任意方向上四子相连，且两端无对方棋子或棋盘边缘阻挡
+- 多冲四，两个或以上方向上四子相连，且两端有且仅有一端被对方棋子或棋盘边缘阻挡
+- 冲四，有且仅有一个方向上四子相连，且两端有且仅有一端被对方棋子或棋盘边缘阻挡
+- 多活三，两个或以上方向上三子相连，且两端无对方棋子或棋盘边缘阻挡
+- 活三，有且仅有一个方向上三子相连，且两端无对方棋子或棋盘边缘阻挡
+- 眠三，任意方向上三子相连，且两端有且仅有一端被对方棋子或棋盘边缘阻挡
+- 活二，任意方向上二子相连，且两端无对方棋子或棋盘边缘阻挡
+- 眠二，任意方向上二子相连，且两端有且仅有一端被对方棋子或棋盘边缘阻挡
+- 独一，单独一子，所有方向上无己方子相连
+
+其中，方向指['横向', '纵向', '主对角线', '副对角线']四个方向
+
+返回的棋型的数据结构如下：
+[
+    {
+        "shape": "多活三",
+        "directions": ["横向", "纵向"]
+    },
+    {
+        "shape": "活二",
+        "directions": ["横向", "纵向"]
+    },
+    ...
+]
+*/
+function detect_shapes(board, position, player) {
+
+}
+
+/*
+棋型 -> reward 映射表
+- 连五，我方 -> max_reward
+- 连五，敌方 -> max_reward * 0.95
+- 活四，我方 -> 0.9 * max_reward
+- 活四，敌方 -> 0.9 * max_reword * 0.95
+- 多冲四，我方 -> 0.9 * max_reward
+- 多冲四，敌方 -> 0.9 * max_reward * 0.95
+- 冲四，我方 -> reward(假设我方执行冲四且敌方防守之后形成的棋型)
+- 冲四，敌方 -> reward(假设敌方执行冲四且我方防守之后形成的棋型， 以对方视角计算) * 0.95
+- 多活三，我方 -> 0.8 * max_reward
+- 多活三，敌方 -> 0.8 * max_reward * 0.95
+- 活三，我方 -> 0.5 * max_reward
+- 活三，敌方 -> 0.5 * max_reward * 0.95
+- 眠三，我方 -> (0.1 + count_directions) * max_reward
+- 眠三，敌方 -> (0.1 + count_directions) * max_reward * 0.95
+- 活二，我方 -> (0.3 + count_directions) * max_reward
+- 活二，敌方 -> (0.3 + count_directions) * max_reward * 0.95
+- 眠二，我方 -> 0
+- 眠二，敌方 -> 0
+- 独一，我方 -> 0
+- 独一，敌方 -> 0
+*/
+function shape_to_reward(board, shape, player, is_current_player) {
+
+}
+
+我方冲四的递归流程：
+模拟我方在 position 落子，形成冲四
+找到唯一的防守位置（冲四的另一端空位）
+模拟敌方在防守位置落子
+检测我方在防守位置落子后能形成的棋型
+返回那个棋型的 reward
+敌方冲四的递归流程：
+模拟敌方在 position 落子，形成冲四
+找到唯一的防守位置
+模拟我方在防守位置落子
+检测敌方在防守位置落子后能形成的棋型
+用敌方列映射计算 reward，最后 × 0.95
+
+
+## mask 逻辑更新
+已落子的位置，mask 置为0，使得计算 loss 时屏蔽已落子位置的影响。
