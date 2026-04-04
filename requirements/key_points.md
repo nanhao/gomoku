@@ -503,10 +503,10 @@ function detect_shapes(board, position, player) {
 - 多活三，敌方 -> 0.8 * max_reward * 0.95
 - 活三，我方 -> 0.5 * max_reward
 - 活三，敌方 -> 0.5 * max_reward * 0.95
-- 眠三，我方 -> (0.1 + count_directions) * max_reward
-- 眠三，敌方 -> (0.1 + count_directions) * max_reward * 0.95
-- 活二，我方 -> (0.3 + count_directions) * max_reward
-- 活二，敌方 -> (0.3 + count_directions) * max_reward * 0.95
+- 眠三，我方 -> (0.1 + count_directions * 0.1) * max_reward
+- 眠三，敌方 -> (0.1 + count_directions * 0.1) * max_reward * 0.95
+- 活二，我方 -> (0.3 + count_directions * 0.1) * max_reward
+- 活二，敌方 -> (0.3 + count_directions * 0.1) * max_reward * 0.95
 - 眠二，我方 -> 0
 - 眠二，敌方 -> 0
 - 独一，我方 -> 0
