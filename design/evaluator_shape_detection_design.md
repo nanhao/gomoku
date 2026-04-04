@@ -108,8 +108,8 @@ shapes = [
 | 冲四 | 递归计算 | 递归计算 × 0.95 |
 | 多活三 | 0.8 × MAX_REWARD | 0.8 × MAX_REWARD × 0.95 |
 | 活三 | 0.5 × MAX_REWARD | 0.5 × MAX_REWARD × 0.95 |
-| 眠三 | (0.1 + count_directions) × MAX_REWARD | (0.1 + count_directions) × MAX_REWARD × 0.95 |
-| 活二 | (0.3 + count_directions) × MAX_REWARD | (0.3 + count_directions) × MAX_REWARD × 0.95 |
+| 眠三 | (0.1 + count_directions × 0.1) × MAX_REWARD | (0.1 + count_directions × 0.1) × MAX_REWARD × 0.95 |
+| 活二 | (0.3 + count_directions × 0.1) × MAX_REWARD | (0.3 + count_directions × 0.1) × MAX_REWARD × 0.95 |
 | 眠二 | 0 | 0 |
 | 独一 | 0 | 0 |
 

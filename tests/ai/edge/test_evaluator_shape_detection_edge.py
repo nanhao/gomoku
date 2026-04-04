@@ -71,7 +71,7 @@ class TestEvaluatorShapeDetectionEdge(unittest.TestCase):
         
         reward = self.evaluator._compute_position_reward(board, 0, 5, 1)
         # 眠三：一端被白子阻挡
-        expected = int((0.1 + 1) * Evaluator.MAX_REWARD)
+        expected = int((0.1 + 1 * 0.1) * Evaluator.MAX_REWARD)
         self.assertEqual(reward, expected)
     
     def test_corner_position(self):

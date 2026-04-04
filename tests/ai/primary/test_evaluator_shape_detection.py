@@ -178,7 +178,7 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         board[7 * 15 + 4] = 2  # 左端阻挡
         
         reward = self.evaluator._compute_position_reward(board, 7, 7, 1)
-        expected = int((0.1 + 1) * Evaluator.MAX_REWARD)  # count_directions = 1
+        expected = int((0.1 + 1 * 0.1) * Evaluator.MAX_REWARD)  # count_directions = 1
         self.assertEqual(reward, expected)
     
     def test_sleep_three_multi_direction(self):
@@ -194,7 +194,7 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         board[4 * 15 + 7] = 2
         
         reward = self.evaluator._compute_position_reward(board, 7, 7, 1)
-        expected = int((0.1 + 2) * Evaluator.MAX_REWARD)  # count_directions = 2
+        expected = int((0.1 + 2 * 0.1) * Evaluator.MAX_REWARD)  # count_directions = 2
         self.assertEqual(reward, expected)
     
     # ==================== 活二测试 ====================
@@ -206,7 +206,7 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         board[7 * 15 + 6] = 1
         
         reward = self.evaluator._compute_position_reward(board, 7, 7, 1)
-        expected = int((0.3 + 1) * Evaluator.MAX_REWARD)  # count_directions = 1
+        expected = int((0.3 + 1 * 0.1) * Evaluator.MAX_REWARD)  # count_directions = 1
         self.assertEqual(reward, expected)
     
     def test_live_two_multi_direction(self):
@@ -218,7 +218,7 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         board[6 * 15 + 7] = 1
         
         reward = self.evaluator._compute_position_reward(board, 7, 7, 1)
-        expected = int((0.3 + 2) * Evaluator.MAX_REWARD)  # count_directions = 2
+        expected = int((0.3 + 2 * 0.1) * Evaluator.MAX_REWARD)  # count_directions = 2
         self.assertEqual(reward, expected)
     
     # ==================== 眠二/独一测试 ====================

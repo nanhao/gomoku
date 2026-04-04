@@ -363,10 +363,10 @@ class Evaluator:
             return int(0.5 * self.MAX_REWARD * factor)
         
         elif shape_type == "眠三":
-            return int((0.1 + count_directions) * self.MAX_REWARD * factor)
+            return int((0.1 + count_directions * 0.1) * self.MAX_REWARD * factor)
         
         elif shape_type == "活二":
-            return int((0.3 + count_directions) * self.MAX_REWARD * factor)
+            return int((0.3 + count_directions * 0.1) * self.MAX_REWARD * factor)
         
         else:  # 眠二, 独一
             return 0
