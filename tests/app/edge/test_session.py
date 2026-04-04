@@ -80,3 +80,41 @@ class TestGameSessionEdge:
         # 游戏已结束，再次落子应报错
         result = self.session.make_player_move(0, 4)
         assert result["status"] == "error"
+
+
+class TestGameSessionStartGameEdge:
+    """start_game 边缘测试"""
+
+    def setup_method(self):
+        self.controller = _make_controller()
+
+    def test_start_game_with_duplicate_name_returns_error(self):
+        """存档名称已存在时应返回 error"""
+        # 先创建一个存档
+        self.controller.new_game("duplicate_name_test")
+
+        # 再尝试用相同名称创建
+        session = GameSession("pvp", self.controller)
+        result = session.start_game("duplicate_name_test")
+
+        assert result["status"] == "error"
+        assert "error" in result
+
+    def test_do_ai_move_when_game_not_started_raises_error(self):
+        """游戏未创建时调用 do_ai_move 应返回 error"""
+        session = GameSession("pve", self.controller, ai_name="random", ai_player=1)
+        # 注意：不调用 start_game，直接调用 do_ai_move
+        result = session.do_ai_move()
+        assert result["status"] == "error"
+
+    def test_start_game_twice_returns_error(self):
+        """重复调用 start_game 应返回 error（存档已存在）"""
+        import time
+        unique_name = f"test_double_start_{time.time()}"
+        session = GameSession("pvp", self.controller)
+        result1 = session.start_game(unique_name)
+        assert result1["status"] == "success"
+
+        # 再次调用应失败
+        result2 = session.start_game(unique_name)
+        assert result2["status"] == "error"

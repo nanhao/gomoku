@@ -153,3 +153,55 @@ class TestGameSessionGameOver:
         result = self.session.make_player_move(7, 9)
         assert result["game_over"] is True
         assert result["winner"] == 1  # 黑棋胜
+
+
+class TestGameSessionStartGame:
+    """start_game 方法主流程测试"""
+
+    def setup_method(self):
+        self.controller = _make_controller()
+
+    def test_pvp_start_game_creates_game(self):
+        """PvP 模式 start_game 应创建游戏"""
+        session = GameSession("pvp", self.controller)
+        result = session.start_game(f"pvp_start_{id(self)}")
+
+        assert result["status"] == "success"
+        assert result["ai_moved"] is False
+        assert self.controller.game is not None
+
+    def test_pve_ai_first_start_game_creates_and_ai_moves(self):
+        """PvE AI 先走（ai_player=1），start_game 应创建游戏并执行 AI 落子"""
+        session = GameSession("pve", self.controller, ai_name="random", ai_player=1)
+        result = session.start_game(f"pve_ai_first_{id(self)}")
+
+        assert result["status"] == "success"
+        assert result["ai_moved"] is True
+        # 验证棋盘上有一个黑子
+        state = self.controller.get_state()
+        black_count = sum(row.count(1) for row in state["board"])
+        assert black_count == 1
+        # 验证轮到白方
+        assert self.controller.get_current_player() == 2
+
+    def test_pve_player_first_start_game_only_creates(self):
+        """PvE 玩家先走（ai_player=2），start_game 只创建游戏"""
+        session = GameSession("pve", self.controller, ai_name="random", ai_player=2)
+        result = session.start_game(f"pve_player_first_{id(self)}")
+
+        assert result["status"] == "success"
+        assert result["ai_moved"] is False
+        # 验证棋盘为空
+        state = self.controller.get_state()
+        black_count = sum(row.count(1) for row in state["board"])
+        assert black_count == 0
+        # 验证轮到黑方
+        assert self.controller.get_current_player() == 1
+
+    def test_start_game_with_auto_generated_name(self):
+        """start_game 不传存档名称时应自动生成"""
+        session = GameSession("pvp", self.controller)
+        result = session.start_game()
+
+        assert result["status"] == "success"
+        assert self.controller.current_save_name is not None

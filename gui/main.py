@@ -69,9 +69,9 @@ class GomokuGUI:
         self._create_menu()
         self._create_main_frame()
         
-        # 如果是人机对战且 AI 执黑，自动开始
+        # 如果是人机对战且 AI 执黑，自动启动游戏（由 session 处理 AI 落子）
         if game_mode == "pve" and ai_player == 1:
-            self.root.after(500, self._ai_move)
+            self.root.after(500, self._start_game_with_ai_first)
     
     def _create_menu(self):
         """创建菜单栏"""
@@ -229,11 +229,26 @@ class GomokuGUI:
             if result["need_ai_move"]:
                 self.root.after(500, self._ai_move)
     
-    def _ai_move(self):
-        """AI 落子"""
-        if self.controller.game is None or self.controller.is_over():
+    def _start_game_with_ai_first(self):
+        """AI 先走：启动游戏并更新界面"""
+        result = self.session.start_game()
+
+        if result["status"] == "error":
+            messagebox.showerror("错误", result.get("error", "启动游戏失败"))
             return
 
+        self._update_board()
+
+        if result.get("game_over"):
+            winner = result["winner"]
+            if winner == 0:
+                messagebox.showinfo("游戏结束", "平局！")
+            else:
+                winner_text = "黑方" if winner == 1 else "白方"
+                messagebox.showinfo("游戏结束", f"{winner_text}获胜！")
+
+    def _ai_move(self):
+        """AI 落子"""
         result = self.session.do_ai_move()
 
         if result.get("status") == "success":
@@ -362,20 +377,20 @@ class GomokuGUI:
             "请输入存档名称（留空使用默认名称）:",
             parent=self.root
         )
-        
+
         if save_name is None:  # 用户取消
             return
-        
+
         save_name = save_name.strip() if save_name else None
-        
-        result = self.controller.new_game(save_name)
-        
-        if "error" in result:
-            messagebox.showerror("错误", result["error"])
+
+        result = self.session.start_game(save_name)
+
+        if result["status"] == "error":
+            messagebox.showerror("错误", result.get("error", "创建游戏失败"))
             return
-        
+
         self._update_display()
-        messagebox.showinfo("成功", f"游戏已创建！\n存档名称: {result['state']['name']}")
+        messagebox.showinfo("成功", f"游戏已创建！\n存档名称: {self.controller.current_save_name}")
     
     def _save_game(self):
         """保存游戏"""

@@ -95,6 +95,47 @@ class GameSession:
 
         return response
 
+    def start_game(self, save_name: str = None) -> dict:
+        """
+        启动游戏
+
+        - 创建游戏
+        - 如果是 PvE 且 AI 执黑，自动执行 AI 落子
+
+        Args:
+            save_name: 存档名称，None 则使用默认名称
+
+        Returns:
+            {
+                "status": "success" | "error",
+                "error": str,          # 仅 error 时存在
+                "ai_moved": bool,      # AI 是否已落子（AI先走时）
+                "game_over": bool,     # 游戏是否结束
+                "winner": int          # 仅 game_over=True 时存在
+            }
+        """
+        # 创建游戏
+        result = self._controller.new_game(save_name)
+        if "error" in result:
+            return {"status": "error", "error": result["error"], "ai_moved": False}
+
+        # 如果 AI 执黑，执行 AI 落子
+        if self._mode == "pve" and self._ai_player == 1:
+            ai_result = self._ai_manager.ai_move()
+            game_over = self._controller.is_over()
+            return {
+                "status": ai_result.get("status", "error"),
+                "ai_moved": True,
+                "game_over": game_over,
+                **({"winner": self._controller.get_winner()} if game_over else {})
+            }
+
+        return {
+            "status": "success",
+            "ai_moved": False,
+            "game_over": False
+        }
+
     def do_ai_move(self) -> dict:
         """
         执行 AI 落子
@@ -113,6 +154,10 @@ class GameSession:
         """
         if self._ai_manager is None:
             raise RuntimeError("pvp 模式没有 AI，不能调用 do_ai_move()")
+
+        # 检查游戏是否已创建
+        if self._controller.game is None:
+            return {"status": "error", "error": "游戏尚未创建"}
 
         result = self._ai_manager.ai_move()
 
