@@ -115,9 +115,90 @@ class Evaluator:
         
         return sample_dict
     
+    def _find_five_in_a_row(self, winning_actions: List[Tuple[int, List[int]]], 
+                             history: List[Dict]) -> List[int]:
+        """
+        从获胜方落子序列中找出构成五子连线的5个步骤索引
+        
+        Args:
+            winning_actions: 获胜方落子列表，每项为 (step_index, [x, y])
+            history: 完整历史记录
+            
+        Returns:
+            构成五子连线的5个步骤索引 [j1, j2, j3, j4, j5]，如果找不到返回空列表
+        """
+        if len(winning_actions) < 5:
+            return []
+        
+        # 获取最后一步的棋盘状态
+        last_step_idx = winning_actions[-1][0]
+        if last_step_idx >= len(history):
+            return []
+        
+        final_board = history[last_step_idx]["input"][:225]
+        winner = history[last_step_idx]["input"][225]  # 获胜方编号
+        
+        # 四个方向：水平、垂直、主对角线、副对角线
+        directions = [
+            (0, 1),   # 水平
+            (1, 0),   # 垂直
+            (1, 1),   # 主对角线
+            (1, -1)   # 副对角线
+        ]
+        
+        # 获取获胜方所有落子位置及其步骤索引
+        winner_positions = {}  # (x, y) -> step_index
+        for step_idx, pos in winning_actions:
+            winner_positions[(pos[0], pos[1])] = step_idx
+        
+        # 从最后一步位置开始，向四个方向寻找五子连线
+        last_pos = winning_actions[-1][1]
+        last_x, last_y = last_pos[0], last_pos[1]
+        
+        for dx, dy in directions:
+            # 收集该方向上的所有获胜方落子
+            line_positions = []
+            
+            # 向正方向搜索
+            x, y = last_x, last_y
+            while 0 <= x < 15 and 0 <= y < 15:
+                if final_board[x * 15 + y] == winner:
+                    if (x, y) in winner_positions:
+                        line_positions.append((winner_positions[(x, y)], (x, y)))
+                else:
+                    break
+                x += dx
+                y += dy
+            
+            # 向反方向搜索
+            x, y = last_x - dx, last_y - dy
+            while 0 <= x < 15 and 0 <= y < 15:
+                if final_board[x * 15 + y] == winner:
+                    if (x, y) in winner_positions:
+                        line_positions.append((winner_positions[(x, y)], (x, y)))
+                else:
+                    break
+                x -= dx
+                y -= dy
+            
+            # 去重并按步骤索引排序
+            line_positions = list(set(line_positions))
+            line_positions.sort(key=lambda x: x[0])
+            
+            # 如果该方向上有至少5个落子，返回最后5个的step_index
+            if len(line_positions) >= 5:
+                # 返回最后5个的step_index
+                return [pos[0] for pos in line_positions[-5:]]
+        
+        return []
+    
     def _compute_rewards(self, sample_dict: List[Dict], history: List[Dict], winner: int):
         """
-        第二步：反向传播计算 reward
+        第二步：反向传播计算 reward（新算法）
+        
+        新算法规则：
+        1. 只找出构成五子连线的5步，对这5步进行 reward 反向传播
+        2. 失败方不做处理（保持初始化值）
         
         Args:
             sample_dict: 初始化的样本字典
@@ -137,36 +218,29 @@ class Evaluator:
             else:
                 white_actions.append((i, position))
         
-        # 确定获胜方和失败方
+        # 确定获胜方
         if winner == 1:
             winning_actions = black_actions
-            losing_actions = white_actions
         else:
             winning_actions = white_actions
-            losing_actions = black_actions
         
-        # 计算获胜方 reward（从最后一步向前）
-        current_reward = self.MAX_REWARD
-        for step_idx, position in reversed(winning_actions):
-            # 位置 [x, y] -> 索引 x*15 + y
-            reward_idx = position[0] * 15 + position[1]
-            
-            if 0 <= reward_idx < 225:
-                sample_dict[step_idx]["output"][reward_idx] = int(current_reward)
-                # mask 初始化时已全为 1，无需重复赋値
-            
-            current_reward *= self.decay_rate
+        # 找出构成五子连线的5步
+        five_steps = self._find_five_in_a_row(winning_actions, history)
         
-        # 计算失败方 reward（从最后一步向前）
-        current_reward = self.MIN_REWARD
-        for step_idx, position in reversed(losing_actions):
-            reward_idx = position[0] * 15 + position[1]
-            
-            if 0 <= reward_idx < 225:
-                sample_dict[step_idx]["output"][reward_idx] = int(current_reward)
-                # mask 初始化时已全为 1，无需重复赋値
-            
-            current_reward *= self.decay_rate
+        # 对这5步进行 reward 反向传播
+        if five_steps:
+            current_reward = self.MAX_REWARD
+            # 从最后一步（j5）向前遍历
+            for step_idx in reversed(five_steps):
+                position = history[step_idx]["position"]
+                reward_idx = position[0] * 15 + position[1]
+                
+                if 0 <= reward_idx < 225:
+                    sample_dict[step_idx]["output"][reward_idx] = int(current_reward)
+                
+                current_reward *= self.decay_rate
+        
+        # 失败方不做处理（保持初始化值：已落子=min_reward，空位=0）
     
     def _get_sample_path(self, record_file: str) -> str:
         """

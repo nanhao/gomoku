@@ -86,23 +86,28 @@ class TestEvaluator(unittest.TestCase):
         self.assertEqual(sample_dict[0]["mask"][0], 1)
     
     def test_compute_rewards_black_wins(self):
-        """测试黑方获胜时的 reward 计算"""
-        # 构造测试数据：黑方获胜
+        """测试黑方获胜时的 reward 计算（新算法：只给五子连线的5步分配 reward）"""
+        # 构造测试数据：黑方形成五子连线获胜
         history = []
         
-        # 模拟 7 步：黑 a1, 白 b1, 黑 a2, 白 b2, 黑 a3, 白 b3, 黑 a4（获胜）
+        # 黑方形成垂直五子连线：(3,7), (4,7), (5,7), (6,7), (7,7)
+        # 中间夹杂白方落子
         moves = [
-            ([7, 7], 1),   # 黑 a1
-            ([7, 8], 2),   # 白 b1
-            ([6, 7], 1),   # 黑 a2
-            ([6, 8], 2),   # 白 b2
-            ([8, 7], 1),   # 黑 a3
-            ([8, 8], 2),   # 白 b3
-            ([5, 7], 1),   # 黑 a4（获胜）
+            ([3, 7], 1),   # 黑 a1
+            ([0, 0], 2),   # 白 b1
+            ([4, 7], 1),   # 黑 a2
+            ([0, 1], 2),   # 白 b2
+            ([5, 7], 1),   # 黑 a3
+            ([0, 2], 2),   # 白 b3
+            ([6, 7], 1),   # 黑 a4
+            ([0, 3], 2),   # 白 b4
+            ([7, 7], 1),   # 黑 a5（获胜）
         ]
         
         board = [0] * 225
         for pos, player in moves:
+            # 先更新棋盘再记录（确保最后一步的棋盘状态正确）
+            board[pos[0] * 15 + pos[1]] = player
             input_vec = board.copy() + [player]
             output = [0] * 225
             
@@ -111,9 +116,6 @@ class TestEvaluator(unittest.TestCase):
                 "output": output,
                 "position": pos
             })
-            
-            # 更新棋盘
-            board[pos[0] * 15 + pos[1]] = player
         
         # 初始化
         sample_dict = self.evaluator._initialize_sample(history)
@@ -121,17 +123,21 @@ class TestEvaluator(unittest.TestCase):
         # 计算 reward（黑方获胜）
         self.evaluator._compute_rewards(sample_dict, history, winner=1)
         
-        # 验证：最后一步（黑 a4）应该是 MAX_REWARD
-        last_step = sample_dict[-1]
-        # 位置 [5, 7] -> 索引 5*15 + 7 = 82
-        reward_idx = 5 * 15 + 7
-        self.assertEqual(last_step["output"][reward_idx], 1000000)
+        max_r = Evaluator.MAX_REWARD
+        r = Evaluator.DECAY_RATE
+        
+        # 验证：最后一步（黑 a5, step 8, position [7,7]）应该是 MAX_REWARD
+        # 这是五子连线的最后一步（j5）
+        last_step = sample_dict[8]
+        reward_idx = 7 * 15 + 7  # [7, 7]
+        self.assertEqual(last_step["output"][reward_idx], max_r)
         self.assertEqual(last_step["mask"][reward_idx], 1)
         
-        # 验证：黑方倒数第二步（a3）应该是 900000
-        step_a3 = sample_dict[-3]  # 黑 a3
-        reward_idx_a3 = 8 * 15 + 7  # [8, 7]
-        self.assertEqual(step_a3["output"][reward_idx_a3], 900000)
+        # 验证：黑方倒数第二步（a4, step 6, position [6,7]）应该是 MAX_REWARD * r
+        # 这是五子连线的 j4
+        step_a4 = sample_dict[6]
+        reward_idx_a4 = 6 * 15 + 7  # [6, 7]
+        self.assertEqual(step_a4["output"][reward_idx_a4], int(max_r * r))
     
     def test_evaluate_record(self):
         """测试完整评价流程"""
@@ -209,17 +215,29 @@ class TestEvaluatorDecayRate(unittest.TestCase):
             shutil.rmtree(self.test_dir)
     
     def _make_history(self):
-        """constructing simple 3-step game history (black wins)"""
+        """constructing simple game history with 5-in-a-row (black wins)"""
         board = [0] * 225
         history = []
-        moves = [([7, 7], 1), ([7, 8], 2), ([6, 6], 1)]
+        # 黑方形成水平五子连线：(7,3), (7,4), (7,5), (7,6), (7,7)
+        moves = [
+            ([7, 3], 1),   # 黑 a1
+            ([0, 0], 2),   # 白 b1
+            ([7, 4], 1),   # 黑 a2
+            ([0, 1], 2),   # 白 b2
+            ([7, 5], 1),   # 黑 a3
+            ([0, 2], 2),   # 白 b3
+            ([7, 6], 1),   # 黑 a4
+            ([0, 3], 2),   # 白 b4
+            ([7, 7], 1),   # 黑 a5（获胜）
+        ]
         for pos, player in moves:
+            # 先更新棋盘再记录
+            board[pos[0] * 15 + pos[1]] = player
             history.append({
                 "input": board.copy() + [player],
                 "output": [0] * 225,
                 "position": pos
             })
-            board[pos[0] * 15 + pos[1]] = player
         return history
     
     def test_default_decay_rate_is_0_9(self):
@@ -245,16 +263,17 @@ class TestEvaluatorDecayRate(unittest.TestCase):
         sample_custom = evaluator_custom._initialize_sample(history)
         evaluator_custom._compute_rewards(sample_custom, history, winner=1)
         
-        # 第一步（默认 rate=0.9: 1000000 * 0.9 = 900000、rate=0.5: 1000000 * 0.5 = 500000）
-        # 步骤序列：默认[7,7]默, [7,8]白, [6,6]默获胜
-        # 默认方落子：步0=[7,7]，步0=[6,6]
-        # 从后向前：步0=[6,6]奖励=MAX_REWARD，步0=[7,7]奖励=MAX_REWARD*decay
-        first_step_idx_default = 7 * 15 + 7  # [7, 7]
+        # 验证 decay_rate 影响 reward 计算
+        # 五子连线最后一步（step 8, position [7,7]）是 MAX_REWARD
+        # 五子连线第一步（step 0, position [7,3]）是 MAX_REWARD * decay^4
+        # rate=0.9: 1000000 * 0.9^4 = 656100
+        # rate=0.5: 1000000 * 0.5^4 = 62500
+        first_step_idx_default = 7 * 15 + 3  # [7, 3]
         reward_09 = sample_default[0]["output"][first_step_idx_default]
         reward_05 = sample_custom[0]["output"][first_step_idx_default]
         
-        self.assertEqual(reward_09, int(1000000 * 0.9))
-        self.assertEqual(reward_05, int(1000000 * 0.5))
+        self.assertEqual(reward_09, int(1000000 * 0.9 ** 4))
+        self.assertEqual(reward_05, int(1000000 * 0.5 ** 4))
     
     def test_class_constant_decay_rate_unchanged(self):
         """DECAY_RATE 类常量保持 0.9，不受实例影响"""
