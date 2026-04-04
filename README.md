@@ -86,6 +86,7 @@ python ai/battle.py --ai1 <AI名称> --ai2 <AI名称> --games <局数>
 **可用 AI：**
 - `random` - 随机落子
 - `fc_v1` - 全连接神经网络模型
+- `cnn` - 卷积神经网络模型
 
 **示例：**
 
@@ -106,7 +107,7 @@ python ai/battle.py --ai1 fc_v1 --ai2 random --games 50
 #### 单轮次训练
 
 ```bash
-python ai/fc_v1/train.py --sample-dir <sample目录> [--epochs <轮数>]
+python ai/models/fc_v1/train.py --sample-dir <sample目录> [--epochs <轮数>]
 ```
 
 使用已有的训练样本训练模型。
@@ -115,16 +116,16 @@ python ai/fc_v1/train.py --sample-dir <sample目录> [--epochs <轮数>]
 
 ```bash
 # 使用指定样本训练（默认 1000 轮）
-python ai/fc_v1/train.py --sample-dir train_data/random_vs_random_1/1
+python ai/models/fc_v1/train.py --sample-dir train_data/random_vs_random_1/1
 
 # 自定义训练轮数
-python ai/fc_v1/train.py --sample-dir train_data/random_vs_random_1/1 --epochs 20
+python ai/models/fc_v1/train.py --sample-dir train_data/random_vs_random_1/1 --epochs 20
 ```
 
 #### 训练周期（自我对弈训练）
 
 ```bash
-python ai/fc_v1/train.py --cycle [--rounds <轮数>] [--games <每轮局数>] [--rate <衰减率>]
+python ai/models/fc_v1/train.py --cycle [--rounds <轮数>] [--games <每轮局数>] [--rate <衰减率>]
 ```
 
 让模型自我对弈并训练。
@@ -144,23 +145,23 @@ python ai/fc_v1/train.py --cycle [--rounds <轮数>] [--games <每轮局数>] [-
 
 ```bash
 # 启动训练周期（默认参数）
-python ai/fc_v1/train.py --cycle
+python ai/models/fc_v1/train.py --cycle
 
 # 自定义参数
-python ai/fc_v1/train.py --cycle --rounds 50 --games 50
+python ai/models/fc_v1/train.py --cycle --rounds 50 --games 50
 
 # 从新模型开始
-python ai/fc_v1/train.py --cycle --fresh
+python ai/models/fc_v1/train.py --cycle --fresh
 ```
 
-模型保存在 `ai/fc_v1/fc_v1.pth`。
+模型保存在 `ai/models/fc_v1/fc_v1.pth`。
 
 ---
 
 ### 4. 样本检视脚本
 
 ```bash
-python ai/fc_v1/inspect_main.py --sample <sample.json路径> [--model-path <模型路径>]
+python ai/models/fc_v1/inspect_main.py --sample <sample.json路径> [--model-path <模型路径>]
 ```
 
 检视模型在指定样本上的表现，逐步输出模型预测与目标值的对比。
@@ -170,12 +171,12 @@ python ai/fc_v1/inspect_main.py --sample <sample.json路径> [--model-path <模�
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
 | `--sample` | sample.json 文件路径 | 必填 |
-| `--model-path` | 模型文件路径 | ai/fc_v1/fc_v1.pth |
+| `--model-path` | 模型文件路径 | ai/models/fc_v1/fc_v1.pth |
 
 **示例：**
 
 ```bash
-python ai/fc_v1/inspect_main.py --sample train_data/fc_v1_cycle_1_4/1/sample.json
+python ai/models/fc_v1/inspect_main.py --sample train_data/fc_v1_cycle_1_4/1/sample.json
 ```
 
 ---
