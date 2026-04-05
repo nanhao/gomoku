@@ -20,15 +20,12 @@ import argparse
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from ai.models.fc_v1.trainer import FCv1Trainer
-
-
 def get_trainer(model_name: str, fresh: bool = False):
     """
     根据模型名称创建对应的训练器
     
     Args:
-        model_name: 模型名称，如 "fc_v1"、"cnn"
+        model_name: 模型名称，如 "fc_v1"、"cnn_v1"
         fresh: 是否从新模型开始训练
         
     Returns:
@@ -38,9 +35,13 @@ def get_trainer(model_name: str, fresh: bool = False):
         ValueError: 不支持的模型名称
     """
     if model_name == "fc_v1":
+        from ai.models.fc_v1.trainer import FCv1Trainer
         return FCv1Trainer(fresh=fresh)
+    elif model_name == "cnn_v1":
+        from ai.models.cnn_v1.trainer import CNNTrainer
+        return CNNTrainer(fresh=fresh)
     else:
-        raise ValueError(f"不支持的模型: {model_name}。目前仅支持: fc_v1")
+        raise ValueError(f"不支持的模型: {model_name}。目前支持: fc_v1, cnn_v1")
 
 
 def main():
@@ -71,7 +72,7 @@ def main():
         '--model',
         type=str,
         default='fc_v1',
-        help='模型名称，如 fc_v1、cnn，默认 fc_v1'
+        help='模型名称，如 fc_v1、cnn_v1，默认 fc_v1'
     )
     
     parser.add_argument(

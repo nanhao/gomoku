@@ -546,3 +546,10 @@ fc_v1 的网络架构改变。从10个隐藏层改为5个。
 1，fc_v1 的网络结构最后加一层 softmax
 2，trainer.py 在计算 loss 的时候，把 reward 归一化到 0-1 之间
 3，热力图的 reward 值域调整 0-1
+
+
+# 第十七次追加
+在 ai 目录下创建一个 base_trainer.py 文件，作为现在的 ai/models/fc_v1/trainer.py 的父类。
+重构 ai/models/fc_v1/trainer.py 继承该父类，把通用的代码都挪到父类。
+在 ai/models/cnn_v1 目录下也创建并实现一个训练类继承该父类。
+train_main.py 支持 cnn_v1 模型的训练。使用方式和 fc_v1 的一样

@@ -86,7 +86,7 @@ python ai/battle.py --ai1 <AI名称> --ai2 <AI名称> --games <局数>
 **可用 AI：**
 - `random` - 随机落子
 - `fc_v1` - 全连接神经网络模型
-- `cnn` - 卷积神经网络模型
+- `cnn_v1` - 卷积神经网络模型
 
 **示例：**
 
@@ -107,25 +107,32 @@ python ai/battle.py --ai1 fc_v1 --ai2 random --games 50
 #### 单轮次训练
 
 ```bash
-python ai/models/fc_v1/train.py --sample-dir <sample目录> [--epochs <轮数>]
+python ai/train_main.py --model <模型名称> --sample-dir <sample目录> [--epochs <轮数>]
 ```
 
-使用已有的训练样本训练模型。
+使用已有的训练样本训练指定模型。
+
+**支持的模型：**
+- `fc_v1` - 全连接神经网络模型
+- `cnn_v1` - 卷积神经网络模型
 
 **示例：**
 
 ```bash
-# 使用指定样本训练（默认 1000 轮）
-python ai/models/fc_v1/train.py --sample-dir train_data/random_vs_random_1/1
+# 训练 fc_v1（默认 1000 轮）
+python ai/train_main.py --model fc_v1 --sample-dir train_data/random_vs_random_1/1
+
+# 训练 cnn_v1
+python ai/train_main.py --model cnn_v1 --sample-dir train_data/random_vs_random_1/1
 
 # 自定义训练轮数
-python ai/models/fc_v1/train.py --sample-dir train_data/random_vs_random_1/1 --epochs 20
+python ai/train_main.py --model fc_v1 --sample-dir train_data/random_vs_random_1/1 --epochs 20
 ```
 
 #### 训练周期（自我对弈训练）
 
 ```bash
-python ai/models/fc_v1/train.py --cycle [--rounds <轮数>] [--games <每轮局数>] [--rate <衰减率>]
+python ai/train_main.py --model <模型名称> --cycle [--rounds <轮数>] [--games <每轮局数>] [--rate <衰减率>]
 ```
 
 让模型自我对弈并训练。
@@ -134,6 +141,7 @@ python ai/models/fc_v1/train.py --cycle [--rounds <轮数>] [--games <每轮局�
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
+| `--model` | 模型名称（fc_v1/cnn_v1） | fc_v1 |
 | `--cycle` | 启用训练周期模式 | - |
 | `--rounds` | 训练轮数 | 10 |
 | `--games` | 每轮对局数 | 100 |
@@ -144,17 +152,22 @@ python ai/models/fc_v1/train.py --cycle [--rounds <轮数>] [--games <每轮局�
 **示例：**
 
 ```bash
-# 启动训练周期（默认参数）
-python ai/models/fc_v1/train.py --cycle
+# fc_v1 训练周期（默认参数）
+python ai/train_main.py --model fc_v1 --cycle
+
+# cnn_v1 训练周期
+python ai/train_main.py --model cnn_v1 --cycle
 
 # 自定义参数
-python ai/models/fc_v1/train.py --cycle --rounds 50 --games 50
+python ai/train_main.py --model fc_v1 --cycle --rounds 50 --games 50
 
 # 从新模型开始
-python ai/models/fc_v1/train.py --cycle --fresh
+python ai/train_main.py --model fc_v1 --cycle --fresh
 ```
 
-模型保存在 `ai/models/fc_v1/fc_v1.pth`。
+模型保存位置：
+- fc_v1: `ai/models/fc_v1/fc_v1.pth`
+- cnn_v1: `ai/models/cnn_v1/cnn.pth`
 
 ---
 
@@ -212,7 +225,17 @@ python tests/run_tests.py
 全连接神经网络模型，通过自我对弈进行强化学习训练。
 
 - **输入**：226 维向量（225 位棋盘状态 + 1 位当前玩家）
-- **输出**：225 维 reward 列表
+- **输出**：225 维概率分布（Softmax）
+- **网络结构**：输入层(226) → 隐藏层1-5(各1000, ReLU) → 输出层(225) → Softmax
+- **训练方式**：自我对弈 + 奖励反向传播
+
+### CNN v1
+
+卷积神经网络模型，通过卷积层提取棋盘空间特征。
+
+- **输入**：15×15×3 张量（黑棋通道、白棋通道、当前玩家通道）
+- **输出**：225 维概率分布（Softmax）
+- **网络结构**：卷积层(3→64→128→256→256) → 全连接层(57600→1024→512→225) → Softmax
 - **训练方式**：自我对弈 + 奖励反向传播
 
 ---
