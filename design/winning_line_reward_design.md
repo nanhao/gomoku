@@ -10,7 +10,7 @@
 ## 设计决策
 
 1. **衰减系数 r**：复用 `Evaluator.DECAY_RATE = 0.9`
-2. **融合权重**：α = 0.7（棋型评估），1-α = 0.3（五连追溯）
+2. **融合策略**：取两者最大值 `max(shape_reward, line_bonus)`
 3. **失败方**：不给负奖励，仅保留棋型评估
 
 ## 算法流程
@@ -113,23 +113,25 @@ def find_five_in_a_row(board, winner):
     return []
 ```
 
-## Reward 叠加公式
+## Reward 融合策略
 
 ```python
-def blend_rewards(shape_reward, line_bonus, alpha=0.7):
+def blend_rewards(shape_reward, line_bonus):
     """
     融合棋型评估奖励和五连追溯奖励
     
-    Args:
-        shape_reward: 棋型评估奖励（每个空位都有）
-        line_bonus: 五连追溯奖励（仅五连相关的 5 步有）
-        alpha: 棋型评估权重
-    
-    Returns:
-        融合后的奖励
+    取两者最大值，确保五连追溯信号不被稀释。
     """
-    return alpha * shape_reward + (1 - alpha) * line_bonus
+    return max(shape_reward, line_bonus)
 ```
+
+**设计决策**：取最大值而非加权平均
+
+| 场景 | 棋型评估 | 五连追溯 | 融合结果 |
+|------|---------|---------|---------|
+| 五连追溯更高 | 380,000 | 656,100 | 656,100 |
+| 棋型评估更高 | 855,000 | 729,000 | 855,000 |
+| 两者相等 | 1,000,000 | 1,000,000 | 1,000,000 |
 
 ## 文件修改
 
