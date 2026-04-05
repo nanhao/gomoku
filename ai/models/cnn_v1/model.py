@@ -27,8 +27,9 @@ class CNNNetwork(nn.Module):
     
     网络结构：
     - 3 层卷积：3→32→64→128
-    - 1 层全连接：28800→512→225
-    - 参数量：约 14.95 万
+    - 全局平均池化：128x15x15 → 128
+    - 1 层全连接：128→225
+    - 参数量：约 4 万
     """
     
     def __init__(self):
@@ -49,13 +50,12 @@ class CNNNetwork(nn.Module):
         self.bn3 = nn.BatchNorm2d(128)
         self.relu3 = nn.ReLU()
         
-        # 全连接层部分
-        # 128通道 * 15 * 15 = 28800
-        self.fc1 = nn.Linear(128 * 15 * 15, 512)
-        self.relu_fc1 = nn.ReLU()
+        # 全局平均池化：将 128x15x15 压缩为 128
+        # 大幅减少全连接层参数量
+        self.global_pool = nn.AdaptiveAvgPool2d((1, 1))
         
-        # 输出层: 225个位置
-        self.fc_output = nn.Linear(512, 225)
+        # 输出层: 128 -> 225
+        self.fc_output = nn.Linear(128, 225)
         
         # Softmax 激活函数
         self.softmax = nn.Softmax(dim=1)
@@ -82,12 +82,11 @@ class CNNNetwork(nn.Module):
         x = self.bn3(x)
         x = self.relu3(x)
         
-        # 展平
-        x = x.view(x.size(0), -1)
+        # 全局平均池化： (batch, 128, 15, 15) -> (batch, 128, 1, 1)
+        x = self.global_pool(x)
         
-        # 全连接层
-        x = self.fc1(x)
-        x = self.relu_fc1(x)
+        # 展平：(batch, 128, 1, 1) -> (batch, 128)
+        x = x.view(x.size(0), -1)
         
         # 输出层
         x = self.fc_output(x)
