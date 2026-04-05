@@ -31,30 +31,99 @@ pip install torch
 
 ---
 
-## 脚本说明
+## 命令速查表
 
-### 1. 游戏入口
+### 启动游戏
 
-#### GUI 图形界面（推荐）
+| 命令 | 说明 |
+|------|------|
+| `python gui/main.py` | 启动图形界面（推荐） |
+| `python cli/main.py` | 启动命令行界面 |
 
-```bash
-python gui/main.py
-```
-
-启动图形界面，支持三种模式：
-- **人人对战 (PvP)** - 双人对战
-- **人机对战 (PvE)** - 玩家 vs AI，可选 AI 难度
-- **AI 内战 (AI vs AI)** - 观看 AI 自动对战
-
-#### CLI 命令行界面
+### AI 对战
 
 ```bash
-python cli/main.py
+python ai/battle.py --ai1 <AI名称> --ai2 <AI名称> [--games <局数>]
 ```
 
-启动交互式命令行游戏。
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--ai1` | 第一方 AI 名称 | 必填 |
+| `--ai2` | 第二方 AI 名称 | 必填 |
+| `--games` | 对战局数 | 10 |
 
-**命令列表：**
+**可用 AI：** `random` / `fc_v1` / `cnn_v1`
+
+```bash
+# 示例
+python ai/battle.py --ai1 fc_v1 --ai2 random --games 50
+```
+
+### 模型训练
+
+#### 单轮次训练（使用已有样本）
+
+```bash
+python ai/train_main.py --model <模型名称> --sample-dir <sample目录> [--epochs <轮数>]
+```
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--model` | 模型名称（fc_v1/cnn_v1） | 必填 |
+| `--sample-dir` | 训练样本目录 | 必填 |
+| `--epochs` | 训练迭代数 | 1000 |
+
+```bash
+# 示例
+python ai/train_main.py --model fc_v1 --sample-dir train_data/random_vs_random_1/1
+```
+
+#### 训练周期（自我对弈训练）
+
+```bash
+python ai/train_main.py --model <模型名称> --cycle [选项]
+```
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--model` | 模型名称（fc_v1/cnn_v1） | fc_v1 |
+| `--cycle` | 启用训练周期模式 | - |
+| `--rounds` | 训练轮数 | 10 |
+| `--games` | 每轮对局数 | 100 |
+| `--epochs` | 每轮训练迭代数 | 1000 |
+| `--rate` | 奖励衰减率 | 0.9 |
+| `--fresh` | 从新模型开始 | - |
+
+```bash
+# 示例
+python ai/train_main.py --model fc_v1 --cycle              # 默认参数
+python ai/train_main.py --model cnn_v1 --cycle             # CNN 训练
+python ai/train_main.py --model fc_v1 --cycle --rounds 50 --games 50  # 自定义
+python ai/train_main.py --model fc_v1 --cycle --fresh      # 从新模型开始
+```
+
+### 样本检视
+
+```bash
+python ai/models/fc_v1/inspect_main.py --sample <sample.json路径> [--model-path <模型路径>]
+```
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--sample` | sample.json 文件路径 | 必填 |
+| `--model-path` | 模型文件路径 | ai/models/fc_v1/fc_v1.pth |
+
+### 运行测试
+
+```bash
+python tests/run_tests.py
+```
+
+---
+
+## CLI 命令一览
+
+启动 CLI 后可用命令：
 
 | 命令 | 说明 |
 |------|------|
@@ -66,151 +135,6 @@ python cli/main.py
 | `short <名称>` | 显示简要存档信息 |
 | `help` | 显示帮助 |
 | `quit / exit` | 退出程序 |
-
----
-
-### 2. AI 对战脚本
-
-```bash
-python ai/battle.py --ai1 <AI名称> --ai2 <AI名称> --games <局数>
-```
-
-**参数：**
-
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `--ai1` | 第一方 AI 名称 | 必填 |
-| `--ai2` | 第二方 AI 名称 | 必填 |
-| `--games` | 对战局数 | 10 |
-
-**可用 AI：**
-- `random` - 随机落子
-- `fc_v1` - 全连接神经网络模型
-- `cnn_v1` - 卷积神经网络模型
-
-**示例：**
-
-```bash
-# random vs random，10 局
-python ai/battle.py --ai1 random --ai2 random --games 10
-
-# fc_v1 vs random，50 局
-python ai/battle.py --ai1 fc_v1 --ai2 random --games 50
-```
-
-对局记录保存在 `ai/ai_data/` 目录下。
-
----
-
-### 3. 模型训练脚本
-
-#### 单轮次训练
-
-```bash
-python ai/train_main.py --model <模型名称> --sample-dir <sample目录> [--epochs <轮数>]
-```
-
-使用已有的训练样本训练指定模型。
-
-**支持的模型：**
-- `fc_v1` - 全连接神经网络模型
-- `cnn_v1` - 卷积神经网络模型
-
-**示例：**
-
-```bash
-# 训练 fc_v1（默认 1000 轮）
-python ai/train_main.py --model fc_v1 --sample-dir train_data/random_vs_random_1/1
-
-# 训练 cnn_v1
-python ai/train_main.py --model cnn_v1 --sample-dir train_data/random_vs_random_1/1
-
-# 自定义训练轮数
-python ai/train_main.py --model fc_v1 --sample-dir train_data/random_vs_random_1/1 --epochs 20
-```
-
-#### 训练周期（自我对弈训练）
-
-```bash
-python ai/train_main.py --model <模型名称> --cycle [--rounds <轮数>] [--games <每轮局数>] [--rate <衰减率>]
-```
-
-让模型自我对弈并训练。
-
-**参数：**
-
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `--model` | 模型名称（fc_v1/cnn_v1） | fc_v1 |
-| `--cycle` | 启用训练周期模式 | - |
-| `--rounds` | 训练轮数 | 10 |
-| `--games` | 每轮对局数 | 100 |
-| `--epochs` | 每轮训练迭代数 | 1000 |
-| `--rate` | 奖励衰减率 | 0.9 |
-| `--fresh` | 从新模型开始（不加载已有模型） | - |
-
-**示例：**
-
-```bash
-# fc_v1 训练周期（默认参数）
-python ai/train_main.py --model fc_v1 --cycle
-
-# cnn_v1 训练周期
-python ai/train_main.py --model cnn_v1 --cycle
-
-# 自定义参数
-python ai/train_main.py --model fc_v1 --cycle --rounds 50 --games 50
-
-# 从新模型开始
-python ai/train_main.py --model fc_v1 --cycle --fresh
-```
-
-模型保存位置：
-- fc_v1: `ai/models/fc_v1/fc_v1.pth`
-- cnn_v1: `ai/models/cnn_v1/cnn.pth`
-
----
-
-### 4. 样本检视脚本
-
-```bash
-python ai/models/fc_v1/inspect_main.py --sample <sample.json路径> [--model-path <模型路径>]
-```
-
-检视模型在指定样本上的表现，逐步输出模型预测与目标值的对比。
-
-**参数：**
-
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `--sample` | sample.json 文件路径 | 必填 |
-| `--model-path` | 模型文件路径 | ai/models/fc_v1/fc_v1.pth |
-
-**示例：**
-
-```bash
-python ai/models/fc_v1/inspect_main.py --sample train_data/fc_v1_cycle_1_4/1/sample.json
-```
-
----
-
-### 5. 测试脚本
-
-```bash
-python tests/run_tests.py
-```
-
-运行所有单元测试（无需 pytest）。
-
----
-
-## 数据目录
-
-| 目录 | 说明 |
-|------|------|
-| `game/save/` | 游戏存档 |
-| `ai_data/` | AI 对战记录（record.json） |
-| `train_data/` | 训练样本（sample.json） |
 
 ---
 
@@ -227,7 +151,8 @@ python tests/run_tests.py
 - **输入**：226 维向量（225 位棋盘状态 + 1 位当前玩家）
 - **输出**：225 维概率分布（Softmax）
 - **网络结构**：输入层(226) → 隐藏层1-5(各1000, ReLU) → 输出层(225) → Softmax
-- **训练方式**：自我对弈 + 奖励反向传播
+- **训练方式**：自我对弈 + 奖励反向传播 + 五连追溯奖励
+- **模型文件**：`ai/models/fc_v1/fc_v1.pth`
 
 ### CNN v1
 
@@ -236,7 +161,18 @@ python tests/run_tests.py
 - **输入**：15×15×3 张量（黑棋通道、白棋通道、当前玩家通道）
 - **输出**：225 维概率分布（Softmax）
 - **网络结构**：卷积层(3→64→128→256→256) → 全连接层(57600→1024→512→225) → Softmax
-- **训练方式**：自我对弈 + 奖励反向传播
+- **训练方式**：自我对弈 + 奖励反向传播 + 五连追溯奖励
+- **模型文件**：`ai/models/cnn_v1/cnn.pth`
+
+---
+
+## 数据目录
+
+| 目录 | 说明 |
+|------|------|
+| `game/save/` | 游戏存档 |
+| `ai/ai_data/` | AI 对战记录（record.json） |
+| `ai/train_data/` | 训练样本（sample.json） |
 
 ---
 
