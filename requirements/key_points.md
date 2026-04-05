@@ -532,3 +532,12 @@ function shape_to_reward(board, shape, player, is_current_player) {
 
 ## mask 逻辑更新
 已落子的位置，mask 置为0，使得计算 loss 时屏蔽已落子位置的影响。
+
+
+# 第十四次追加
+在 ai 包中增加一个常量定义模块，把 ai/ai_data 和 ai/train_data 都定义为常量 {project_root}/ai/ai_data、{project_root}/ai/train_data
+搜索整个项目中使用到这两个目录的地方，全都替换成引用这个常量模块
+
+
+# 第十五次追加
+fc_v1 的网络架构改变。从10个隐藏层改为5个。

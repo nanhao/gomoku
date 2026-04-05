@@ -38,20 +38,26 @@ class TestBattleSessionRun:
 
     def test_run_returns_results_with_correct_length(self):
         """run() 应返回长度等于 num_games 的结果列表"""
-        session = BattleSession("random", "random", num_games=2, project_root=_TEST_ROOT)
+        ai_data_dir = os.path.join(_TEST_ROOT, "ai_data")
+        train_data_dir = os.path.join(_TEST_ROOT, "train_data")
+        session = BattleSession("random", "random", num_games=2, ai_data_dir=ai_data_dir, train_data_dir=train_data_dir)
         results = session.run()
         assert len(results) == 2
 
     def test_run_result_has_game_and_winner(self):
         """run() 返回的每项结果应包含 game 和 winner 字段"""
-        session = BattleSession("random", "random", num_games=1, project_root=_TEST_ROOT)
+        ai_data_dir = os.path.join(_TEST_ROOT, "ai_data")
+        train_data_dir = os.path.join(_TEST_ROOT, "train_data")
+        session = BattleSession("random", "random", num_games=1, ai_data_dir=ai_data_dir, train_data_dir=train_data_dir)
         results = session.run()
         assert "game" in results[0]
         assert "winner" in results[0]
 
     def test_run_winner_is_valid_value(self):
         """winner 应为 1（黑胜）、2（白胜）或 3（平局）"""
-        session = BattleSession("random", "random", num_games=1, project_root=_TEST_ROOT)
+        ai_data_dir = os.path.join(_TEST_ROOT, "ai_data")
+        train_data_dir = os.path.join(_TEST_ROOT, "train_data")
+        session = BattleSession("random", "random", num_games=1, ai_data_dir=ai_data_dir, train_data_dir=train_data_dir)
         results = session.run()
         assert results[0]["winner"] in (1, 2, 3)
 
@@ -62,7 +68,9 @@ class TestBattleSessionRun:
         def on_progress(current, total):
             calls.append((current, total))
 
-        session = BattleSession("random", "random", num_games=3, project_root=_TEST_ROOT)
+        ai_data_dir = os.path.join(_TEST_ROOT, "ai_data")
+        train_data_dir = os.path.join(_TEST_ROOT, "train_data")
+        session = BattleSession("random", "random", num_games=3, ai_data_dir=ai_data_dir, train_data_dir=train_data_dir)
         session.run(on_progress=on_progress)
 
         assert len(calls) == 3
@@ -72,10 +80,11 @@ class TestBattleSessionRun:
 
     def test_run_generates_train_samples(self):
         """run() 完成后应在 train_data 目录下生成 sample.json"""
-        session = BattleSession("random", "random", num_games=1, project_root=_TEST_ROOT)
+        ai_data_dir = os.path.join(_TEST_ROOT, "ai_data")
+        train_data_dir = os.path.join(_TEST_ROOT, "train_data")
+        session = BattleSession("random", "random", num_games=1, ai_data_dir=ai_data_dir, train_data_dir=train_data_dir)
         session.run()
 
-        train_data_dir = os.path.join(_TEST_ROOT, "train_data")
         sample_files = []
         for root, dirs, files in os.walk(train_data_dir):
             for f in files:
@@ -87,7 +96,9 @@ class TestBattleSessionRun:
     def test_get_recorder_returns_recorder_after_run(self):
         """run() 后 get_recorder() 应返回有效的 DataRecorder"""
         from ai import DataRecorder
-        session = BattleSession("random", "random", num_games=1, project_root=_TEST_ROOT)
+        ai_data_dir = os.path.join(_TEST_ROOT, "ai_data")
+        train_data_dir = os.path.join(_TEST_ROOT, "train_data")
+        session = BattleSession("random", "random", num_games=1, ai_data_dir=ai_data_dir, train_data_dir=train_data_dir)
         session.run()
         recorder = session.get_recorder()
         assert recorder is not None
@@ -95,5 +106,7 @@ class TestBattleSessionRun:
 
     def test_get_recorder_returns_none_before_run(self):
         """run() 前 get_recorder() 应返回 None"""
-        session = BattleSession("random", "random", num_games=1, project_root=_TEST_ROOT)
+        ai_data_dir = os.path.join(_TEST_ROOT, "ai_data")
+        train_data_dir = os.path.join(_TEST_ROOT, "train_data")
+        session = BattleSession("random", "random", num_games=1, ai_data_dir=ai_data_dir, train_data_dir=train_data_dir)
         assert session.get_recorder() is None

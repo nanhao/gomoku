@@ -27,6 +27,7 @@ if _project_root not in sys.path:
 from ai.engine import AIEngine
 from ai.data_recorder import DataRecorder
 from ai.game_manager import AIGameManager
+from ai.constants import AI_DATA_DIR
 
 
 # 已知 AI 名称到模型类的映射
@@ -144,10 +145,8 @@ def run_battle(ai1_name: str, ai2_name: str, num_games: int):
     
     # 创建数据记录器，使用组合 AI 名称作为轮次目录前缀
     round_name = f"{ai1_name}_vs_{ai2_name}"
-    project_root = os.path.dirname(os.path.dirname(__file__))
-    # 数据目录位于 ai/ai_data/ 下
-    ai_data_dir = os.path.join(project_root, "ai", "ai_data")
-    recorder = DataRecorder(round_name, ai_data_dir)
+    # 使用常量定义的 AI 数据目录
+    recorder = DataRecorder(round_name, AI_DATA_DIR)
     
     # 执行对战（每局执方随机）
     results = AIGameManager.start_ai_vs_ai_random(engine1, engine2, num_games, recorder)

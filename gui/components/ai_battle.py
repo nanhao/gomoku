@@ -255,13 +255,10 @@ class AIBattleProgressWindow:
     def _run_battle(self):
         """在后台线程中运行对战"""
         def battle_thread():
-            project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-
             session = BattleSession(
                 ai1_name=self.ai1_name,
                 ai2_name=self.ai2_name,
                 num_games=self.num_games,
-                project_root=project_root,
             )
             self._battle_session = session
 

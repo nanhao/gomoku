@@ -1,8 +1,8 @@
 """评价器模块
 
 从 AI 对战记录生成训练样本。
-输入：ai_data/.../record.json
-输出：train_data/.../sample.json
+输入：ai/ai_data/.../record.json
+输出：ai/train_data/.../sample.json
 
 使用双向棋型检测法计算每个位置的 reward 值。
 """
@@ -11,6 +11,8 @@ import os
 import json
 from typing import List, Dict, Tuple
 from copy import deepcopy
+
+from ai.constants import AI_DATA_DIR, TRAIN_DATA_DIR
 
 
 class Evaluator:
@@ -42,14 +44,14 @@ class Evaluator:
         初始化评价器
         
         Args:
-            ai_data_dir: AI 数据目录路径，默认为 ai/ai_data
-            train_data_dir: 训练数据目录路径，默认为 ai/train_data
+            ai_data_dir: AI 数据目录路径，默认为 AI_DATA_DIR
+            train_data_dir: 训练数据目录路径，默认为 TRAIN_DATA_DIR
             decay_rate: 奖励衰减率 r（已弃用，保留参数兼容性）
         """
         if ai_data_dir is None:
-            ai_data_dir = os.path.join("ai", "ai_data")
+            ai_data_dir = AI_DATA_DIR
         if train_data_dir is None:
-            train_data_dir = os.path.join("ai", "train_data")
+            train_data_dir = TRAIN_DATA_DIR
         self.ai_data_dir = ai_data_dir
         self.train_data_dir = train_data_dir
         self.decay_rate = decay_rate if decay_rate is not None else self.DECAY_RATE

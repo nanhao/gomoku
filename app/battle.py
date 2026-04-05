@@ -8,6 +8,7 @@ import os
 from typing import Callable, List
 
 from ai import AIGameManager, DataRecorder, Evaluator, create_engine
+from ai.constants import AI_DATA_DIR, TRAIN_DATA_DIR
 
 
 class BattleSession:
@@ -27,7 +28,8 @@ class BattleSession:
         ai1_name: str,
         ai2_name: str,
         num_games: int,
-        project_root: str,
+        ai_data_dir: str = None,
+        train_data_dir: str = None,
     ):
         """
         初始化 AI 内战会话
@@ -36,12 +38,14 @@ class BattleSession:
             ai1_name: 黑方 AI 名称（如 "random"、"fc_v1"）
             ai2_name: 白方 AI 名称
             num_games: 对战局数
-            project_root: 项目根目录，用于确定 ai_data / train_data 路径
+            ai_data_dir: AI 数据目录，默认使用 AI_DATA_DIR 常量
+            train_data_dir: 训练数据目录，默认使用 TRAIN_DATA_DIR 常量
         """
         self._ai1_name = ai1_name
         self._ai2_name = ai2_name
         self._num_games = num_games
-        self._project_root = project_root
+        self._ai_data_dir = ai_data_dir if ai_data_dir is not None else AI_DATA_DIR
+        self._train_data_dir = train_data_dir if train_data_dir is not None else TRAIN_DATA_DIR
         self._recorder = None
 
     def run(self, on_progress: Callable[[int, int], None] = None) -> List[dict]:
@@ -64,10 +68,7 @@ class BattleSession:
         engine2 = create_engine(self._ai2_name)
 
         battle_name = f"{self._ai1_name}_vs_{self._ai2_name}"
-        ai_data_dir = os.path.join(self._project_root, "ai_data")
-        train_data_dir = os.path.join(self._project_root, "train_data")
-
-        recorder = DataRecorder(battle_name, ai_data_dir)
+        recorder = DataRecorder(battle_name, self._ai_data_dir)
         self._recorder = recorder
 
         results = AIGameManager.start_ai_vs_ai(
@@ -77,8 +78,8 @@ class BattleSession:
 
         # 对战完成后生成训练样本
         evaluator = Evaluator(
-            ai_data_dir=ai_data_dir,
-            train_data_dir=train_data_dir,
+            ai_data_dir=self._ai_data_dir,
+            train_data_dir=self._train_data_dir,
         )
         evaluator.evaluate_round(recorder.get_round_dir())
 

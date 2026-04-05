@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from .model import FCv1Model
+from ai.constants import AI_DATA_DIR, TRAIN_DATA_DIR
 
 
 class FCv1Trainer:
@@ -194,8 +195,8 @@ class FCv1Trainer:
             project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
         
         # 创建数据目录（位于 ai/ 子目录下）
-        ai_data_dir = os.path.join(project_root, "ai", "ai_data")
-        train_data_dir = os.path.join(project_root, "ai", "train_data")
+        ai_data_dir = AI_DATA_DIR
+        train_data_dir = TRAIN_DATA_DIR
         os.makedirs(ai_data_dir, exist_ok=True)
         os.makedirs(train_data_dir, exist_ok=True)
         

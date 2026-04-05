@@ -1,32 +1,36 @@
 """AI 对战数据记录器模块
 
 记录 AI 对战的每一轮输入输出、落子位置、游戏结果。
-数据保存到 ai_data/ 目录下。
+数据保存到 ai/ai_data/ 目录下。
 """
 
 import os
 import json
 from typing import List, Tuple
 
+from ai.constants import AI_DATA_DIR
+
 
 class DataRecorder:
     """AI 对战数据记录器
     
     负责：
-    1. 创建轮次目录（ai_data/{ai_name}_{递增整数}/）
+    1. 创建轮次目录（ai/ai_data/{ai_name}_{递增整数}/）
     2. 每局游戏一个子目录（1, 2, 3, ...）
     3. 每次落子记录 input、output、position
     4. 游戏结束保存完整记录文件
     """
     
-    def __init__(self, ai_name: str, ai_data_dir: str = "ai_data"):
+    def __init__(self, ai_name: str, ai_data_dir: str = None):
         """
         初始化数据记录器
         
         Args:
             ai_name: AI 名称，用于命名轮次目录
-            ai_data_dir: 数据存储根目录，默认为项目根目录下的 ai_data/
+            ai_data_dir: 数据存储根目录，默认为 AI_DATA_DIR
         """
+        if ai_data_dir is None:
+            ai_data_dir = AI_DATA_DIR
         self.ai_name = ai_name
         self.ai_data_dir = ai_data_dir
         self.round_dir = self._create_round_dir()

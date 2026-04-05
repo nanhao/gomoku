@@ -98,7 +98,7 @@ python ai/battle.py --ai1 random --ai2 random --games 10
 python ai/battle.py --ai1 fc_v1 --ai2 random --games 50
 ```
 
-对局记录保存在 `ai_data/` 目录下。
+对局记录保存在 `ai/ai_data/` 目录下。
 
 ---
 

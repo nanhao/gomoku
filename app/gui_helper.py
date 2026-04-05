@@ -5,6 +5,8 @@
 
 import os
 
+from ai.constants import AI_DATA_DIR
+
 
 class GUIHelper:
     """GUI 辅助类 - 处理与界面无关的业务逻辑"""
@@ -187,12 +189,7 @@ def get_ai_data_dir() -> str:
     Returns:
         ai_data 目录的绝对路径（位于 ai/ai_data/）
     """
-    # 从 app/gui_helper.py 所在位置计算
-    app_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(app_dir)
-    # 数据目录位于 ai/ 子目录下
-    ai_dir = os.path.join(project_root, "ai")
-    return os.path.join(ai_dir, "ai_data")
+    return AI_DATA_DIR
 
 
 def create_pve_config(selector_result: dict) -> dict:

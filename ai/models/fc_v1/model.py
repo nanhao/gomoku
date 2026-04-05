@@ -13,8 +13,8 @@ from ai.base_model import BaseModel
 class FCv1Network(nn.Module):
     """FC v1 神经网络结构
     
-    10层隐藏层，每层1000个神经元，使用ReLU激活函数。
-    输入层(226) -> 隐藏层1-10(各1000, ReLU) -> 输出层(225)
+    5层隐藏层，每层1000个神经元，使用ReLU激活函数。
+    输入层(226) -> 隐藏层1-5(各1000, ReLU) -> 输出层(225) -> softmax
     """
     
     def __init__(self):
@@ -26,7 +26,7 @@ class FCv1Network(nn.Module):
         self.fc1 = nn.Linear(226, 1000)
         self.relu1 = nn.ReLU()
         
-        # 隐藏层2-10
+        # 隐藏层2-5
         self.fc2 = nn.Linear(1000, 1000)
         self.relu2 = nn.ReLU()
         
@@ -38,21 +38,6 @@ class FCv1Network(nn.Module):
         
         self.fc5 = nn.Linear(1000, 1000)
         self.relu5 = nn.ReLU()
-        
-        self.fc6 = nn.Linear(1000, 1000)
-        self.relu6 = nn.ReLU()
-        
-        self.fc7 = nn.Linear(1000, 1000)
-        self.relu7 = nn.ReLU()
-        
-        self.fc8 = nn.Linear(1000, 1000)
-        self.relu8 = nn.ReLU()
-        
-        self.fc9 = nn.Linear(1000, 1000)
-        self.relu9 = nn.ReLU()
-        
-        self.fc10 = nn.Linear(1000, 1000)
-        self.relu10 = nn.ReLU()
         
         # 输出层
         self.fc_output = nn.Linear(1000, 225)
@@ -85,26 +70,6 @@ class FCv1Network(nn.Module):
         # 第5层
         x = self.fc5(x)
         x = self.relu5(x)
-        
-        # 第6层
-        x = self.fc6(x)
-        x = self.relu6(x)
-        
-        # 第7层
-        x = self.fc7(x)
-        x = self.relu7(x)
-        
-        # 第8层
-        x = self.fc8(x)
-        x = self.relu8(x)
-        
-        # 第9层
-        x = self.fc9(x)
-        x = self.relu9(x)
-        
-        # 第10层
-        x = self.fc10(x)
-        x = self.relu10(x)
         
         # 输出层
         x = self.fc_output(x)
