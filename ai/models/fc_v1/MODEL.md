@@ -36,15 +36,15 @@
   - `2`: 白方
 
 ### 输出向量 (225 维)
-- 每个位置对应的 reward 预测值
+- 每个位置对应的概率预测值（Softmax 输出）
 - 索引 `i` 对应棋盘位置 `(i//15, i%15)`
-- 范围：`[-1,000,000, 1,000,000]`
+- 范围：`(0, 1)`，所有概率之和为 1
 
 ## 训练配置
 
 - **优化器**: Adam (lr=0.001)
 - **损失函数**: L1Loss (MAE)
-- **Reward 归一化**: 除以 1,000,000，映射到 [-1, 1]
+- **目标**: Softmax 概率分布（由 Evaluator 生成）
 - **默认训练轮数**: 
   - 单轮次训练: 10 epochs
   - 批量训练: 1000 epochs
@@ -56,11 +56,12 @@
 fc_v1/
 ├── model.py          # 模型定义 (FCv1Network, FCv1Model)
 ├── trainer.py        # 训练器 (FCv1Trainer)
-├── train.py          # 训练入口脚本
 ├── fc_v1.pth         # 模型参数文件
 ├── inspect_main.py   # 模型检查工具
 └── sample_inspector.py # 样本检查工具
 ```
+
+**训练入口脚本**: `ai/train_main.py`（支持多模型训练）
 
 ## 已知局限性
 

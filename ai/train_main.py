@@ -1,13 +1,16 @@
-"""FC v1 训练器入口脚本
+"""AI 模型训练器入口脚本
 
-独立运行的训练器入口，不依赖 cli 包。
+独立运行的训练器入口，支持多种模型。
 
 用法:
-    # 单轮次训练
-    python ai/fc_v1/train.py --sample-dir train_data/{轮次目录}/{局数目录}
+    # 单轮次训练（fc_v1 模型）
+    python ai/train_main.py --model fc_v1 --sample-dir train_data/{轮次目录}/{局数目录}
     
-    # 训练周期
-    python ai/fc_v1/train.py --cycle [--rounds 100] [--games 100]
+    # 训练周期（fc_v1 模型）
+    python ai/train_main.py --model fc_v1 --cycle [--rounds 100] [--games 100]
+    
+    # 单轮次训练（cnn 模型）
+    python ai/train_main.py --model cnn --sample-dir train_data/{轮次目录}/{局数目录}
 """
 
 import sys
@@ -15,36 +18,60 @@ import os
 import argparse
 
 # 添加项目根目录到路径
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from ai.models.fc_v1.trainer import FCv1Trainer
+
+
+def get_trainer(model_name: str, fresh: bool = False):
+    """
+    根据模型名称创建对应的训练器
+    
+    Args:
+        model_name: 模型名称，如 "fc_v1"、"cnn"
+        fresh: 是否从新模型开始训练
+        
+    Returns:
+        对应的训练器实例
+        
+    Raises:
+        ValueError: 不支持的模型名称
+    """
+    if model_name == "fc_v1":
+        return FCv1Trainer(fresh=fresh)
+    else:
+        raise ValueError(f"不支持的模型: {model_name}。目前仅支持: fc_v1")
 
 
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(
-        description='FC v1 模型训练器',
+        description='AI 模型训练器',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  # 单轮次训练（默认10轮）
-  python ai/fc_v1/train.py --sample-dir train_data/random_vs_random_1/1
+  # 单轮次训练 fc_v1（默认10轮）
+  python ai/train_main.py --model fc_v1 --sample-dir train_data/random_vs_random_1/1
   
-  # 单轮次训练（自定义轮数）
-  python ai/fc_v1/train.py --sample-dir train_data/random_vs_random_1/1 --epochs 20
+  # 单轮次训练 fc_v1（自定义轮数）
+  python ai/train_main.py --model fc_v1 --sample-dir train_data/random_vs_random_1/1 --epochs 20
   
-  # 训练周期（100轮，每轮100局）
-  python ai/fc_v1/train.py --cycle
+  # 训练周期 fc_v1（100轮，每轮100局）
+  python ai/train_main.py --model fc_v1 --cycle
   
-  # 训练周期（自定义参数）
-  python ai/fc_v1/train.py --cycle --rounds 50 --games 50
+  # 训练周期 fc_v1（自定义参数）
+  python ai/train_main.py --model fc_v1 --cycle --rounds 50 --games 50
   
-  # 从新模型开始训练（不加载已保存模型）
-  python ai/fc_v1/train.py --cycle --fresh
-  
-  # 单轮次训练，从新模型开始
-  python ai/fc_v1/train.py --sample-dir train_data/random_vs_random_1/1 --fresh
+  # 从新模型开始训练 fc_v1
+  python ai/train_main.py --model fc_v1 --cycle --fresh
         """
+    )
+    
+    parser.add_argument(
+        '--model',
+        type=str,
+        default='fc_v1',
+        help='模型名称，如 fc_v1、cnn，默认 fc_v1'
     )
     
     parser.add_argument(
@@ -103,7 +130,11 @@ def main():
         parser.error("--cycle 和 --sample-dir 不能同时使用")
     
     # 创建训练器
-    trainer = FCv1Trainer(fresh=args.fresh)
+    try:
+        trainer = get_trainer(args.model, fresh=args.fresh)
+    except ValueError as e:
+        print(f"错误: {e}")
+        sys.exit(1)
     
     if args.sample_dir:
         # 单轮次训练
@@ -120,7 +151,7 @@ def main():
             print(f"错误: sample.json 不存在: {sample_path}")
             sys.exit(1)
         
-        print(f"开始训练 fc_v1 模型...")
+        print(f"开始训练 {args.model} 模型...")
         print(f"使用数据: {sample_path}")
         
         try:
@@ -139,7 +170,7 @@ def main():
     
     elif args.cycle:
         # 训练周期
-        print(f"开始 fc_v1 训练周期...")
+        print(f"开始 {args.model} 训练周期...")
         print(f"轮次数: {args.rounds}")
         print(f"每轮对局数: {args.games}")
         print(f"奖励衰减率: {args.rate}")

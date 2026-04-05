@@ -351,23 +351,24 @@ class TestFCv1TrainerCycle(unittest.TestCase):
             self.assertEqual(len(result), 225)
 
 
-class TestFCv1TrainScript(unittest.TestCase):
-    """FC v1 训练脚本参数默认值测试"""
+class TestTrainMainScript(unittest.TestCase):
+    """训练入口脚本 (train_main.py) 参数默认值测试"""
     
-    def test_train_script_epochs_default(self):
-        """测试 train.py --epochs 默认值为 1000"""
+    def test_train_main_script_epochs_default(self):
+        """测试 train_main.py --epochs 默认值为 1000"""
         import argparse
         import sys
         
         # 模拟命令行参数解析
         original_argv = sys.argv
         try:
-            sys.argv = ['train.py']
+            sys.argv = ['train_main.py']
             
             parser = argparse.ArgumentParser()
             parser.add_argument('--epochs', type=int, default=1000)
             parser.add_argument('--rounds', type=int, default=10)
             parser.add_argument('--games', type=int, default=100)
+            parser.add_argument('--model', type=str, default='fc_v1')
             
             args = parser.parse_args([])
             
@@ -375,6 +376,7 @@ class TestFCv1TrainScript(unittest.TestCase):
             self.assertEqual(args.epochs, 1000, "--epochs 默认值应为 1000")
             self.assertEqual(args.rounds, 10, "--rounds 默认值应为 10")
             self.assertEqual(args.games, 100, "--games 默认值应为 100")
+            self.assertEqual(args.model, 'fc_v1', "--model 默认值应为 fc_v1")
             
         finally:
             sys.argv = original_argv
@@ -874,8 +876,8 @@ class TestTrainCycleRateParameter(unittest.TestCase):
             msg="rate 默认值应为 0.9"
         )
     
-    def test_train_script_rate_default(self):
-        """train.py --rate 默认值为 0.9"""
+    def test_train_main_script_rate_default(self):
+        """train_main.py --rate 默认值为 0.9"""
         import argparse
         import sys
         
@@ -883,9 +885,11 @@ class TestTrainCycleRateParameter(unittest.TestCase):
         try:
             parser = argparse.ArgumentParser()
             parser.add_argument('--rate', type=float, default=0.9)
+            parser.add_argument('--model', type=str, default='fc_v1')
             
             args = parser.parse_args([])
             self.assertAlmostEqual(args.rate, 0.9, places=9, msg="--rate 默认值应为 0.9")
+            self.assertEqual(args.model, 'fc_v1', "--model 默认值应为 fc_v1")
         finally:
             sys.argv = original_argv
 
