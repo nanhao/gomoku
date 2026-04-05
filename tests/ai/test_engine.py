@@ -226,10 +226,10 @@ class TestCreateEngine(unittest.TestCase):
         self.assertEqual(engine.model.name, "fc_v1")
 
     def test_create_engine_cnn(self):
-        """测试创建 cnn 引擎"""
-        engine = create_engine("cnn")
+        """测试创建 cnn_v1 引擎"""
+        engine = create_engine("cnn_v1")
         self.assertIsNotNone(engine)
-        self.assertEqual(engine.model.name, "cnn")
+        self.assertEqual(engine.model.name, "cnn_v1")
 
     def test_create_engine_unknown_uses_random(self):
         """测试未知模型名称时使用 random 作为兜底"""

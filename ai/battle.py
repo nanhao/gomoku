@@ -34,7 +34,7 @@ from ai.constants import AI_DATA_DIR
 _AI_MODEL_MAP = {
     "random": "ai.models.random.model.RandomModel",
     "fc_v1": "ai.models.fc_v1.model.FCv1Model",
-    "cnn": "ai.models.cnn_v1.model.CNNModel",
+    "cnn_v1": "ai.models.cnn_v1.model.CNNModel",
 }
 
 

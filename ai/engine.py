@@ -16,7 +16,7 @@ def create_engine(ai_name: str) -> "AIEngine":
     AI 名称到模型的映射由 ai 包统一维护，外部调用者无需了解具体模型类。
 
     Args:
-        ai_name: AI 名称，如 "random"、"fc_v1"、"cnn"
+        ai_name: AI 名称，如 "random"、"fc_v1"、"cnn_v1"
 
     Returns:
         对应的 AIEngine 实例；未知名称时返回 AIEngine(RandomModel)（兜底）
@@ -28,7 +28,7 @@ def create_engine(ai_name: str) -> "AIEngine":
     model_map = {
         "random": RandomModel,
         "fc_v1": FCv1Model,
-        "cnn": CNNModel,
+        "cnn_v1": CNNModel,
     }
     model_cls = model_map.get(ai_name, RandomModel)
     return AIEngine(model_cls())

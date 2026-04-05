@@ -147,7 +147,7 @@ class CNNModel(BaseModel):
     @property
     def name(self) -> str:
         """模型名称"""
-        return "cnn"
+        return "cnn_v1"
     
     def _vector_to_tensor(self, board_vector: List[int], device: torch.device = None) -> torch.Tensor:
         """将 226 维向量转换为 CNN 输入张量 (1, 3, 15, 15)
