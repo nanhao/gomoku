@@ -4,6 +4,7 @@
 """
 
 import random
+import math
 from typing import List, Tuple
 from ai.base_model import BaseModel
 
@@ -58,9 +59,11 @@ class AIEngine:
         
         流程：
         1. 将棋盘转换为 226 维向量
-        2. 调用模型获取 225 维 reward 列表
-        3. 解析 reward，排除已有棋子的位置
-        4. 选择 reward 最高的位置（平局随机）
+        2. 调用模型获取 225 维概率分布
+        3. 按概率采样选择落子位置（排除已有棋子）
+        
+        使用概率采样而非选择最大值，确保即使模型输出接近均匀分布，
+        也会有足够的随机性，避免自我对弈时出现确定性结果。
         
         Args:
             board: 15x15 棋盘，0=空, 1=黑, 2=白
@@ -75,33 +78,26 @@ class AIEngine:
         # 1. 转换棋盘为向量
         board_vector = self.board_to_vector(board, current_player)
         
-        # 2. 获取模型预测（225 维 reward）
-        rewards = self.model.predict(board_vector)
+        # 2. 获取模型预测（225 维概率分布）
+        probs = self.model.predict(board_vector)
         
-        # 3. 解析 225 维 reward 列表，索引 i 对应位置 (i//15, i%15)
-        position_rewards = []
+        # 3. 构建位置-概率列表，排除已有棋子的位置
+        valid_positions = []
+        valid_probs = []
         for i in range(225):
             x = i // 15
             y = i % 15
-            position_rewards.append((x, y, rewards[i]))
+            if 0 <= x < 15 and 0 <= y < 15 and board[x][y] == 0:
+                valid_positions.append((x, y))
+                valid_probs.append(probs[i])
         
-        # 4. 过滤掉已有棋子的位置
-        empty_positions = [
-            (x, y, r) for x, y, r in position_rewards 
-            if 0 <= x < 15 and 0 <= y < 15 and board[x][y] == 0
-        ]
-        
-        if not empty_positions:
+        if not valid_positions:
             raise ValueError("棋盘已满，无空位可落子")
         
-        # 5. 找出最大 reward
-        max_reward = max(r for _, _, r in empty_positions)
-        
-        # 6. 找出所有 reward 最大的位置
-        best_positions = [(x, y) for x, y, r in empty_positions if r == max_reward]
-        
-        # 7. 随机选择一个
-        return random.choice(best_positions)
+        # 4. 按概率采样选择位置
+        # 使用 random.choices 进行加权随机选择
+        chosen_idx = random.choices(range(len(valid_positions)), weights=valid_probs, k=1)[0]
+        return valid_positions[chosen_idx]
     
     @staticmethod
     def board_to_vector(board: List[List[int]], current_player: int) -> List[int]:
