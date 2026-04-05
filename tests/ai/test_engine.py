@@ -119,15 +119,76 @@ class TestRandomModel(unittest.TestCase):
         # 验证长度 225
         self.assertEqual(len(result), 225)
     
-    def test_predict_all_rewards_zero(self):
-        """测试所有 reward 为 0"""
+    def test_predict_probability_format(self):
+        """[primary] 测试输出为概率格式（浮点数）"""
         model = RandomModel()
         board_vector = [0] * 226
         result = model.predict(board_vector)
         
-        # 验证所有元素为 0（每个元素对应一个位置的 reward）
+        # 验证所有元素为浮点数
         self.assertEqual(len(result), 225)
-        self.assertTrue(all(r == 0 for r in result))
+        for prob in result:
+            self.assertIsInstance(prob, float)
+    
+    def test_predict_probability_sum(self):
+        """[primary] 测试空位概率总和为 1"""
+        model = RandomModel()
+        board_vector = [0] * 226
+        result = model.predict(board_vector)
+        
+        # 验证概率总和为 1
+        prob_sum = sum(result)
+        self.assertAlmostEqual(prob_sum, 1.0, places=5)
+    
+    def test_predict_empty_cells_uniform_probability(self):
+        """[primary] 测试空位均匀分布"""
+        model = RandomModel()
+        board_vector = [0] * 226
+        result = model.predict(board_vector)
+        
+        # 空棋盘有 225 个空位，每个概率应为 1/225
+        expected_prob = 1.0 / 225.0
+        for prob in result:
+            self.assertAlmostEqual(prob, expected_prob, places=5)
+    
+    def test_predict_with_pieces(self):
+        """[primary] 测试有棋子时的概率分布"""
+        model = RandomModel()
+        
+        # 创建有棋子的棋盘：中心有黑棋
+        board = [0] * 225
+        board[7 * 15 + 7] = 1  # (7, 7) 位置有黑棋
+        board.append(1)  # 当前黑方落子
+        
+        result = model.predict(board)
+        
+        # 验证概率总和为 1
+        prob_sum = sum(result)
+        self.assertAlmostEqual(prob_sum, 1.0, places=5)
+        
+        # 验证已落子位置概率为 0
+        self.assertEqual(result[7 * 15 + 7], 0.0)
+        
+        # 验证空位概率相同（均匀分布）
+        empty_count = 224  # 225 - 1 个已落子
+        expected_prob = 1.0 / empty_count
+        for i, prob in enumerate(result):
+            if board[i] == 0:  # 空位
+                self.assertAlmostEqual(prob, expected_prob, places=5)
+    
+    def test_predict_all_occupied(self):
+        """[primary] 测试棋盘满时的输出"""
+        model = RandomModel()
+        
+        # 创建满棋盘
+        board = [1] * 225  # 全部有棋子
+        board.append(1)
+        
+        result = model.predict(board)
+        
+        # 验证所有概率为 0
+        self.assertEqual(len(result), 225)
+        self.assertTrue(all(p == 0.0 for p in result))
     
     def test_predict_index_mapping(self):
         """测试索引映射：索引 i 对应位置 (i//15, i%15)"""
@@ -136,11 +197,12 @@ class TestRandomModel(unittest.TestCase):
         result = model.predict(board_vector)
         
         # 索引 0 -> (0, 0)，索引 1 -> (0, 1)，索引 15 -> (1, 0)
-        # random 模型所有 reward 为 0，就验证长度和全为 0
+        # 空棋盘每个位置概率相同
+        expected_prob = 1.0 / 225.0
         self.assertEqual(len(result), 225)
-        self.assertEqual(result[0], 0)   # (0, 0)
-        self.assertEqual(result[1], 0)   # (0, 1)
-        self.assertEqual(result[15], 0)  # (1, 0)
+        self.assertAlmostEqual(result[0], expected_prob, places=5)   # (0, 0)
+        self.assertAlmostEqual(result[1], expected_prob, places=5)   # (0, 1)
+        self.assertAlmostEqual(result[15], expected_prob, places=5)  # (1, 0)
     
     def test_name(self):
         """测试模型名称"""

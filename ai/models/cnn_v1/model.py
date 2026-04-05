@@ -1,12 +1,14 @@
 """CNN 卷积神经网络模型实现
 
 网络结构：
-输入层(15x15x3) -> 卷积层 -> 全连接层 -> 输出层(225)
+输入层(15x15x3) -> 卷积层 -> 全连接层 -> 输出层(225) -> Softmax
 
 输入编码：
 - 通道1：黑棋位置（1表示黑棋，0表示其他）
 - 通道2：白棋位置（1表示白棋，0表示其他）
 - 通道3：当前落子方（全1表示黑方，全0表示白方）
+
+输出：Softmax 概率分布，值域 (0, 1)，总和为 1
 """
 
 import os
@@ -21,7 +23,7 @@ class CNNNetwork(nn.Module):
     
     卷积神经网络用于五子棋棋盘特征提取和落子位置预测。
     输入：15x15x3 的棋盘状态
-    输出：225 维的 reward 预测
+    输出：225 维的 Softmax 概率分布
     """
     
     def __init__(self):
@@ -56,6 +58,9 @@ class CNNNetwork(nn.Module):
         
         # 输出层: 225个位置
         self.fc_output = nn.Linear(512, 225)
+        
+        # Softmax 激活函数
+        self.softmax = nn.Softmax(dim=1)
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """前向传播
@@ -64,7 +69,7 @@ class CNNNetwork(nn.Module):
             x: 输入张量，形状为 (batch_size, 3, 15, 15)
             
         Returns:
-            输出张量，形状为 (batch_size, 225)
+            输出张量，形状为 (batch_size, 225)，值域 (0, 1)，每行和为 1
         """
         # 卷积层
         x = self.conv1(x)
@@ -95,6 +100,9 @@ class CNNNetwork(nn.Module):
         
         # 输出层
         x = self.fc_output(x)
+        
+        # Softmax 激活，输出概率分布
+        x = self.softmax(x)
         
         return x
 
@@ -178,16 +186,17 @@ class CNNModel(BaseModel):
         
         return input_tensor
     
-    def predict(self, board_vector: List[int]) -> List[int]:
-        """预测每个落子位置的 reward
+    def predict(self, board_vector: List[int]) -> List[float]:
+        """预测每个落子位置的概率
         
         Args:
             board_vector: 226 维向量，前 225 位是棋盘（按行展开，0=空, 1=黑, 2=白），
                          最后 1 位是当前落子方（1=黑, 2=白）
             
         Returns:
-            225 维列表，格式为 [reward(0,0), reward(0,1), ..., reward(14,14)]
-            索引 i 对应位置 (i//15, i%15)，reward 范围：-1000000 <= reward <= 1000000
+            225 维列表，格式为 [prob(0,0), prob(0,1), ..., prob(14,14)]
+            索引 i 对应位置 (i//15, i%15)，概率范围：0 < prob < 1
+            所有概率之和为 1（Softmax 输出）
         """
         # 将输入转换为 CNN 输入张量
         input_tensor = self._vector_to_tensor(board_vector)
@@ -197,15 +206,12 @@ class CNNModel(BaseModel):
         with torch.no_grad():
             output_tensor = self.network(input_tensor)
         
-        # 将输出转换为整数列表，并限制范围
+        # 将输出转换为列表 (值域 (0, 1)，Softmax 概率)
         output_values = output_tensor.squeeze(0).tolist()
         
         # 构建 225 维结果，索引 i 对应位置 (i//15, i%15)
-        result = []
-        for i in range(225):
-            reward = int(output_values[i])
-            reward = max(-1000000, min(1000000, reward))
-            result.append(reward)
+        # 直接返回概率值
+        result = [float(prob) for prob in output_values]
         
         return result
     

@@ -30,6 +30,32 @@ class TestCNNNetwork(unittest.TestCase):
 
         # 输出应该是 (batch_size, 225)
         self.assertEqual(output.shape, (batch_size, 225))
+    
+    def test_network_softmax_output_range(self):
+        """[primary] Softmax 输出值域应在 (0, 1) 范围内"""
+        network = CNNNetwork()
+        
+        batch_size = 4
+        input_tensor = torch.randn(batch_size, 3, 15, 15)
+        output = network(input_tensor)
+        
+        # 验证输出范围 (0, 1)
+        self.assertTrue(torch.all(output > 0), "Softmax 输出应大于 0")
+        self.assertTrue(torch.all(output < 1), "Softmax 输出应小于 1")
+    
+    def test_network_softmax_row_sum(self):
+        """[primary] Softmax 每行概率和应为 1"""
+        network = CNNNetwork()
+        
+        batch_size = 4
+        input_tensor = torch.randn(batch_size, 3, 15, 15)
+        output = network(input_tensor)
+        
+        # 验证每行和为 1
+        row_sums = output.sum(dim=1)
+        expected_sums = torch.ones(batch_size)
+        self.assertTrue(torch.allclose(row_sums, expected_sums, atol=1e-5),
+                       "Softmax 每行概率和应接近 1")
 
     def test_network_forward_single(self):
         """测试单样本前向传播"""
@@ -100,22 +126,33 @@ class TestCNNModel(unittest.TestCase):
         # 检查格式：225 维列表，索引 i 对应位置 (i//15, i%15)
         self.assertEqual(len(result), 225)
         for i in range(225):
-            reward = result[i]
-            # reward 应该是整数
-            self.assertIsInstance(reward, int)
+            prob = result[i]
+            # 概率应该是浮点数
+            self.assertIsInstance(prob, float)
 
-    def test_model_predict_reward_range(self):
-        """测试 predict 方法返回的 reward 范围"""
+    def test_model_predict_probability_range(self):
+        """[primary] 测试 predict 方法返回的概率范围"""
         model = CNNModel()
 
         board_vector = [0] * 225 + [1]
         result = model.predict(board_vector)
 
-        # 检查所有 reward 值在范围内
+        # 检查所有概率值在 (0, 1) 范围内
         for i in range(225):
-            reward = result[i]
-            self.assertGreaterEqual(reward, -1000000)
-            self.assertLessEqual(reward, 1000000)
+            prob = result[i]
+            self.assertGreater(prob, 0.0, "概率应大于 0")
+            self.assertLess(prob, 1.0, "概率应小于 1")
+    
+    def test_model_predict_probability_sum(self):
+        """[primary] 测试 predict 方法返回的概率总和为 1"""
+        model = CNNModel()
+
+        board_vector = [0] * 225 + [1]
+        result = model.predict(board_vector)
+
+        # 检查概率总和为 1
+        prob_sum = sum(result)
+        self.assertAlmostEqual(prob_sum, 1.0, places=5, msg="概率总和应为 1")
 
     def test_model_predict_different_inputs(self):
         """测试不同输入产生输出"""
