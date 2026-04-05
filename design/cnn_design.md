@@ -76,6 +76,15 @@ class CNNModel(BaseModel):
 
 ## 3. 网络结构
 
+### 3.1 设计原则
+
+为了确保模型能在有限的训练数据下有效学习，采用轻量化设计：
+- 参数量控制在 ~400 万，与 FC v1 模型相当
+- 3 层卷积提取空间特征
+- 紧凑的全连接层
+
+### 3.2 网络架构
+
 ```
 输入: (batch_size, 3, 15, 15)
   │
@@ -84,32 +93,43 @@ class CNNModel(BaseModel):
   └── 通道3: 当前落子方 (全1=黑方, 全0=白方)
   │
   ▼
-Conv2d(3, 64, 3x3, padding=1) → BatchNorm2d → ReLU
+Conv2d(3, 32, 3x3, padding=1) → BatchNorm2d → ReLU
+  │
+  ▼
+Conv2d(32, 64, 3x3, padding=1) → BatchNorm2d → ReLU
   │
   ▼
 Conv2d(64, 128, 3x3, padding=1) → BatchNorm2d → ReLU
   │
   ▼
-Conv2d(128, 256, 3x3, padding=1) → BatchNorm2d → ReLU
+Flatten: (batch_size, 128*15*15) = (batch_size, 28800)
   │
   ▼
-Conv2d(256, 256, 3x3, padding=1) → BatchNorm2d → ReLU
-  │
-  ▼
-Flatten: (batch_size, 256*15*15) = (batch_size, 57600)
-  │
-  ▼
-Linear(57600, 1024) → ReLU
-  │
-  ▼
-Linear(1024, 512) → ReLU
+Linear(28800, 512) → ReLU
   │
   ▼
 Linear(512, 225)
   │
   ▼
-输出: (batch_size, 225)
+Softmax
+  │
+  ▼
+输出: (batch_size, 225) 概率分布，值域 (0, 1)，总和为 1
 ```
+
+### 3.3 参数量估算
+
+| 层 | 参数量 |
+|---|--------|
+| Conv1 (3→32) | 3×32×3×3 + 32 = 896 |
+| Conv2 (32→64) | 32×64×3×3 + 64 = 18,496 |
+| Conv3 (64→128) | 64×128×3×3 + 128 = 73,856 |
+| FC1 (28800→512) | 28800×512 + 512 = 14,746,112 |
+| FC2 (512→225) | 512×225 + 225 = 115,425 |
+| BN 层 | ~60,000 |
+| **总计** | **约 1500 万** |
+
+> 注：实际参数量约 1500 万，比原来的 6000 万减少 75%，比 FC v1 的 445 万稍大。轻量化设计更适合小数据集训练。
 
 ## 4. 主流程伪代码
 
@@ -193,18 +213,19 @@ def test_model_predict_shape():
     result = model.predict(board_vector)
     assert len(result) == 225
 
-def test_model_predict_reward_range():
-    """测试 reward 范围在 [-1000000, 1000000]"""
+def test_model_predict_prob_range():
+    """测试输出为 Softmax 概率，值域 (0, 1)，总和为 1"""
     model = CNNModel()
     board_vector = [0] * 225 + [1]
     result = model.predict(board_vector)
-    for reward in result:
-        assert -1000000 <= reward <= 1000000
+    for prob in result:
+        assert 0 < prob < 1
+    assert abs(sum(result) - 1.0) < 1e-5
 
 def test_model_name():
-    """测试模型名称为 "cnn" """
+    """测试模型名称为 "cnn_v1"""
     model = CNNModel()
-    assert model.name == "cnn"
+    assert model.name == "cnn_v1"
 ```
 
 ### 5.3 输入编码测试

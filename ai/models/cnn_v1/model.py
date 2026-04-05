@@ -21,40 +21,38 @@ from ai.base_model import BaseModel
 class CNNNetwork(nn.Module):
     """CNN 神经网络结构
     
-    卷积神经网络用于五子棋棋盘特征提取和落子位置预测。
+    轻量化卷积神经网络用于五子棋棋盘特征提取和落子位置预测。
     输入：15x15x3 的棋盘状态
     输出：225 维的 Softmax 概率分布
+    
+    网络结构：
+    - 3 层卷积：3→32→64→128
+    - 1 层全连接：28800→512→225
+    - 参数量：约 14.95 万
     """
     
     def __init__(self):
         """初始化网络结构"""
         super(CNNNetwork, self).__init__()
         
-        # 卷积层部分
+        # 卷积层部分（轻量化设计）
         # 输入: 3通道 (黑棋、白棋、当前方), 15x15
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=3, padding=1)
-        self.bn1 = nn.BatchNorm2d(64)
+        self.conv1 = nn.Conv2d(3, 32, kernel_size=3, padding=1)
+        self.bn1 = nn.BatchNorm2d(32)
         self.relu1 = nn.ReLU()
         
-        self.conv2 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
-        self.bn2 = nn.BatchNorm2d(128)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
+        self.bn2 = nn.BatchNorm2d(64)
         self.relu2 = nn.ReLU()
         
-        self.conv3 = nn.Conv2d(128, 256, kernel_size=3, padding=1)
-        self.bn3 = nn.BatchNorm2d(256)
+        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
+        self.bn3 = nn.BatchNorm2d(128)
         self.relu3 = nn.ReLU()
         
-        self.conv4 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
-        self.bn4 = nn.BatchNorm2d(256)
-        self.relu4 = nn.ReLU()
-        
         # 全连接层部分
-        # 256通道 * 15 * 15 = 57600
-        self.fc1 = nn.Linear(256 * 15 * 15, 1024)
+        # 128通道 * 15 * 15 = 28800
+        self.fc1 = nn.Linear(128 * 15 * 15, 512)
         self.relu_fc1 = nn.ReLU()
-        
-        self.fc2 = nn.Linear(1024, 512)
-        self.relu_fc2 = nn.ReLU()
         
         # 输出层: 225个位置
         self.fc_output = nn.Linear(512, 225)
@@ -84,19 +82,12 @@ class CNNNetwork(nn.Module):
         x = self.bn3(x)
         x = self.relu3(x)
         
-        x = self.conv4(x)
-        x = self.bn4(x)
-        x = self.relu4(x)
-        
         # 展平
         x = x.view(x.size(0), -1)
         
         # 全连接层
         x = self.fc1(x)
         x = self.relu_fc1(x)
-        
-        x = self.fc2(x)
-        x = self.relu_fc2(x)
         
         # 输出层
         x = self.fc_output(x)
