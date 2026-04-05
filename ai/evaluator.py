@@ -73,12 +73,13 @@ class Evaluator:
         
         history = record.get("history", [])
         winner = record.get("winner", 0)
+        end_board = record.get("end_board", [])
         
         if not history or winner == 0:
             raise ValueError("记录文件无效或游戏未结束")
         
-        # 计算每个 step 的 reward
-        sample_dict = self._compute_all_rewards(history)
+        # 计算每个 step 的 reward（融合棋型评估和五连追溯）
+        sample_dict = self._compute_all_rewards(history, winner, end_board)
         
         # 生成输出文件路径
         sample_file = self._get_sample_path(record_file)
@@ -92,15 +93,20 @@ class Evaluator:
         
         return sample_file
     
-    def _compute_all_rewards(self, history: List[Dict]) -> List[Dict]:
+    def _compute_all_rewards(self, history: List[Dict], winner: int = 0,
+                              end_board: List[int] = None) -> List[Dict]:
         """
-        计算所有步骤的 reward（双向棋型检测法）
+        计算所有步骤的 reward（双向棋型检测法 + 五连追溯）
         
         对每个 step 的每个空位，计算其 reward 值，
         然后通过 Softmax 转换为概率分布。
         
+        如果有胜者，叠加五连追溯奖励。
+        
         Args:
             history: 历史记录
+            winner: 获胜方（1=黑, 2=白, 0=未结束, 3=平局）
+            end_board: 最终棋盘状态（225 或 226 维）
             
         Returns:
             包含 input, output, mask 的样本列表
@@ -108,7 +114,16 @@ class Evaluator:
         """
         sample_dict = []
         
-        for step in history:
+        # 计算五连追溯奖励
+        line_bonuses = {}
+        if end_board and winner > 0 and winner < 3:
+            # end_board 可能是 226 维，取前 225 位
+            board_225 = end_board[:225] if len(end_board) >= 225 else end_board
+            bonuses = self.trace_winning_line(board_225, winner, history)
+            # 转换为 {step_index: bonus_reward} 字典
+            line_bonuses = dict(bonuses)
+        
+        for step_idx, step in enumerate(history):
             input_vector = step.get("input", [])
             if len(input_vector) < 226:
                 continue
@@ -132,6 +147,19 @@ class Evaluator:
                     mask[i] = 1
                     x, y = i // 15, i % 15
                     raw_rewards[i] = float(self._compute_position_reward(board, x, y, current_player))
+            
+            # 如果当前步骤有五连追溯奖励，叠加到实际落子位置
+            if step_idx in line_bonuses:
+                position = step.get("position", [])
+                if len(position) >= 2:
+                    px, py = position[0], position[1]
+                    pos_idx = px * 15 + py
+                    if 0 <= pos_idx < 225 and mask[pos_idx] == 1:
+                        # 融合棋型评估奖励和五连追溯奖励
+                        raw_rewards[pos_idx] = self.blend_rewards(
+                            raw_rewards[pos_idx],
+                            line_bonuses[step_idx]
+                        )
             
             # 对 raw_rewards 应用 Softmax 转换为概率分布
             output = self._softmax(raw_rewards, mask)
@@ -510,19 +538,129 @@ class Evaluator:
     def evaluate_round(self, round_dir: str):
         """
         评价整个轮次的所有对局
-        
+    
         Args:
             round_dir: 轮次目录路径（如 ai_data/random_1）
         """
         if not os.path.exists(round_dir):
             return
-        
+    
         for game_dir in sorted(os.listdir(round_dir)):
             game_path = os.path.join(round_dir, game_dir)
             record_file = os.path.join(game_path, "record.json")
-            
+                
             if os.path.isdir(game_path) and os.path.exists(record_file):
                 try:
                     self.evaluate_record(record_file)
                 except Exception as e:
                     print(f"评价失败 {record_file}: {e}")
+    
+    # ==================== 五连追溯奖励相关方法 ====================
+    
+    def find_five_in_a_row(self, board: List[int], winner: int) -> List[Tuple[int, int]]:
+        """
+        在棋盘上找到五连的位置
+    
+        Args:
+            board: 225 维棋盘向量
+            winner: 获胜方 (1=黑, 2=白)
+    
+        Returns:
+            五连的 5 个位置坐标列表 [(x, y), ...]
+        """
+        # 四个方向：横向、纵向、主对角线、副对角线
+        directions = [(0, 1), (1, 0), (1, 1), (1, -1)]
+    
+        for x in range(15):
+            for y in range(15):
+                if board[x * 15 + y] != winner:
+                    continue
+    
+                for dx, dy in directions:
+                    positions = [(x, y)]
+                    nx, ny = x + dx, y + dy
+    
+                    while 0 <= nx < 15 and 0 <= ny < 15:
+                        if board[nx * 15 + ny] == winner:
+                            positions.append((nx, ny))
+                            nx += dx
+                            ny += dy
+                        else:
+                            break
+    
+                    if len(positions) >= 5:
+                        # 返回前 5 个位置
+                        return positions[:5]
+    
+        return []
+    
+    def trace_winning_line(self, end_board: List[int], winner: int,
+                           history: List[Dict]) -> List[Tuple[int, float]]:
+        """
+        追溯形成五连的那 5 步落子，计算反向传播奖励
+    
+        Args:
+            end_board: 最终棋盘状态（225 维）
+            winner: 获胜方 (1=黑, 2=白, 0=未结束, 3=平局)
+            history: 对局历史记录
+    
+        Returns:
+            [(step_index, bonus_reward), ...] 落子步骤索引和奖励
+        """
+        # 无胜者或平局，返回空列表
+        if winner == 0 or winner == 3:
+            return []
+    
+        # 1. 找到五连位置
+        winning_positions = self.find_five_in_a_row(end_board, winner)
+        if not winning_positions:
+            return []
+    
+        # 2. 在 history 中找出这 5 个位置对应的落子步骤
+        step_indices = []
+        for pos in winning_positions:
+            pos_list = list(pos)
+            for i, step in enumerate(history):
+                step_pos = step.get("position", [])
+                if step_pos == pos_list:
+                    # 检查落子方是否正确
+                    input_vector = step.get("input", [])
+                    if len(input_vector) > 225:
+                        player = input_vector[225]
+                        if player == winner:
+                            step_indices.append(i)
+                            break
+    
+        # 如果没有找到足够的落子步骤，返回空
+        if len(step_indices) < 5:
+            return []
+    
+        # 3. 按 step 排序（从小到大）
+        step_indices.sort()
+    
+        # 4. 反向传播奖励
+        # j5 是最后一步（索引最大的），奖励 = MAX_REWARD
+        # j4 奖励 = r * j5 的奖励
+        # ...
+        results = []
+        reward = float(self.MAX_REWARD)
+        for i in range(len(step_indices) - 1, -1, -1):
+            results.append((step_indices[i], reward))
+            reward *= self.DECAY_RATE
+    
+        return results
+    
+    def blend_rewards(self, shape_reward: float, line_bonus: float,
+                      alpha: float = 0.7) -> float:
+        """
+        融合棋型评估奖励和五连追溯奖励
+    
+        Args:
+            shape_reward: 棋型评估奖励
+            line_bonus: 五连追溯奖励
+            alpha: 棋型评估权重（默认 0.7）
+    
+        Returns:
+            融合后的奖励
+        """
+        return alpha * shape_reward + (1 - alpha) * line_bonus
