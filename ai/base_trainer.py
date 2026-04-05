@@ -220,6 +220,96 @@ class BaseTrainer(ABC):
         # 返回平均损失
         return total_loss / epochs
     
+    def train_mini_batch(
+        self,
+        sample_dirs: List[str],
+        epochs: int = 1000,
+        batch_size: int = 32,
+        shuffle: bool = True,
+        verbose: bool = True
+    ) -> float:
+        """Mini-Batch 训练：将多个 sample 文件数据合并，分批次训练。
+        
+        每个 epoch 内将数据分成多个 mini-batch，每个 batch 进行一次前向+反向传播。
+        相比 train_batch，mini-batch 训练更高效，收敛更快。
+        
+        Args:
+            sample_dirs: 包含 sample.json 的目录路径列表
+            epochs: 训练轮数，默认 1000
+            batch_size: 每批次样本数，默认 32
+            shuffle: 每个 epoch 是否打乱数据顺序，默认 True
+            verbose: 是否输出训练信息，默认 True
+            
+        Returns:
+            训练后的平均损失值
+            
+        Raises:
+            ValueError: sample_dirs 为空列表
+            FileNotFoundError: 某个目录下不存在 sample.json
+        """
+        if not sample_dirs:
+            raise ValueError("sample_dirs 不能为空列表")
+        
+        # 收集所有 sample 数据（合并为一个数据集）
+        all_sample_data = []
+        for sample_dir in sample_dirs:
+            sample_path = os.path.join(sample_dir, "sample.json")
+            if not os.path.exists(sample_path):
+                raise FileNotFoundError(f"Sample file not found: {sample_path}")
+            all_sample_data.extend(self._load_sample_data(sample_path))
+        
+        
+        # 准备合并后的训练数据（转换为张量）
+        inputs_tensor, targets_tensor, masks_tensor = self._prepare_tensors(all_sample_data)
+        
+        # 获取样本总数
+        n_samples = inputs_tensor.shape[0]
+        
+        # 训练模式
+        self.model.network.train()
+        
+        total_loss = 0.0
+        total_batches = 0
+        
+        for epoch in range(epochs):
+            # 生成批次索引
+            if shuffle:
+                indices = torch.randperm(n_samples, device=self.device)
+            else:
+                indices = torch.arange(n_samples, device=self.device)
+            
+            # 按批次训练
+            for start_idx in range(0, n_samples, batch_size):
+                # 获取当前批次的索引
+                batch_indices = indices[start_idx:start_idx + batch_size]
+                
+                # 获取批次数据
+                batch_inputs = inputs_tensor[batch_indices]
+                batch_targets = targets_tensor[batch_indices]
+                batch_masks = masks_tensor[batch_indices]
+                
+                # 前向传播
+                self.optimizer.zero_grad()
+                outputs = self.model.network(batch_inputs)
+                
+                # 计算损失（使用 mask）
+                loss = self._masked_loss(outputs, batch_targets, batch_masks)
+                
+                # 反向传播
+                loss.backward()
+                self.optimizer.step()
+                
+                total_loss += loss.item()
+                total_batches += 1
+            
+            # 若 verbose=True，每 200 个 epoch 输出一次损失
+            if verbose and (epoch + 1) % 200 == 0:
+                avg_loss = total_loss / total_batches if total_batches > 0 else 0
+                print(f"Epoch {epoch + 1}/{epochs}, avg_loss: {avg_loss:.4f}")
+        
+        # 返回平均损失
+        return total_loss / total_batches if total_batches > 0 else 0.0
+    
     def train_cycle(
         self,
         rounds: int = 10,
