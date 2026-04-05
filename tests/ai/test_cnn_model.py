@@ -94,13 +94,13 @@ class TestCNNModel(unittest.TestCase):
     def test_model_name(self):
         """测试模型名称"""
         model = CNNModel()
-        self.assertEqual(model.name, "cnn")
+        self.assertEqual(model.name, "cnn_v1")
 
     def test_model_initialization_without_path(self):
         """测试不指定路径初始化模型"""
         model = CNNModel()
         self.assertIsNotNone(model)
-        self.assertEqual(model.name, "cnn")
+        self.assertEqual(model.name, "cnn_v1")
 
     def test_model_predict_shape(self):
         """测试 predict 方法返回形状"""
@@ -194,7 +194,7 @@ class TestCNNModel(unittest.TestCase):
 
         # 加载模型
         model2 = CNNModel(self.model_path)
-        self.assertEqual(model2.name, "cnn")
+        self.assertEqual(model2.name, "cnn_v1")
 
     def test_model_save_default_path(self):
         """测试模型保存到默认路径"""
@@ -219,7 +219,7 @@ class TestCNNModel(unittest.TestCase):
 
         # 应该创建新模型而不是报错
         model = CNNModel(nonexistent_path)
-        self.assertEqual(model.name, "cnn")
+        self.assertEqual(model.name, "cnn_v1")
 
     def test_model_predict_consistency(self):
         """测试模型预测的一致性（相同输入产生相同输出）"""
@@ -332,7 +332,7 @@ class TestCNNModelDefaultLoad(unittest.TestCase):
         model = CNNModel()
 
         # 应该成功创建
-        self.assertEqual(model.name, "cnn")
+        self.assertEqual(model.name, "cnn_v1")
 
     def test_fresh_parameter_skips_load(self):
         """测试 fresh=True 时跳过加载，创建新模型"""
@@ -345,7 +345,7 @@ class TestCNNModelDefaultLoad(unittest.TestCase):
 
         # 两个模型的预测结果可能不同（因为是随机初始化）
         # 但这里主要验证 fresh 参数生效，不会因为已存在模型而加载
-        self.assertEqual(model2.name, "cnn")
+        self.assertEqual(model2.name, "cnn_v1")
 
     def test_fresh_parameter_with_existing_default_model(self):
         """测试当默认模型存在时，fresh=True 强制使用新模型"""
@@ -362,7 +362,7 @@ class TestCNNModelDefaultLoad(unittest.TestCase):
         result2 = model2.predict(board_vector)
 
         # 验证模型2是独立的实例
-        self.assertEqual(model2.name, "cnn")
+        self.assertEqual(model2.name, "cnn_v1")
         self.assertEqual(len(result2), 225)
 
     def test_model_path_takes_priority_over_default(self):

@@ -65,7 +65,7 @@ class TestCNNTrainer(unittest.TestCase):
         trainer = CNNTrainer()
         self.assertIsNotNone(trainer)
         self.assertIsNotNone(trainer.model)
-        self.assertEqual(trainer.model.name, "cnn")
+        self.assertEqual(trainer.model.name, "cnn_v1")
     
     def test_trainer_initialization_with_model(self):
         """测试传入模型时初始化训练器"""
