@@ -95,6 +95,11 @@ class AIEngine:
             raise ValueError("棋盘已满，无空位可落子")
         
         # 4. 按概率采样选择位置
+        # 如果所有有效概率都为 0（模型可能选择了已占位置），回退到均匀分布
+        total_prob = sum(valid_probs)
+        if total_prob <= 0:
+            valid_probs = [1.0] * len(valid_positions)
+        
         # 使用 random.choices 进行加权随机选择
         chosen_idx = random.choices(range(len(valid_positions)), weights=valid_probs, k=1)[0]
         return valid_positions[chosen_idx]
