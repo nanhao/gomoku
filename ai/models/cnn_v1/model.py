@@ -110,7 +110,7 @@ class CNNNetwork(nn.Module):
 class CNNModel(BaseModel):
     """CNN 模型
     
-    卷积神经网络模型，用于预测五子棋落子位置的 reward。
+    卷积神经网络模型，用于预测五子棋落子位置的概率。
     
     默认行为：
     - 如果 cnn.pth 存在，自动加载该模型参数

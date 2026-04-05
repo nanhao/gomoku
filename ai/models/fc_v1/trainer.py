@@ -351,13 +351,10 @@ class FCv1Trainer:
     def _masked_loss(self, outputs, targets_tensor, masks_tensor):
         """计算 masked L1 loss
         
-        当前版本 mask 全为 1，等价于对全部 225 个位置求平均 L1 损失。
-        mask 机制保留，未来版本可能重新启用（如只对特定位置计算损失）。
-        
         Args:
             outputs: 模型输出张量 (N, 225)
             targets_tensor: 目标张量 (N, 225)
-            masks_tensor: 225 维 mask 张量 (N, 225)，当前版本全为 1
+            masks_tensor: 225 维 mask 张量 (N, 225)
             
         Returns:
             标量损失 tensor
