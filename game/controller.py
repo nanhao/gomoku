@@ -76,10 +76,8 @@ class GomokuController:
             # 执行落子
             winner = self.game.make_move(x, y)
             
-            # 保存游戏状态
+            # 获取游戏状态
             state = self.game.get_state()
-            if self.current_save_name:
-                self.save.save_game(state, self.current_save_name)
             
             # 返回结果
             result = {

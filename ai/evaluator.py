@@ -447,11 +447,18 @@ class Evaluator:
         # 这里暂时返回一个合理的估值
         return int(0.5 * self.MAX_REWARD * factor)
     
+    # Softmax 缩放因子：将 reward 从 [-1000000, 1000000] 缩放到 [-10, 10]
+    # 避免 exp(x) 在大数值时的下溢问题
+    SOFTMAX_SCALE = 1.0 / 100000.0
+    
     def _softmax(self, rewards: List[float], mask: List[int]) -> List[float]:
         """
         对 reward 值应用 Softmax 转换为概率分布
         
         只考虑 mask=1 的位置（空位），已落子位置保持为 0。
+        
+        注意：reward 值可能高达 1000000，直接计算 exp 会导致数值下溢。
+        因此先将 reward 缩放到合理范围，再计算 softmax。
         
         Args:
             rewards: 225 维 reward 列表
@@ -470,9 +477,12 @@ class Evaluator:
         # 提取有效位置的 reward 值
         valid_rewards = [rewards[i] for i in valid_indices]
         
+        # 缩放 reward 到合理范围，避免数值下溢
+        scaled_rewards = [r * self.SOFTMAX_SCALE for r in valid_rewards]
+        
         # 数值稳定性处理：减去最大值
-        max_reward = max(valid_rewards)
-        exp_values = [math.exp(r - max_reward) for r in valid_rewards]
+        max_reward = max(scaled_rewards)
+        exp_values = [math.exp(r - max_reward) for r in scaled_rewards]
         
         # 计算 softmax
         sum_exp = sum(exp_values)
