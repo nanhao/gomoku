@@ -651,16 +651,18 @@ class Evaluator:
         return results
     
     def blend_rewards(self, shape_reward: float, line_bonus: float,
-                      alpha: float = 0.7) -> float:
+                      alpha: float = None) -> float:
         """
         融合棋型评估奖励和五连追溯奖励
+            
+        取两者中的最大值，确保五连追溯信号不被稀释。
     
         Args:
             shape_reward: 棋型评估奖励
             line_bonus: 五连追溯奖励
-            alpha: 棋型评估权重（默认 0.7）
+            alpha: 已弃用（保留参数兼容性）
     
         Returns:
-            融合后的奖励
+            融合后的奖励（两者最大值）
         """
-        return alpha * shape_reward + (1 - alpha) * line_bonus
+        return max(shape_reward, line_bonus)

@@ -268,35 +268,43 @@ class TestBlendRewards(unittest.TestCase):
         self.evaluator = Evaluator()
 
     def test_blend_with_line_bonus(self):
-        """有五连奖励时的融合"""
+        """有五连奖励时，取最大值"""
         shape_reward = 500000
         line_bonus = 1000000
         
-        blended = self.evaluator.blend_rewards(shape_reward, line_bonus, alpha=0.7)
+        blended = self.evaluator.blend_rewards(shape_reward, line_bonus)
         
-        expected = 0.7 * 500000 + 0.3 * 1000000
-        self.assertEqual(blended, expected)
+        # 取最大值
+        self.assertEqual(blended, 1000000)
 
     def test_blend_without_line_bonus(self):
-        """无五连奖励时的融合"""
+        """无五连奖励时，取棋型评估"""
         shape_reward = 500000
         line_bonus = 0
         
-        blended = self.evaluator.blend_rewards(shape_reward, line_bonus, alpha=0.7)
+        blended = self.evaluator.blend_rewards(shape_reward, line_bonus)
         
-        expected = 0.7 * 500000
-        self.assertEqual(blended, expected)
+        # 取最大值 = 棋型评估
+        self.assertEqual(blended, 500000)
 
-    def test_blend_default_alpha(self):
-        """默认融合权重"""
+    def test_blend_shape_higher(self):
+        """棋型评估更高时，取棋型评估"""
+        shape_reward = 855000
+        line_bonus = 729000
+        
+        blended = self.evaluator.blend_rewards(shape_reward, line_bonus)
+        
+        # 取最大值 = 棋型评估
+        self.assertEqual(blended, 855000)
+
+    def test_blend_equal(self):
+        """两者相等时，返回该值"""
         shape_reward = 1000000
         line_bonus = 1000000
         
         blended = self.evaluator.blend_rewards(shape_reward, line_bonus)
         
-        # 默认 alpha=0.7
-        expected = 0.7 * 1000000 + 0.3 * 1000000
-        self.assertEqual(blended, expected)
+        self.assertEqual(blended, 1000000)
 
 
 class TestNoWinnerNoBonus(unittest.TestCase):
