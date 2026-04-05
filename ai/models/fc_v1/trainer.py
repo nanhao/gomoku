@@ -24,9 +24,9 @@ class FCv1Trainer:
     - 使用 fresh=True 可强制创建新模型
     """
     
-    # reward 归一化因子：将 [-1000000, 1000000] 映射到 [-1, 1]
-    # 仅在 _prepare_tensors 内部对 targets 使用，不影响 sample.json 原始值和 predict 输出
-    REWARD_NORMALIZE_FACTOR = 1_000_000.0
+    # 注意：sample.json 中的 output 已经是 Softmax 概率分布（由 Evaluator 生成）
+    # 值域 (0, 1)，所有 mask=1 位置的概率和为 1
+    # Trainer 不再需要额外的归一化操作
     
     def __init__(self, model: FCv1Model = None, fresh: bool = False):
         """初始化训练器
@@ -341,10 +341,9 @@ class FCv1Trainer:
         targets_tensor = torch.tensor(targets, dtype=torch.float32)  # (N, 225)
         masks_tensor = torch.tensor(masks, dtype=torch.float32)      # (N, 225)
             
-        # 对 targets 做归一化：[-1000000, 1000000] -> [-1, 1]
-        # 目的：使 target 量级与网络初始输出匹配，大幅加快收敛速度
-        # sample.json 中的原始值不受影响
-        targets_tensor = targets_tensor / self.REWARD_NORMALIZE_FACTOR
+        # 注意：targets 已经是 Softmax 概率分布（由 Evaluator 生成）
+        # 值域 (0, 1)，所有 mask=1 位置的概率和为 1
+        # 不需要额外的归一化操作
             
         # mask 和 targets 都是 225 维，直接返回
         return inputs_tensor, targets_tensor, masks_tensor

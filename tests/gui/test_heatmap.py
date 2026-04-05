@@ -67,7 +67,21 @@ class TestHeatmapCanvas:
     def test_draw_heatmap_with_values(self):
         """测试绘制带数值的热力图"""
         heatmap = HeatmapCanvas(self.root)
-        rewards = [i * 1000 for i in range(225)]  # 不同数值
+        rewards = [i / 224 for i in range(225)]  # [0, 1] 范围内的不同数值
+
+        heatmap.draw_heatmap(rewards)
+        assert True
+
+    def test_draw_heatmap_with_softmax_values(self):
+        """[primary] 测试绘制 Softmax 输出的热力图 [0, 1]"""
+        heatmap = HeatmapCanvas(self.root)
+        # 模拟 Softmax 输出：概率分布，和为 1
+        import random
+        random.seed(42)
+        rewards = [random.random() for _ in range(225)]
+        # 归一化使和接近 1（模拟 Softmax 特性）
+        total = sum(rewards)
+        rewards = [r / total for r in rewards]
 
         heatmap.draw_heatmap(rewards)
         assert True
@@ -81,37 +95,64 @@ class TestHeatmapCanvas:
         assert isinstance(color, str)
         assert color.startswith('#')
 
-    def test_get_reward_color_positive(self):
-        """测试获取正值颜色"""
+    def test_get_reward_color_high(self):
+        """测试获取高值颜色（接近 1）"""
         heatmap = HeatmapCanvas(self.root)
-        color = heatmap._get_reward_color(500000)
+        color = heatmap._get_reward_color(0.75)
 
         assert color is not None
         assert isinstance(color, str)
         assert color.startswith('#')
 
-    def test_get_reward_color_negative(self):
-        """测试获取负值颜色"""
+    def test_get_reward_color_low(self):
+        """测试获取低值颜色（接近 0）"""
         heatmap = HeatmapCanvas(self.root)
-        color = heatmap._get_reward_color(-500000)
+        color = heatmap._get_reward_color(0.25)
 
         assert color is not None
         assert isinstance(color, str)
         assert color.startswith('#')
 
     def test_get_reward_color_max(self):
-        """测试获取最大值颜色"""
+        """测试获取最大值颜色 (1.0 -> 红色)"""
         heatmap = HeatmapCanvas(self.root)
-        color = heatmap._get_reward_color(1000000)
+        color = heatmap._get_reward_color(1.0)
 
         assert color is not None
+        # 1.0 对应红色（忽略大小写）
+        assert color.lower() == "#ff0000"
 
     def test_get_reward_color_min(self):
-        """测试获取最小值颜色"""
+        """测试获取最小值颜色 (0.0 -> 黑色)"""
         heatmap = HeatmapCanvas(self.root)
-        color = heatmap._get_reward_color(-1000000)
+        color = heatmap._get_reward_color(0.0)
 
         assert color is not None
+        # 0.0 对应黑色（忽略大小写）
+        assert color.lower() == "#000000"
+
+    def test_get_reward_color_middle(self):
+        """测试获取中间值颜色 (0.5 -> 白色)"""
+        heatmap = HeatmapCanvas(self.root)
+        color = heatmap._get_reward_color(0.5)
+
+        assert color is not None
+        # 0.5 对应白色（忽略大小写）
+        assert color.lower() == "#ffffff"
+
+    def test_get_reward_color_out_of_range(self):
+        """测试超出范围的值被正确截断"""
+        heatmap = HeatmapCanvas(self.root)
+        
+        # 大于 1 的值应被截断为 1
+        color_high = heatmap._get_reward_color(2.0)
+        color_max = heatmap._get_reward_color(1.0)
+        assert color_high == color_max
+        
+        # 小于 0 的值应被截断为 0
+        color_low = heatmap._get_reward_color(-1.0)
+        color_min = heatmap._get_reward_color(0.0)
+        assert color_low == color_min
 
     def test_primary_colors_defined(self):
         """测试正色定义"""
@@ -123,11 +164,15 @@ class TestHeatmapCanvas:
             assert len(color) == 3
             assert all(0 <= c <= 255 for c in color)
 
-    def test_global_max_abs(self):
-        """测试全局最大值常量"""
+    def test_reward_range_constants(self):
+        """测试 reward 值域常量 [0, 1]（与 Softmax 输出匹配）"""
         heatmap = HeatmapCanvas(self.root)
 
-        assert heatmap.GLOBAL_MAX_ABS == 1000000
+        # 验证值域常量存在且正确
+        assert hasattr(heatmap, 'REWARD_MIN')
+        assert hasattr(heatmap, 'REWARD_MAX')
+        assert heatmap.REWARD_MIN == 0.0
+        assert heatmap.REWARD_MAX == 1.0
 
     def test_create_tooltip(self):
         """测试创建 tooltip 窗口"""

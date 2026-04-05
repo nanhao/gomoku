@@ -824,27 +824,30 @@ class TestFCv1TrainerPrepareTensors(unittest.TestCase):
     def test_masked_loss_consistent_with_compute_loss(self):
         """_masked_loss 与 _compute_loss 语义说明
         
-        _compute_loss 是 Python 纯实现，不走 _prepare_tensors，接收原始 reward 值。
-        _masked_loss 接收的 targets 是经过 _prepare_tensors 归一化后的值。
+        _compute_loss 是 Python 纯实现，不走 _prepare_tensors，接收原始值。
+        _masked_loss 接收的 targets 是 Softmax 概率（由 Evaluator 生成）。
         两者在各自的语义下结果应正确。
+        
+        注意：现在 sample.json 中的 output 已经是 Softmax 概率，
+        Trainer 不再进行归一化。
         """
-        # _compute_loss 使用原始 reward 值
+        # _compute_loss 使用原始值
         output_estimated = [0.0] * 225
-        output_estimated[0] = 100.0
+        output_estimated[0] = 0.7  # 模拟 Softmax 概率
         output_target = [0.0] * 225
-        output_target[0] = 50.0
+        output_target[0] = 0.5
         mask = [0] * 225
         mask[0] = 1
         
-        # _compute_loss 不走归一化：|100 - 50| = 50
+        # _compute_loss：|0.7 - 0.5| = 0.2
         py_loss = self.trainer._compute_loss(output_estimated, output_target, mask)
-        self.assertAlmostEqual(py_loss, 50.0, places=4)
+        self.assertAlmostEqual(py_loss, 0.2, places=4)
         
-        # _masked_loss 接收的 targets 已经归一化：50 / 1e6 = 0.00005
-        # 所以损失 = |100 - 0.00005| ≈ 100
+        # _masked_loss 接收的 targets 已经是 Softmax 概率
+        # 直接读取，不做转换
         sample = {
             "input": [0.0] * 226,
-            "output": output_target,  # 传入原始值，_prepare_tensors 会归一化
+            "output": output_target,  # 传入 Softmax 概率
             "mask": mask
         }
         inputs_t, targets_t, masks_t = self.trainer._prepare_tensors([sample])
@@ -853,9 +856,9 @@ class TestFCv1TrainerPrepareTensors(unittest.TestCase):
         outputs_t = torch.tensor([output_estimated], dtype=torch.float32)
         tensor_loss = self.trainer._masked_loss(outputs_t, targets_t, masks_t)
         
-        # targets 已归一化：|100 - 50/1e6| ≈ 100
-        self.assertAlmostEqual(tensor_loss.item(), 100.0, places=0,
-                               msg="targets 已归一化后，_masked_loss 应基于归一化值计算")
+        # targets 已经是概率：|0.7 - 0.5| = 0.2
+        self.assertAlmostEqual(tensor_loss.item(), 0.2, places=4,
+                               msg="targets 是 Softmax 概率，_masked_loss 应直接计算")
 
 
 class TestTrainCycleRateParameter(unittest.TestCase):
@@ -887,11 +890,11 @@ class TestTrainCycleRateParameter(unittest.TestCase):
             sys.argv = original_argv
 
 
-class TestRewardNormalization(unittest.TestCase):
-    """reward 归一化测试
+class TestSoftmaxProbabilityInput(unittest.TestCase):
+    """Softmax 概率输入测试
     
-    主流程：训练时 _prepare_tensors 内部对 targets 归一化到 [-1, 1]，
-    sample.json 原始值不变。
+    主流程：sample.json 中的 output 已经是 Softmax 概率分布（由 Evaluator 生成），
+    Trainer 直接读取使用，不再进行归一化。
     """
 
     def setUp(self):
@@ -900,70 +903,90 @@ class TestRewardNormalization(unittest.TestCase):
 
     # ---------- primary tests ----------
 
-    def test_targets_are_normalized_in_prepare_tensors(self):
-        """[primary] _prepare_tensors 应将 targets 归一化到 [-1, 1]"""
+    def test_targets_are_softmax_probabilities(self):
+        """[primary] _prepare_tensors 应直接读取 Softmax 概率，不做转换"""
+        # 模拟 Evaluator 生成的 Softmax 概率分布
+        # 3个空位，概率分别为 0.7, 0.2, 0.1
+        output = [0.0] * 225
+        output[0] = 0.7
+        output[1] = 0.2
+        output[2] = 0.1
+        
         sample_data = [
             {
                 "input": [0] * 225 + [1],
-                "output": [1_000_000] + [0] * 223 + [-1_000_000],  # 最大和最小值
+                "output": output,
                 "mask": [1] * 225
             }
         ]
         _, targets_tensor, _ = self.trainer._prepare_tensors(sample_data)
 
-        # 归一化后应在 [-1, 1] 范围内
-        self.assertAlmostEqual(targets_tensor[0][0].item(), 1.0, places=5,
-                               msg="1000000 应归一化为 1.0")
-        self.assertAlmostEqual(targets_tensor[0][-1].item(), -1.0, places=5,
-                               msg="-1000000 应归一化为 -1.0")
+        # 应直接读取，不做转换
+        self.assertAlmostEqual(targets_tensor[0][0].item(), 0.7, places=5,
+                               msg="Softmax 概率应直接读取")
+        self.assertAlmostEqual(targets_tensor[0][1].item(), 0.2, places=5,
+                               msg="Softmax 概率应直接读取")
+        self.assertAlmostEqual(targets_tensor[0][2].item(), 0.1, places=5,
+                               msg="Softmax 概率应直接读取")
 
-    def test_zero_reward_stays_zero_after_normalization(self):
-        """[primary] reward=0 归一化后仍为 0"""
+    def test_softmax_probabilities_sum_to_one(self):
+        """[primary] Softmax 概率总和应为 1（mask=1 的位置）"""
+        # 模拟均匀分布的 Softmax 概率
+        prob = 1.0 / 225.0
+        output = [prob] * 225
+        
         sample_data = [
             {
                 "input": [0] * 225 + [1],
-                "output": [0] * 225,
+                "output": output,
                 "mask": [1] * 225
             }
         ]
         _, targets_tensor, _ = self.trainer._prepare_tensors(sample_data)
 
-        for i in range(225):
-            self.assertAlmostEqual(targets_tensor[0][i].item(), 0.0, places=5)
+        # 验证概率总和为 1
+        prob_sum = targets_tensor[0].sum().item()
+        self.assertAlmostEqual(prob_sum, 1.0, places=5,
+                               msg="Softmax 概率总和应为 1")
 
-    def test_loss_scale_is_reasonable_after_normalization(self):
-        """[primary] 归一化后 loss 的量级应在 [0, 2] 内（而非数百万）"""
-        # 使用包含 +1000000 和 -1000000 的极端样本
-        output_values = [-1_000_000] * 112 + [1_000_000] * 113  # 混合极端值
+    def test_loss_scale_with_softmax_input(self):
+        """[primary] Softmax 输入时 loss 的量级应在合理范围内"""
+        # 使用 Softmax 概率作为输入
+        output = [0.0] * 225
+        output[0] = 0.9  # 高概率位置
+        for i in range(1, 225):
+            output[i] = 0.1 / 224  # 其余位置均分剩余概率
+        
         sample_data = [
             {
                 "input": [0] * 225 + [1],
-                "output": output_values,
+                "output": output,
                 "mask": [1] * 225
             }
         ]
         inputs_tensor, targets_tensor, masks_tensor = self.trainer._prepare_tensors(sample_data)
 
-        # 模型初始输出约为 ±几十，归一化后 target 为 ±1，损失应在合理范围内
+        # 模型输出和 target 都是 Softmax 概率，loss 应在合理范围内
         self.trainer.model.network.train()
         outputs = self.trainer.model.network(inputs_tensor)
         loss = self.trainer._masked_loss(outputs, targets_tensor, masks_tensor)
 
         loss_value = loss.item()
         self.assertGreater(loss_value, 0, "loss 应大于 0")
-        self.assertLess(loss_value, 100, 
-                        f"loss 应小于 100（归一化后），实际为 {loss_value:.4f}")
+        self.assertLess(loss_value, 2, 
+                        f"loss 应小于 2，实际为 {loss_value:.4f}")
 
     def test_original_sample_data_unchanged(self):
         """[primary] _prepare_tensors 不应修改原始 sample_data 列表"""
+        output = [1.0 / 225.0] * 225
         sample_data = [
             {
                 "input": [0] * 225 + [1],
-                "output": [1_000_000] + [0] * 224,
+                "output": output,
                 "mask": [1] * 225
             }
         ]
-        original_output_val = sample_data[0]["output"][0]  # 应为 1000000
+        original_output_val = sample_data[0]["output"][0]
 
         self.trainer._prepare_tensors(sample_data)
 
@@ -973,32 +996,47 @@ class TestRewardNormalization(unittest.TestCase):
 
     # ---------- edge tests ----------
 
-    def test_partial_reward_normalization(self):
-        """[edge] 中间值归一化结果正确"""
+    def test_partial_mask_softmax(self):
+        """[edge] 部分 mask=0 时，Softmax 概率处理正确"""
+        # 只有前3个位置是空位（mask=1）
+        output = [0.0] * 225
+        output[0] = 0.7
+        output[1] = 0.2
+        output[2] = 0.1
+        mask = [1, 1, 1] + [0] * 222
+        
         sample_data = [
             {
                 "input": [0] * 225 + [1],
-                "output": [500_000] + [-500_000] + [0] * 223,
-                "mask": [1] * 225
+                "output": output,
+                "mask": mask
             }
         ]
-        _, targets_tensor, _ = self.trainer._prepare_tensors(sample_data)
+        _, targets_tensor, masks_tensor = self.trainer._prepare_tensors(sample_data)
 
-        self.assertAlmostEqual(targets_tensor[0][0].item(), 0.5, places=5,
-                               msg="500000 应归一化为 0.5")
-        self.assertAlmostEqual(targets_tensor[0][1].item(), -0.5, places=5,
-                               msg="-500000 应归一化为 -0.5")
+        # mask=1 的位置保持原值
+        self.assertAlmostEqual(targets_tensor[0][0].item(), 0.7, places=5)
+        self.assertAlmostEqual(targets_tensor[0][1].item(), 0.2, places=5)
+        self.assertAlmostEqual(targets_tensor[0][2].item(), 0.1, places=5)
+        
+        # mask=0 的位置应为 0（但 mask 会处理）
+        self.assertEqual(masks_tensor[0][3].item(), 0.0)
 
-    def test_loss_decreases_with_normalization(self):
-        """[edge] 归一化后训练，loss 应能收敛（10 epoch 后应有下降趋势）"""
+    def test_training_converges_with_softmax(self):
+        """[edge] 使用 Softmax 概率训练，loss 应能收敛"""
         import tempfile
         import os
 
-        # 创建一个有明确信号的 sample
+        # 创建一个有明确信号的 sample（Softmax 概率）
+        output = [0.0] * 225
+        output[0] = 0.9  # 位置 0 高概率
+        for i in range(1, 225):
+            output[i] = 0.1 / 224
+        
         sample_data = [
             {
                 "input": [0] * 225 + [1],
-                "output": [1_000_000] + [0] * 223 + [-1_000_000],
+                "output": output,
                 "mask": [1] * 225
             }
         ]
@@ -1014,7 +1052,6 @@ class TestRewardNormalization(unittest.TestCase):
             loss_epoch50 = trainer2.train_single(tmpdir, epochs=50)
 
         # 50 epoch 的平均 loss 应小于 1 epoch
-        # （如果没归一化，1 epoch loss 和 50 epoch 平均 loss 基本相同）
         self.assertLess(loss_epoch50, loss_epoch1,
                         f"50 epoch 平均 loss({loss_epoch50:.6f}) 应小于 1 epoch loss({loss_epoch1:.6f})")
 

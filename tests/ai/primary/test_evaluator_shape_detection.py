@@ -312,5 +312,116 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         self.assertEqual(reward, expected)
 
 
+class TestEvaluatorSoftmax(unittest.TestCase):
+    """Evaluator Softmax 转换测试"""
+    
+    def setUp(self):
+        """测试前准备"""
+        self.test_dir = "test_evaluator_softmax_data"
+        self.ai_data_dir = os.path.join(self.test_dir, "ai_data")
+        self.train_data_dir = os.path.join(self.test_dir, "train_data")
+        
+        # 清理并创建测试目录
+        if os.path.exists(self.test_dir):
+            shutil.rmtree(self.test_dir)
+        os.makedirs(self.ai_data_dir)
+        os.makedirs(self.train_data_dir)
+        
+        # 创建评价器
+        self.evaluator = Evaluator(self.ai_data_dir, self.train_data_dir)
+    
+    def tearDown(self):
+        """测试后清理"""
+        if os.path.exists(self.test_dir):
+            shutil.rmtree(self.test_dir)
+    
+    def test_softmax_output_range(self):
+        """[primary] Softmax 输出值域应在 [0, 1] 范围内"""
+        rewards = [1000000.0, 500000.0, 0.0, -500000.0, -1000000.0] + [0.0] * 220
+        mask = [1, 1, 1, 1, 1] + [0] * 220
+        
+        softmax_output = self.evaluator._softmax(rewards, mask)
+        
+        # 验证所有概率在 [0, 1] 范围内
+        # 注意：当 reward 差距很大时，小的概率可能下溢为 0
+        for i in range(5):
+            self.assertGreaterEqual(softmax_output[i], 0.0, "Softmax 概率应大于等于 0")
+            self.assertLessEqual(softmax_output[i], 1.0, "Softmax 概率应小于等于 1")
+        
+        # 验证至少有一个位置的概率大于 0
+        self.assertTrue(any(p > 0 for p in softmax_output[:5]), "至少有一个概率大于 0")
+    
+    def test_softmax_sum_to_one(self):
+        """[primary] Softmax 概率总和应为 1（mask=1 的位置）"""
+        rewards = [1000000.0, 500000.0, 0.0] + [0.0] * 222
+        mask = [1, 1, 1] + [0] * 222
+        
+        softmax_output = self.evaluator._softmax(rewards, mask)
+        
+        # 验证概率总和为 1
+        prob_sum = sum(softmax_output)
+        self.assertAlmostEqual(prob_sum, 1.0, places=5,
+                               msg="Softmax 概率总和应为 1")
+    
+    def test_softmax_higher_reward_higher_prob(self):
+        """[primary] 更高的 reward 应得到更高的概率"""
+        rewards = [1000000.0, 500000.0, 0.0] + [0.0] * 222
+        mask = [1, 1, 1] + [0] * 222
+        
+        softmax_output = self.evaluator._softmax(rewards, mask)
+        
+        # 验证 reward 越高，概率越高
+        self.assertGreater(softmax_output[0], softmax_output[1],
+                          "更高 reward 应有更高概率")
+        # 由于 500000 和 0 差距很大，概率差距也会很大
+        # 但 0 的概率会非常接近 0，可能等于 0（数值下溢）
+        self.assertGreaterEqual(softmax_output[1], softmax_output[2],
+                               "更高 reward 应有更高或相等的概率")
+    
+    def test_softmax_with_all_same_rewards(self):
+        """[edge] 所有 reward 相同时，Softmax 应均匀分布"""
+        rewards = [100.0] * 225
+        mask = [1] * 225
+        
+        softmax_output = self.evaluator._softmax(rewards, mask)
+        
+        # 验证均匀分布：每个位置概率为 1/225
+        expected_prob = 1.0 / 225.0
+        for i in range(225):
+            self.assertAlmostEqual(softmax_output[i], expected_prob, places=5,
+                                   msg="相同 reward 应均匀分布")
+    
+    def test_softmax_ignores_masked_positions(self):
+        """[edge] Softmax 应忽略 mask=0 的位置"""
+        rewards = [1000000.0, 500000.0, 0.0] + [0.0] * 222
+        mask = [1, 1, 0] + [0] * 222  # 第3个位置 mask=0
+        
+        softmax_output = self.evaluator._softmax(rewards, mask)
+        
+        # 验证 mask=0 的位置概率为 0
+        self.assertEqual(softmax_output[2], 0.0, "mask=0 的位置概率应为 0")
+        
+        # 验证 mask=1 的位置概率和为 1
+        prob_sum = softmax_output[0] + softmax_output[1]
+        self.assertAlmostEqual(prob_sum, 1.0, places=5,
+                               msg="mask=1 的位置概率和应为 1")
+    
+    def test_softmax_numerical_stability(self):
+        """[edge] Softmax 数值稳定性测试（极大值）"""
+        # 使用极大值测试数值稳定性
+        rewards = [1e6, 1e6 - 1, 1e6 - 2] + [0.0] * 222
+        mask = [1, 1, 1] + [0] * 222
+        
+        softmax_output = self.evaluator._softmax(rewards, mask)
+        
+        # 验证没有溢出（概率在合理范围内）
+        for i in range(3):
+            self.assertGreater(softmax_output[i], 0.0)
+            self.assertLess(softmax_output[i], 1.0)
+        
+        # 验证总和为 1
+        self.assertAlmostEqual(sum(softmax_output), 1.0, places=5)
+
+
 if __name__ == '__main__':
     unittest.main()

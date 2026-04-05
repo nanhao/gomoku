@@ -541,3 +541,8 @@ function shape_to_reward(board, shape, player, is_current_player) {
 
 # 第十五次追加
 fc_v1 的网络架构改变。从10个隐藏层改为5个。
+
+# 第十六次追加
+1，fc_v1 的网络结构最后加一层 softmax
+2，trainer.py 在计算 loss 的时候，把 reward 归一化到 0-1 之间
+3，热力图的 reward 值域调整 0-1

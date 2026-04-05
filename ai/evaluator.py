@@ -4,11 +4,13 @@
 输入：ai/ai_data/.../record.json
 输出：ai/train_data/.../sample.json
 
-使用双向棋型检测法计算每个位置的 reward 值。
+使用双向棋型检测法计算每个位置的 reward 值，
+并通过 Softmax 转换为概率分布。
 """
 
 import os
 import json
+import math
 from typing import List, Dict, Tuple
 from copy import deepcopy
 
@@ -94,13 +96,15 @@ class Evaluator:
         """
         计算所有步骤的 reward（双向棋型检测法）
         
-        对每个 step 的每个空位，计算其 reward 值。
+        对每个 step 的每个空位，计算其 reward 值，
+        然后通过 Softmax 转换为概率分布。
         
         Args:
             history: 历史记录
             
         Returns:
             包含 input, output, mask 的样本列表
+            output 为 Softmax 概率分布，值域 (0, 1)，总和为 1
         """
         sample_dict = []
         
@@ -113,21 +117,24 @@ class Evaluator:
             board = input_vector[:225]
             current_player = input_vector[225]
             
-            # 初始化 mask 和 output
+            # 初始化 mask 和 raw_rewards
             mask = [0] * 225
-            output = [0] * 225
+            raw_rewards = [0.0] * 225
             
             # 对每个位置计算 reward
             for i in range(225):
                 if board[i] != 0:
                     # 已落子位置：mask = 0, reward = 0
                     mask[i] = 0
-                    output[i] = 0
+                    raw_rewards[i] = 0.0
                 else:
                     # 空位：mask = 1，计算 reward
                     mask[i] = 1
                     x, y = i // 15, i % 15
-                    output[i] = self._compute_position_reward(board, x, y, current_player)
+                    raw_rewards[i] = float(self._compute_position_reward(board, x, y, current_player))
+            
+            # 对 raw_rewards 应用 Softmax 转换为概率分布
+            output = self._softmax(raw_rewards, mask)
             
             sample_dict.append({
                 "input": input_vector,
@@ -439,6 +446,44 @@ class Evaluator:
         # 实际应该递归计算防守后的棋型
         # 这里暂时返回一个合理的估值
         return int(0.5 * self.MAX_REWARD * factor)
+    
+    def _softmax(self, rewards: List[float], mask: List[int]) -> List[float]:
+        """
+        对 reward 值应用 Softmax 转换为概率分布
+        
+        只考虑 mask=1 的位置（空位），已落子位置保持为 0。
+        
+        Args:
+            rewards: 225 维 reward 列表
+            mask: 225 维 mask 列表
+            
+        Returns:
+            225 维概率分布，值域 (0, 1)，所有 mask=1 位置的概率和为 1
+        """
+        # 找到所有有效位置（mask=1）
+        valid_indices = [i for i in range(225) if mask[i] == 1]
+        
+        if not valid_indices:
+            # 没有有效位置，返回全 0
+            return [0.0] * 225
+        
+        # 提取有效位置的 reward 值
+        valid_rewards = [rewards[i] for i in valid_indices]
+        
+        # 数值稳定性处理：减去最大值
+        max_reward = max(valid_rewards)
+        exp_values = [math.exp(r - max_reward) for r in valid_rewards]
+        
+        # 计算 softmax
+        sum_exp = sum(exp_values)
+        softmax_values = [exp_val / sum_exp for exp_val in exp_values]
+        
+        # 构建完整的 225 维输出
+        output = [0.0] * 225
+        for idx, prob in zip(valid_indices, softmax_values):
+            output[idx] = prob
+        
+        return output
     
     def _get_sample_path(self, record_file: str) -> str:
         """

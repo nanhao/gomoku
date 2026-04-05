@@ -20,8 +20,10 @@ class HeatmapCanvas:
         (255, 0, 0),     # 8: 红
     ]
     
-    # 固定最大值（评价器的 max_reward）
-    GLOBAL_MAX_ABS = 1000000
+    # Reward 值域 [0, 1]（与 Softmax 输出匹配）
+    # 0 对应黑色（最低概率），1 对应红色（最高概率），0.5 对应白色（中间值）
+    REWARD_MIN = 0.0
+    REWARD_MAX = 1.0
     
     def __init__(self, parent, title="热力图", width=280, height=280):
         """
@@ -114,15 +116,18 @@ class HeatmapCanvas:
         根据 reward 值返回颜色
         9种正色: 黑、紫、蓝、绿、白、黄、橙、粉、红
         相邻正色之间分5档，共40档
-        reward=0 对应白色，|reward|越小越接近白色
-        """
-        max_abs = self.GLOBAL_MAX_ABS
         
-        # 将 reward 归一化到 [-1, 1]
-        normalized = reward / max_abs
+        值域 [0, 1]:
+        - 0 对应黑色（最低概率）
+        - 0.5 对应白色（中间值）
+        - 1 对应红色（最高概率）
+        """
+        # 将 reward 限制在 [0, 1] 范围内
+        normalized = max(0.0, min(1.0, reward))
         
         # 映射到 40 档 (8个区间 * 5档 = 40档)
-        level = (normalized + 1) * 20  # [-1,1] -> [0,40]
+        # [0, 1] -> [0, 40]
+        level = normalized * 40
         
         # 限制范围
         if level < 0:
