@@ -1,6 +1,7 @@
 """训练器抽象基类模块
 
 定义所有模型训练器必须实现的接口和通用训练逻辑。
+支持 GPU 加速训练。
 """
 
 from abc import ABC, abstractmethod
@@ -15,33 +16,54 @@ from ai.base_model import BaseModel
 from ai.constants import AI_DATA_DIR, TRAIN_DATA_DIR
 
 
+def get_device() -> torch.device:
+    """获取可用设备（优先 GPU）
+    
+    Returns:
+        torch.device: CUDA 设备（如果可用）或 CPU 设备
+    """
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    return torch.device("cpu")
+
+
 class BaseTrainer(ABC):
     """训练器抽象基类
     
     所有模型训练器必须继承此类，实现模型特定的创建逻辑。
     提供通用的训练流程：单轮次训练、批量训练、训练周期。
     
+    自动检测并使用 GPU 加速训练。
+    
     Attributes:
         model: 模型实例
         optimizer: PyTorch 优化器
         criterion: 损失函数
+        device: 训练设备（CPU 或 GPU）
     """
     
     # 默认学习率，子类可覆盖
     DEFAULT_LR = 0.001
     
-    def __init__(self, model: Optional[BaseModel] = None, fresh: bool = False):
+    def __init__(self, model: Optional[BaseModel] = None, fresh: bool = False, device: Optional[torch.device] = None):
         """初始化训练器
         
         Args:
             model: 模型实例，如果为 None 则根据 fresh 参数创建
             fresh: 是否强制创建新模型（不加载已保存的模型）
+            device: 训练设备，如果为 None 则自动检测（优先 GPU）
         """
+        # 设置设备
+        self.device = device if device is not None else get_device()
+        
         # 创建或保存模型
         if model is not None:
             self.model = model
         else:
             self.model = self._create_model(fresh)
+        
+        # 将模型移到 GPU（如果可用）
+        self.model.network.to(self.device)
         
         # 初始化优化器（Adam）
         self.optimizer = optim.Adam(
@@ -51,6 +73,12 @@ class BaseTrainer(ABC):
         
         # 损失函数使用 L1Loss（MAE）
         self.criterion = nn.L1Loss(reduction='none')
+        
+        # 打印设备信息
+        if self.device.type == "cuda":
+            print(f"使用 GPU 加速: {torch.cuda.get_device_name(self.device)}")
+        else:
+            print("使用 CPU 训练")
     
     @abstractmethod
     def _create_model(self, fresh: bool) -> BaseModel:
@@ -356,7 +384,7 @@ class BaseTrainer(ABC):
             sample_data: sample 数据列表（可来自单个或多个 sample.json 合并）
                 
         Returns:
-            (inputs_tensor, targets_tensor, masks_tensor): 三个张量
+            (inputs_tensor, targets_tensor, masks_tensor): 三个张量，已移到 GPU
         """
         inputs = []
         targets = []
@@ -371,6 +399,11 @@ class BaseTrainer(ABC):
         inputs_tensor = self._convert_inputs(inputs)
         targets_tensor = torch.tensor(targets, dtype=torch.float32)  # (N, 225)
         masks_tensor = torch.tensor(masks, dtype=torch.float32)      # (N, 225)
+            
+        # 将张量移到 GPU（如果可用）
+        inputs_tensor = inputs_tensor.to(self.device)
+        targets_tensor = targets_tensor.to(self.device)
+        masks_tensor = masks_tensor.to(self.device)
             
         # 注意：targets 已经是 Softmax 概率分布（由 Evaluator 生成）
         # 值域 (0, 1)，所有 mask=1 位置的概率和为 1

@@ -475,8 +475,10 @@ class TestFCv1TrainerFreshParameter(unittest.TestCase):
         trainer = FCv1Trainer()
         result2 = trainer.model.predict(board_vector)
         
-        # 应该加载已保存的模型，结果相同
-        self.assertEqual(result1, result2)
+        # 应该加载已保存的模型，结果相近（GPU/CPU 可能有微小精度差异）
+        self.assertEqual(len(result1), len(result2))
+        for r1, r2 in zip(result1, result2):
+            self.assertAlmostEqual(r1, r2, places=5)
     
     def test_trainer_with_model_parameter(self):
         """测试传入 model 参数时使用该模型"""
@@ -489,8 +491,10 @@ class TestFCv1TrainerFreshParameter(unittest.TestCase):
         trainer = FCv1Trainer(model=custom_model)
         result2 = trainer.model.predict(board_vector)
         
-        # 应该是同一个模型实例
-        self.assertEqual(result1, result2)
+        # 应该是同一个模型实例，结果相近（GPU/CPU 可能有微小精度差异）
+        self.assertEqual(len(result1), len(result2))
+        for r1, r2 in zip(result1, result2):
+            self.assertAlmostEqual(r1, r2, places=5)
         self.assertIs(trainer.model, custom_model)
     
     def test_trainer_fresh_with_sample_dir(self):
@@ -856,6 +860,8 @@ class TestFCv1TrainerPrepareTensors(unittest.TestCase):
         
         import torch
         outputs_t = torch.tensor([output_estimated], dtype=torch.float32)
+        # 将张量移到与训练器相同的设备
+        outputs_t = outputs_t.to(self.trainer.device)
         tensor_loss = self.trainer._masked_loss(outputs_t, targets_t, masks_t)
         
         # targets 已经是概率：|0.7 - 0.5| = 0.2

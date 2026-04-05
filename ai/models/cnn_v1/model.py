@@ -149,15 +149,19 @@ class CNNModel(BaseModel):
         """模型名称"""
         return "cnn"
     
-    def _vector_to_tensor(self, board_vector: List[int]) -> torch.Tensor:
+    def _vector_to_tensor(self, board_vector: List[int], device: torch.device = None) -> torch.Tensor:
         """将 226 维向量转换为 CNN 输入张量 (1, 3, 15, 15)
         
         Args:
             board_vector: 226 维向量，前 225 位是棋盘，最后 1 位是当前落子方
+            device: 目标设备，如果为 None 则使用 CPU
             
         Returns:
             形状为 (1, 3, 15, 15) 的张量
         """
+        if device is None:
+            device = torch.device("cpu")
+            
         # 提取棋盘和当前落子方
         board = board_vector[:225]
         current_player = board_vector[225] if len(board_vector) > 225 else 1
@@ -176,9 +180,9 @@ class CNNModel(BaseModel):
         player_matrix = [player_channel[i*15:(i+1)*15] for i in range(15)]
         
         # 转换为张量并堆叠
-        black_tensor = torch.tensor(black_matrix, dtype=torch.float32)
-        white_tensor = torch.tensor(white_matrix, dtype=torch.float32)
-        player_tensor = torch.tensor(player_matrix, dtype=torch.float32)
+        black_tensor = torch.tensor(black_matrix, dtype=torch.float32, device=device)
+        white_tensor = torch.tensor(white_matrix, dtype=torch.float32, device=device)
+        player_tensor = torch.tensor(player_matrix, dtype=torch.float32, device=device)
         
         # 堆叠为 (3, 15, 15) 并添加 batch 维度
         input_tensor = torch.stack([black_tensor, white_tensor, player_tensor], dim=0)
@@ -188,7 +192,7 @@ class CNNModel(BaseModel):
     
     def predict(self, board_vector: List[int]) -> List[float]:
         """预测每个落子位置的概率
-        
+            
         Args:
             board_vector: 226 维向量，前 225 位是棋盘（按行展开，0=空, 1=黑, 2=白），
                          最后 1 位是当前落子方（1=黑, 2=白）
@@ -198,21 +202,24 @@ class CNNModel(BaseModel):
             索引 i 对应位置 (i//15, i%15)，概率范围：0 < prob < 1
             所有概率之和为 1（Softmax 输出）
         """
-        # 将输入转换为 CNN 输入张量
-        input_tensor = self._vector_to_tensor(board_vector)
-        
+        # 获取设备（与网络所在设备一致）
+        device = next(self.network.parameters()).device
+            
+        # 将输入转换为 CNN 输入张量并移到对应设备
+        input_tensor = self._vector_to_tensor(board_vector, device=device)
+            
         # 前向传播
         self.network.eval()
         with torch.no_grad():
             output_tensor = self.network(input_tensor)
-        
+    
         # 将输出转换为列表 (值域 (0, 1)，Softmax 概率)
         output_values = output_tensor.squeeze(0).tolist()
-        
+    
         # 构建 225 维结果，索引 i 对应位置 (i//15, i%15)
         # 直接返回概率值
         result = [float(prob) for prob in output_values]
-        
+    
         return result
     
     def save(self, model_path: str = None) -> str:

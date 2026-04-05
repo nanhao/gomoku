@@ -137,8 +137,11 @@ class FCv1Model(BaseModel):
             索引 i 对应位置 (i//15, i%15)，概率范围：0 < prob < 1
             所有概率之和为 1（Softmax 输出）
         """
-        # 将输入转换为张量
-        input_tensor = torch.tensor(board_vector, dtype=torch.float32).unsqueeze(0)
+        # 获取设备（与网络所在设备一致）
+        device = next(self.network.parameters()).device
+        
+        # 将输入转换为张量并移到对应设备
+        input_tensor = torch.tensor(board_vector, dtype=torch.float32, device=device).unsqueeze(0)
             
         # 前向传播
         self.network.eval()
