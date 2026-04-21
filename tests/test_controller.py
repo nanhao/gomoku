@@ -117,17 +117,20 @@ class TestGomokuController:
         pass
     
     def test_load_game(self):
-        """测试加载存档"""
+        """测试加载存档
+        
+        make_move 已移除自动存档逻辑，所以加载时只能恢复到
+        new_game 保存的初始状态（history 为空）。
+        """
         self.controller.new_game("测试游戏10")
         self.controller.make_move(7, 7)
         
-        # 重新加载
+        # 重新加载（只能恢复到 new_game 保存的初始状态）
         result = self.controller.load_game("测试游戏10")
         assert result["status"] == "success"
         state = result["state"]
-        assert len(state["history"]) == 1
-        assert state["history"][0]["x"] == 7
-        assert state["history"][0]["y"] == 7
+        # make_move 不再自动保存，加载后 history 为初始状态
+        assert len(state["history"]) == 0
     
     def test_list_saves(self):
         """测试列出存档"""
