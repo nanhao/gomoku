@@ -267,9 +267,14 @@ class TestFCv1TrainerCycle(unittest.TestCase):
         self.train_data_dir = os.path.join(self.temp_dir, "train_data")
         os.makedirs(self.ai_data_dir, exist_ok=True)
         os.makedirs(self.train_data_dir, exist_ok=True)
+        
+        # 隔离默认模型路径，防止 train_cycle 保存时覆盖真实模型文件
+        self.original_default_path = FCv1Model.DEFAULT_MODEL_PATH
+        FCv1Model.DEFAULT_MODEL_PATH = os.path.join(self.temp_dir, "fc_v1.pth")
     
     def tearDown(self):
         """测试后清理"""
+        FCv1Model.DEFAULT_MODEL_PATH = self.original_default_path
         shutil.rmtree(self.temp_dir, ignore_errors=True)
     
     def test_train_cycle_basic(self):

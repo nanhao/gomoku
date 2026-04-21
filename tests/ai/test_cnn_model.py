@@ -86,9 +86,14 @@ class TestCNNModel(unittest.TestCase):
         """测试前准备"""
         self.temp_dir = tempfile.mkdtemp()
         self.model_path = os.path.join(self.temp_dir, "test_model.pth")
+        
+        # 隔离默认模型路径，防止测试保存/删除真实模型文件
+        self.original_default_path = CNNModel.DEFAULT_MODEL_PATH
+        CNNModel.DEFAULT_MODEL_PATH = os.path.join(self.temp_dir, "cnn.pth")
 
     def tearDown(self):
         """测试后清理"""
+        CNNModel.DEFAULT_MODEL_PATH = self.original_default_path
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_model_name(self):
