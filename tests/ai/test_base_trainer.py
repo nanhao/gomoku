@@ -3,9 +3,12 @@
 测试 BaseTrainer 的抽象基类特性。
 """
 
+import json
 import os
 import sys
+import tempfile
 import unittest
+from unittest.mock import MagicMock
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -84,6 +87,57 @@ class TestBaseTrainerWithCompleteSubclass(unittest.TestCase):
         """测试：fresh=True 创建新模型"""
         trainer = self.TrainerClass(fresh=True)
         self.assertIsNotNone(trainer.model)
+    
+    def test_train_single_generates_loss_log(self):
+        """测试 train_single 训练后通过依赖注入生成 loss 日志"""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # 创建 sample.json（单个样本，FC 模型输入 226 维，输出 225 维）
+            sample_dir = os.path.join(tmp_dir, "sample")
+            os.makedirs(sample_dir)
+            sample_data = [{
+                "input": [0.0] * 226,
+                "output": [1.0 / 225.0] * 225,
+                "mask": [1] * 225
+            }]
+            with open(os.path.join(sample_dir, "sample.json"), 'w', encoding='utf-8') as f:
+                json.dump(sample_data, f)
+            
+            trainer = self.TrainerClass(fresh=True)
+            mock_logger = MagicMock()
+            trainer.loss_logger = mock_logger
+            
+            trainer.train_single(sample_dir, epochs=1000, verbose=False)
+            
+            # 验证 log 和 plot 被调用（1000/200 = 5 次，断言 >= 4）
+            self.assertTrue(mock_logger.log.called)
+            self.assertGreaterEqual(mock_logger.log.call_count, 4)
+            self.assertTrue(mock_logger.plot.called)
+    
+    def test_train_batch_generates_loss_curve(self):
+        """测试 train_batch 训练后通过依赖注入生成 loss 曲线图"""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sample_dirs = []
+            for i in range(2):
+                sample_dir = os.path.join(tmp_dir, f"sample_{i}")
+                os.makedirs(sample_dir)
+                sample_data = [{
+                    "input": [0.0] * 226,
+                    "output": [1.0 / 225.0] * 225,
+                    "mask": [1] * 225
+                }]
+                with open(os.path.join(sample_dir, "sample.json"), 'w', encoding='utf-8') as f:
+                    json.dump(sample_data, f)
+                sample_dirs.append(sample_dir)
+            
+            trainer = self.TrainerClass(fresh=True)
+            mock_logger = MagicMock()
+            trainer.loss_logger = mock_logger
+            
+            trainer.train_batch(sample_dirs, epochs=1000, verbose=False)
+            
+            # 验证 log 和 plot 被调用
+            self.assertTrue(mock_logger.log.called)
+            self.assertTrue(mock_logger.plot.called)
 
 
 if __name__ == '__main__':

@@ -13,7 +13,8 @@ import torch.optim as optim
 from torch import nn
 
 from ai.base_model import BaseModel
-from ai.constants import AI_DATA_DIR, TRAIN_DATA_DIR
+from ai.constants import AI_DATA_DIR, TRAIN_DATA_DIR, LOSS_LOG_INTERVAL
+from ai.loss_logger import LossLogger
 
 
 def get_device() -> torch.device:
@@ -45,13 +46,14 @@ class BaseTrainer(ABC):
     # 默认学习率，子类可覆盖
     DEFAULT_LR = 0.001
     
-    def __init__(self, model: Optional[BaseModel] = None, fresh: bool = False, device: Optional[torch.device] = None):
+    def __init__(self, model: Optional[BaseModel] = None, fresh: bool = False, device: Optional[torch.device] = None, loss_logger=None):
         """初始化训练器
         
         Args:
             model: 模型实例，如果为 None 则根据 fresh 参数创建
             fresh: 是否强制创建新模型（不加载已保存的模型）
             device: 训练设备，如果为 None 则自动检测（优先 GPU）
+            loss_logger: LossLogger 实例，None 表示由训练方法内部自动创建
         """
         # 设置设备
         self.device = device if device is not None else get_device()
@@ -73,6 +75,9 @@ class BaseTrainer(ABC):
         
         # 损失函数使用 L1Loss（MAE）
         self.criterion = nn.L1Loss(reduction='none')
+        
+        # LossLogger 支持依赖注入（测试时可传入 mock，None 则内部自动创建）
+        self.loss_logger = loss_logger
         
         # 打印设备信息
         if self.device.type == "cuda":
@@ -133,6 +138,9 @@ class BaseTrainer(ABC):
         # 准备训练数据
         inputs_tensor, targets_tensor, masks_expanded = self._prepare_tensors(sample_data)
         
+        # 使用注入的 logger 或自动创建
+        loss_logger = self.loss_logger or LossLogger(model_name=self.model_name)
+        
         # 训练模式
         self.model.network.train()
         
@@ -153,9 +161,15 @@ class BaseTrainer(ABC):
             
             total_loss += loss.item()
             
-            # 若 verbose=True，每 200 个 epoch 输出一次损失
-            if verbose and (epoch + 1) % 200 == 0:
-                print(f"Epoch {epoch + 1}/{epochs}, loss: {loss.item():.4f}")
+            # 记录 loss 日志（每 LOSS_LOG_INTERVAL 个 epoch）
+            if (epoch + 1) % LOSS_LOG_INTERVAL == 0:
+                loss_logger.log(epoch + 1, loss.item())
+                if verbose:
+                    print(f"Epoch {epoch + 1}/{epochs}, loss: {loss.item():.4f}")
+        
+        # 生成 loss 曲线图（matplotlib 缺失时优雅降级）
+        if loss_logger:
+            loss_logger.plot()
         
         # 返回平均损失
         return total_loss / epochs
@@ -193,6 +207,9 @@ class BaseTrainer(ABC):
         # 准备合并后的训练数据（转换为张量）
         inputs_tensor, targets_tensor, masks_tensor = self._prepare_tensors(all_sample_data)
         
+        # 使用注入的 logger 或自动创建
+        loss_logger = self.loss_logger or LossLogger(model_name=self.model_name)
+        
         # 训练模式
         self.model.network.train()
         
@@ -213,9 +230,15 @@ class BaseTrainer(ABC):
             
             total_loss += loss.item()
             
-            # 若 verbose=True，每 200 个 epoch 输出一次损失
-            if verbose and (epoch + 1) % 200 == 0:
-                print(f"Epoch {epoch + 1}/{epochs}, loss: {loss.item():.4f}")
+            # 记录 loss 日志（每 LOSS_LOG_INTERVAL 个 epoch）
+            if (epoch + 1) % LOSS_LOG_INTERVAL == 0:
+                loss_logger.log(epoch + 1, loss.item())
+                if verbose:
+                    print(f"Epoch {epoch + 1}/{epochs}, loss: {loss.item():.4f}")
+        
+        # 生成 loss 曲线图（matplotlib 缺失时优雅降级）
+        if loss_logger:
+            loss_logger.plot()
         
         # 返回平均损失
         return total_loss / epochs
@@ -265,11 +288,16 @@ class BaseTrainer(ABC):
         # 获取样本总数
         n_samples = inputs_tensor.shape[0]
         
+        # 使用注入的 logger 或自动创建
+        loss_logger = self.loss_logger or LossLogger(model_name=self.model_name)
+        
         # 训练模式
         self.model.network.train()
         
         total_loss = 0.0
         total_batches = 0
+        epoch_loss_sum = 0.0
+        epoch_batches = 0
         
         for epoch in range(epochs):
             # 生成批次索引
@@ -301,11 +329,23 @@ class BaseTrainer(ABC):
                 
                 total_loss += loss.item()
                 total_batches += 1
+                epoch_loss_sum += loss.item()
+                epoch_batches += 1
             
-            # 若 verbose=True，每 200 个 epoch 输出一次损失
-            if verbose and (epoch + 1) % 200 == 0:
-                avg_loss = total_loss / total_batches if total_batches > 0 else 0
-                print(f"Epoch {epoch + 1}/{epochs}, avg_loss: {avg_loss:.4f}")
+            # 记录 loss 日志（每 LOSS_LOG_INTERVAL 个 epoch 记录该 epoch 的平均 loss）
+            if (epoch + 1) % LOSS_LOG_INTERVAL == 0:
+                epoch_avg_loss = epoch_loss_sum / epoch_batches if epoch_batches > 0 else 0.0
+                if loss_logger:
+                    loss_logger.log(epoch + 1, epoch_avg_loss)
+                if verbose:
+                    print(f"Epoch {epoch + 1}/{epochs}, avg_loss: {epoch_avg_loss:.4f}")
+            
+            epoch_loss_sum = 0.0
+            epoch_batches = 0
+        
+        # 生成 loss 曲线图（matplotlib 缺失时优雅降级）
+        if loss_logger:
+            loss_logger.plot()
         
         # 返回平均损失
         return total_loss / total_batches if total_batches > 0 else 0.0
@@ -351,6 +391,9 @@ class BaseTrainer(ABC):
         
         # 创建 AI 引擎（使用当前模型）
         engine = AIEngine(self.model)
+        
+        # 使用注入的 logger 或自动创建
+        loss_logger = self.loss_logger or LossLogger(model_name=self.model_name)
         
         print(f"开始训练周期: {rounds} 轮，每轮 {games} 局，奖励衰减率 rate={rate}")
         print(f"数据保存目录: {ai_data_dir}")
@@ -406,16 +449,24 @@ class BaseTrainer(ABC):
             print(f"生成 {len(sample_dirs)} 个样本文件")
             
             # 4. 调用 train_batch 将本轮所有 sample 合并训练
-            #    每个 epoch 只做一次参数更新，保证正确的训练语义
+            #    train_batch 内部会创建自己的 LossLogger（内层 epoch 级日志）
             if sample_dirs:
                 print(f"训练模型 ({epochs} epochs，共 {len(sample_dirs)} 个样本合并训练)...")
                 avg_loss = self.train_batch(sample_dirs, epochs=epochs, verbose=True)
                 print(f"本轮平均损失: {avg_loss:.4f}")
+                
+                # 记录每轮的 avg_loss（外层 round 级日志）
+                if loss_logger:
+                    loss_logger.log(round_num, avg_loss)
             
             # 5. 保存更新后的模型
             model_path = self.model.save()
             print(f"模型已保存: {model_path}")
             print("-" * 50)
+        
+        # 生成 loss 曲线图（外层轮次粒度）
+        if loss_logger:
+            loss_logger.plot()
         
         print(f"\n训练周期完成！共 {rounds} 轮，每轮 {games} 局")
         print(f"最终模型保存于: {self.model.save()}")
