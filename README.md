@@ -95,13 +95,16 @@ python ai/train_main.py --model <模型名称> --cycle [选项]
 | `--epochs` | 每轮训练迭代数 | 1000 |
 | `--rate` | 奖励衰减率 | 0.9 |
 | `--fresh` | 从新模型开始 | - |
+| `--batch-size` | 每批次样本数（启用 mini-batch） | 无（全量更新） |
+| `--shuffle` | 每轮打乱数据顺序（mini-batch 有效） | False |
 
 ```bash
 # 示例
-python ai/train_main.py --model fc_v1 --cycle              # 默认参数
+python ai/train_main.py --model fc_v1 --cycle              # 默认参数（全量更新）
 python ai/train_main.py --model cnn_v1 --cycle             # CNN 训练
 python ai/train_main.py --model fc_v1 --cycle --rounds 50 --games 50  # 自定义
 python ai/train_main.py --model fc_v1 --cycle --fresh      # 从新模型开始
+python ai/train_main.py --model cnn_v1 --cycle --batch-size 32 --shuffle  # mini-batch 训练
 ```
 
 ### 样本检视
@@ -121,7 +124,7 @@ python ai/models/fc_v1/inspect_main.py --sample <sample.json路径> [--model-pat
 python tests/run_tests.py
 ```
 
-> 覆盖全部 474 个测试（基础测试 212 + AI 测试 262）
+> 覆盖全部 487 个测试（基础测试 212 + AI 测试 275）
 
 ---
 
