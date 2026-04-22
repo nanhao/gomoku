@@ -160,15 +160,32 @@ def run_all_tests():
             if run_test_method(test_class, method_name):
                 passed_tests += 1
     
+    # 运行 AI 域测试（tests/ai/ 目录）
+    print("\nAI 域测试")
+    print("-" * 60)
+    ai_loader = unittest.TestLoader()
+    ai_suite = ai_loader.discover('tests/ai', pattern='test_*.py')
+    ai_runner = unittest.TextTestRunner(verbosity=1, stream=sys.stdout)
+    ai_result = ai_runner.run(ai_suite)
+    ai_tests_run = ai_result.testsRun
+    ai_failures = len(ai_result.failures) + len(ai_result.errors)
+    ai_passed = ai_tests_run - ai_failures
+
+    # 汇总
+    grand_total = total_tests + ai_tests_run
+    grand_passed = passed_tests + ai_passed
+
     print("\n" + "=" * 60)
-    print(f"测试结果: {passed_tests}/{total_tests} 通过")
+    print(f"汇总结果: {grand_passed}/{grand_total} 通过")
+    print(f"  - 基础测试: {passed_tests}/{total_tests}")
+    print(f"  - AI 测试:  {ai_passed}/{ai_tests_run}")
     print("=" * 60)
-    
-    if passed_tests == total_tests:
+
+    if grand_passed == grand_total:
         print("SUCCESS: 所有测试通过！")
         return True
     else:
-        print(f"FAILED: {total_tests - passed_tests} 个测试失败")
+        print(f"FAILED: {grand_total - grand_passed} 个测试失败")
         return False
 
 if __name__ == "__main__":
