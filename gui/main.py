@@ -21,7 +21,10 @@ from app import GameSession, GUIHelper, get_ai_data_dir, create_pve_config
 from gui.components import GameModeSelector, GameBoard
 from gui.components import ReplayBrowser, ReplayWindow
 from gui.components import AIBattleConfigDialog, AIBattleProgressWindow
+from gui.components import LoadGameDialog
 from gui.components.constants import COLORS, FONTS
+from gui.display_updater import GameDisplayUpdater
+from gui.ai_battle import run_ai_vs_ai_mode
 
 
 class GomokuGUI:
@@ -71,6 +74,18 @@ class GomokuGUI:
         # 创建界面
         self._create_menu()
         self._create_main_frame()
+
+        # 创建显示更新器（必须在 _create_main_frame 之后，因为需要控件引用）
+        self._display_updater = GameDisplayUpdater(
+            board=self.board,
+            save_name_label=self.save_name_label,
+            status_label=self.status_label,
+            game_status_label=self.game_status_label,
+            history_listbox=self.history_listbox,
+            helper=self.helper,
+            color_text=self.COLOR_TEXT,
+            color_bear=self.COLOR_BEAR,
+        )
 
         # 如果是人机对战且 AI 执黑，自动启动游戏（由 session 处理 AI 落子）
         if game_mode == "pve" and ai_player == 1:
@@ -256,60 +271,12 @@ class GomokuGUI:
     
     def _update_display(self):
         """更新显示"""
-        # 重绘棋盘
-        self.board.draw_board()
-
-        # 获取显示状态
         display_state = self.helper.get_display_state()
-
-        if not display_state["has_game"]:
-            self.save_name_label.config(text="🌲 当前存档: 无")
-            self.status_label.config(text="🎯 当前玩家: -")
-            self.game_status_label.config(text="🌳 游戏状态: 未开始", fg="gray")
-            self.history_listbox.delete(0, tk.END)
-            return
-
-        # 更新存档名称
-        self.save_name_label.config(text=f"🌲 当前存档: {display_state['save_name']}")
-
-        # 绘制棋子
-        self.board.draw_pieces(display_state["board"], display_state["last_move"])
-
-        # 更新玩家信息（动物主题）
-        winner = display_state["winner"]
-        current_player = display_state["current_player"]
-
-        if winner == 0:
-            player_name = self.helper.get_player_name(current_player)
-            status_text = f"🌲 {player_name.split()[0]}的回合"
-            self.status_label.config(text=f"🎯 当前玩家: {player_name}", fg=self.COLOR_TEXT)
-            self.game_status_label.config(text=status_text, fg=self.COLOR_BEAR)
-        elif winner == 3:
-            self.status_label.config(text="🎯 当前玩家: -")
-            self.game_status_label.config(text="🌳 游戏状态: 平局", fg="#8B4513")
-        else:
-            winner_name = self.helper.get_player_name(winner, winner=winner)
-            win_emoji = self.ANIMAL_BLACK if winner == 1 else self.ANIMAL_WHITE
-            self.status_label.config(text=f"🏆 获胜方: {winner_name}", fg=self.COLOR_BEAR)
-            self.game_status_label.config(text=f"{win_emoji} {winner_name.split()[0]}获胜！", fg=self.COLOR_BEAR)
-
-        # 更新历史记录
-        self._update_history(display_state["history"])
+        self._display_updater.update(display_state)
     
     def _update_history(self, history):
         """更新历史记录显示"""
-        self.history_listbox.delete(0, tk.END)
-
-        for i, move in enumerate(history):
-            player_name = "黑" if move["player"] == 1 else "白"
-            self.history_listbox.insert(
-                tk.END,
-                f"{i+1:3d}. {player_name}: ({move['x']}, {move['y']})"
-            )
-
-        # 滚动到最后
-        if history:
-            self.history_listbox.see(tk.END)
+        self._display_updater.update_history(history)
 
     def _show_game_over(self, winner):
         """显示游戏结束弹窗
@@ -317,8 +284,7 @@ class GomokuGUI:
         Args:
             winner: 获胜方 (0=平局, 1=黑胜, 2=白胜)
         """
-        winner_text = self.helper.get_winner_text(winner)
-        messagebox.showinfo("游戏结束", f"{winner_text}！")
+        self._display_updater.show_game_over(winner)
     
 
     def _create_control_buttons(self, parent):
@@ -398,38 +364,18 @@ class GomokuGUI:
             return
         
         # 弹出选择对话框
-        dialog = tk.Toplevel(self.root)
-        dialog.title("加载游戏")
-        dialog.geometry("300x300")
-        dialog.transient(self.root)
-        dialog.grab_set()
+        save_name = LoadGameDialog.show(self.root, saves)
         
-        tk.Label(dialog, text="选择存档:", font=("微软雅黑", 12)).pack(pady=10)
+        if save_name is None:
+            return
         
-        listbox = tk.Listbox(dialog, height=10, font=("微软雅黑", 11))
-        listbox.pack(fill=tk.BOTH, expand=True, padx=20, pady=5)
+        result = self.controller.load_game(save_name)
         
-        for save in saves:
-            listbox.insert(tk.END, save)
-        
-        def do_load():
-            selection = listbox.curselection()
-            if not selection:
-                messagebox.showwarning("提示", "请选择一个存档")
-                return
-            
-            save_name = listbox.get(selection[0])
-            result = self.controller.load_game(save_name)
-            
-            if "error" in result:
-                messagebox.showerror("错误", result["error"])
-            else:
-                self._update_display()
-                messagebox.showinfo("成功", f"存档 '{save_name}' 已加载！")
-            
-            dialog.destroy()
-        
-        tk.Button(dialog, text="加载", command=do_load, width=15).pack(pady=10)
+        if "error" in result:
+            messagebox.showerror("错误", result["error"])
+        else:
+            self._update_display()
+            messagebox.showinfo("成功", f"存档 '{save_name}' 已加载！")
     
 
     
@@ -450,27 +396,6 @@ class GomokuGUI:
             self.root.destroy()
             # 显示回放
             ReplayWindow.show(result["record_file"], result["sample_file"])
-
-
-def run_ai_vs_ai_mode(num_games, ai1_name="random", ai2_name="random"):
-    """运行 AI 内战模式"""
-    progress = AIBattleProgressWindow(num_games, ai1_name, ai2_name)
-    
-    def on_complete(recorder, should_replay):
-        if should_replay and recorder:
-            # 显示回放
-            round_dir = recorder.get_round_dir()
-            # 获取第一局
-            game_dirs = sorted([d for d in os.listdir(round_dir) 
-                               if os.path.isdir(os.path.join(round_dir, d))])
-            if game_dirs:
-                record_file = os.path.join(round_dir, game_dirs[0], "record.json")
-                sample_file = record_file.replace("ai_data", "train_data").replace("record.json", "sample.json")
-                if not os.path.exists(sample_file):
-                    sample_file = None
-                ReplayWindow.show(record_file, sample_file)
-    
-    progress.start_battle(on_complete)
 
 
 def main():

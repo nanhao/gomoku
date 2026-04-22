@@ -15,6 +15,8 @@ from torch import nn
 from ai.base_model import BaseModel
 from ai.constants import AI_DATA_DIR, TRAIN_DATA_DIR, LOSS_LOG_INTERVAL
 from ai.loss_logger import LossLogger
+from ai.sample_loader import SampleLoader
+from ai.self_play_cycle import SelfPlayCycle
 
 
 def get_device() -> torch.device:
@@ -84,6 +86,12 @@ class BaseTrainer(ABC):
             print(f"使用 GPU 加速: {torch.cuda.get_device_name(self.device)}")
         else:
             print("使用 CPU 训练")
+
+        # 初始化样本加载器
+        self._sample_loader = SampleLoader(
+            device=self.device,
+            input_converter=self._convert_inputs
+        )
     
     @abstractmethod
     def _create_model(self, fresh: bool) -> BaseModel:
@@ -112,19 +120,31 @@ class BaseTrainer(ABC):
         """
         pass
     
+    def _setup_training(self):
+        """设置训练环境，返回 LossLogger"""
+        loss_logger = self.loss_logger or LossLogger(model_name=self.model_name)
+        self.model.network.train()
+        return loss_logger
+
+    def _finalize_training(self, loss_logger, total_loss, count):
+        """生成 loss 曲线图并返回平均损失"""
+        if loss_logger:
+            loss_logger.plot()
+        return total_loss / count if count > 0 else 0.0
+
     def train_single(self, sample_dir: str, epochs: int = 10, verbose: bool = False) -> float:
         """单轮次训练（单个 sample 文件）
-        
+
         使用指定目录下的 sample.json 数据进行训练。
-        
+
         Args:
             sample_dir: sample.json 所在目录路径
             epochs: 训练轮数，默认 10
             verbose: 是否输出每个 epoch 的损失值，默认 False
-            
+
         Returns:
             训练后的平均损失值
-            
+
         Raises:
             FileNotFoundError: sample.json 不存在
         """
@@ -132,116 +152,91 @@ class BaseTrainer(ABC):
         sample_path = os.path.join(sample_dir, "sample.json")
         if not os.path.exists(sample_path):
             raise FileNotFoundError(f"Sample file not found: {sample_path}")
-        
-        sample_data = self._load_sample_data(sample_path)
-        
+
+        sample_data = self._sample_loader.load(sample_path)
+
         # 准备训练数据
-        inputs_tensor, targets_tensor, masks_expanded = self._prepare_tensors(sample_data)
-        
-        # 使用注入的 logger 或自动创建
-        loss_logger = self.loss_logger or LossLogger(model_name=self.model_name)
-        
-        # 训练模式
-        self.model.network.train()
-        
+        inputs_tensor, targets_tensor, masks_expanded = self._sample_loader.prepare_tensors(sample_data)
+
+        loss_logger = self._setup_training()
         total_loss = 0.0
-        
+
         for epoch in range(epochs):
             self.optimizer.zero_grad()
-            
+
             # 前向传播
             outputs = self.model.network(inputs_tensor)
-            
+
             # 计算损失（使用 mask）
             loss = self._masked_loss(outputs, targets_tensor, masks_expanded)
-            
+
             # 反向传播
             loss.backward()
             self.optimizer.step()
-            
+
             total_loss += loss.item()
-            
+
             # 记录 loss 日志（每 LOSS_LOG_INTERVAL 个 epoch）
             if (epoch + 1) % LOSS_LOG_INTERVAL == 0:
                 loss_logger.log(epoch + 1, loss.item())
                 if verbose:
                     print(f"Epoch {epoch + 1}/{epochs}, loss: {loss.item():.4f}")
-        
-        # 生成 loss 曲线图（matplotlib 缺失时优雅降级）
-        if loss_logger:
-            loss_logger.plot()
-        
-        # 返回平均损失
-        return total_loss / epochs
+
+        return self._finalize_training(loss_logger, total_loss, epochs)
     
     def train_batch(self, sample_dirs: List[str], epochs: int = 1000, verbose: bool = True) -> float:
         """批量训练：将多个 sample 文件数据合并，每个 epoch 只做一次参数更新。
-        
+
         正确实现"一个 epoch 只更新一次参数"的语义：
         先将所有 sample 文件的数据合并为一个大数据集，
         然后在合并数据集上训练 epochs 次，每次只做一次前向+反向传播。
-        
+
         Args:
             sample_dirs: 包含 sample.json 的目录路径列表
             epochs: 训练轮数，默认 1000
             verbose: 是否输出每个 epoch 的损失值，默认 True
-            
+
         Returns:
             训练后的平均损失值
-            
+
         Raises:
             ValueError: sample_dirs 为空列表
             FileNotFoundError: 某个目录下不存在 sample.json
         """
         if not sample_dirs:
             raise ValueError("sample_dirs 不能为空列表")
-        
+
         # 收集所有 sample 数据（合并为一个数据集）
-        all_sample_data = []
-        for sample_dir in sample_dirs:
-            sample_path = os.path.join(sample_dir, "sample.json")
-            if not os.path.exists(sample_path):
-                raise FileNotFoundError(f"Sample file not found: {sample_path}")
-            all_sample_data.extend(self._load_sample_data(sample_path))
-        
+        all_sample_data = self._sample_loader.load_multiple(sample_dirs)
+
         # 准备合并后的训练数据（转换为张量）
-        inputs_tensor, targets_tensor, masks_tensor = self._prepare_tensors(all_sample_data)
-        
-        # 使用注入的 logger 或自动创建
-        loss_logger = self.loss_logger or LossLogger(model_name=self.model_name)
-        
-        # 训练模式
-        self.model.network.train()
-        
+        inputs_tensor, targets_tensor, masks_tensor = self._sample_loader.prepare_tensors(all_sample_data)
+
+        loss_logger = self._setup_training()
         total_loss = 0.0
-        
+
         for epoch in range(epochs):
             self.optimizer.zero_grad()
-            
+
             # 前向传播（基于全部合并数据）
             outputs = self.model.network(inputs_tensor)
-            
+
             # 计算损失（使用 mask）
             loss = self._masked_loss(outputs, targets_tensor, masks_tensor)
-            
+
             # 反向传播，只做一次参数更新
             loss.backward()
             self.optimizer.step()
-            
+
             total_loss += loss.item()
-            
+
             # 记录 loss 日志（每 LOSS_LOG_INTERVAL 个 epoch）
             if (epoch + 1) % LOSS_LOG_INTERVAL == 0:
                 loss_logger.log(epoch + 1, loss.item())
                 if verbose:
                     print(f"Epoch {epoch + 1}/{epochs}, loss: {loss.item():.4f}")
-        
-        # 生成 loss 曲线图（matplotlib 缺失时优雅降级）
-        if loss_logger:
-            loss_logger.plot()
-        
-        # 返回平均损失
-        return total_loss / epochs
+
+        return self._finalize_training(loss_logger, total_loss, epochs)
     
     def train_mini_batch(
         self,
@@ -252,86 +247,75 @@ class BaseTrainer(ABC):
         verbose: bool = True
     ) -> float:
         """Mini-Batch 训练：将多个 sample 文件数据合并，分批次训练。
-        
+
         每个 epoch 内将数据分成多个 mini-batch，每个 batch 进行一次前向+反向传播。
         相比 train_batch，mini-batch 训练更高效，收敛更快。
-        
+
         Args:
             sample_dirs: 包含 sample.json 的目录路径列表
             epochs: 训练轮数，默认 1000
             batch_size: 每批次样本数，默认 32
             shuffle: 每个 epoch 是否打乱数据顺序，默认 True
             verbose: 是否输出训练信息，默认 True
-            
+
         Returns:
             训练后的平均损失值
-            
+
         Raises:
             ValueError: sample_dirs 为空列表
             FileNotFoundError: 某个目录下不存在 sample.json
         """
         if not sample_dirs:
             raise ValueError("sample_dirs 不能为空列表")
-        
+
         # 收集所有 sample 数据（合并为一个数据集）
-        all_sample_data = []
-        for sample_dir in sample_dirs:
-            sample_path = os.path.join(sample_dir, "sample.json")
-            if not os.path.exists(sample_path):
-                raise FileNotFoundError(f"Sample file not found: {sample_path}")
-            all_sample_data.extend(self._load_sample_data(sample_path))
-        
-        
+        all_sample_data = self._sample_loader.load_multiple(sample_dirs)
+
         # 准备合并后的训练数据（转换为张量）
-        inputs_tensor, targets_tensor, masks_tensor = self._prepare_tensors(all_sample_data)
-        
+        inputs_tensor, targets_tensor, masks_tensor = self._sample_loader.prepare_tensors(all_sample_data)
+
         # 获取样本总数
         n_samples = inputs_tensor.shape[0]
-        
-        # 使用注入的 logger 或自动创建
-        loss_logger = self.loss_logger or LossLogger(model_name=self.model_name)
-        
-        # 训练模式
-        self.model.network.train()
-        
+
+        loss_logger = self._setup_training()
         total_loss = 0.0
         total_batches = 0
         epoch_loss_sum = 0.0
         epoch_batches = 0
-        
+
         for epoch in range(epochs):
             # 生成批次索引
             if shuffle:
                 indices = torch.randperm(n_samples, device=self.device)
             else:
                 indices = torch.arange(n_samples, device=self.device)
-            
+
             # 按批次训练
             for start_idx in range(0, n_samples, batch_size):
                 # 获取当前批次的索引
                 batch_indices = indices[start_idx:start_idx + batch_size]
-                
+
                 # 获取批次数据
                 batch_inputs = inputs_tensor[batch_indices]
                 batch_targets = targets_tensor[batch_indices]
                 batch_masks = masks_tensor[batch_indices]
-                
+
                 # 前向传播
                 self.optimizer.zero_grad()
                 outputs = self.model.network(batch_inputs)
-                
+
                 # 计算损失（使用 mask）
                 loss = self._masked_loss(outputs, batch_targets, batch_masks)
-                
+
                 # 反向传播
                 loss.backward()
                 self.optimizer.step()
-                
+
                 total_loss += loss.item()
                 total_batches += 1
                 epoch_loss_sum += loss.item()
                 epoch_batches += 1
-            
+
             # 记录 loss 日志（每 LOSS_LOG_INTERVAL 个 epoch 记录该 epoch 的平均 loss）
             if (epoch + 1) % LOSS_LOG_INTERVAL == 0:
                 epoch_avg_loss = epoch_loss_sum / epoch_batches if epoch_batches > 0 else 0.0
@@ -339,16 +323,11 @@ class BaseTrainer(ABC):
                     loss_logger.log(epoch + 1, epoch_avg_loss)
                 if verbose:
                     print(f"Epoch {epoch + 1}/{epochs}, avg_loss: {epoch_avg_loss:.4f}")
-            
+
             epoch_loss_sum = 0.0
             epoch_batches = 0
-        
-        # 生成 loss 曲线图（matplotlib 缺失时优雅降级）
-        if loss_logger:
-            loss_logger.plot()
-        
-        # 返回平均损失
-        return total_loss / total_batches if total_batches > 0 else 0.0
+
+        return self._finalize_training(loss_logger, total_loss, total_batches)
     
     def train_cycle(
         self,
@@ -371,104 +350,13 @@ class BaseTrainer(ABC):
             rate: 奖励衰减率 r，默认 0.9，传给 Evaluator 用于生成 sample
             project_root: 项目根目录，用于确定数据保存路径
         """
-        import sys
-        sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-        
-        from ai.engine import AIEngine
-        from ai.game_manager import AIGameManager
-        from ai.data_recorder import DataRecorder
-        from ai.evaluator import Evaluator
-        
-        # 确定项目根目录
-        if project_root is None:
-            project_root = os.path.dirname(os.path.dirname(__file__))
-        
-        # 创建数据目录（位于 ai/ 子目录下）
-        ai_data_dir = AI_DATA_DIR
-        train_data_dir = TRAIN_DATA_DIR
-        os.makedirs(ai_data_dir, exist_ok=True)
-        os.makedirs(train_data_dir, exist_ok=True)
-        
-        # 创建 AI 引擎（使用当前模型）
-        engine = AIEngine(self.model)
-        
-        # 使用注入的 logger 或自动创建
-        loss_logger = self.loss_logger or LossLogger(model_name=self.model_name)
-        
-        print(f"开始训练周期: {rounds} 轮，每轮 {games} 局，奖励衰减率 rate={rate}")
-        print(f"数据保存目录: {ai_data_dir}")
-        print(f"训练数据目录: {train_data_dir}")
-        print("-" * 50)
-        
-        for round_num in range(1, rounds + 1):
-            print(f"\n===== 第 {round_num}/{rounds} 轮 =====")
-            
-            # 1. 创建数据记录器
-            recorder = DataRecorder(
-                ai_name=f"{self.model_name}_cycle_{round_num}",
-                ai_data_dir=ai_data_dir
-            )
-            
-            # 2. 执行 AI 内战（模型自我对弈）
-            print(f"执行 {games} 局自我对弈...")
-            results = AIGameManager.start_ai_vs_ai(
-                engine1=engine,
-                engine2=engine,
-                num_games=games,
-                recorder=recorder,
-                project_root=project_root
-            )
-            
-            # 统计结果
-            black_wins = sum(1 for r in results if r["winner"] == 1)
-            white_wins = sum(1 for r in results if r["winner"] == 2)
-            draws = sum(1 for r in results if r["winner"] == 3)
-            print(f"对局结果: 黑胜 {black_wins}, 白胜 {white_wins}, 平局 {draws}")
-            
-            # 3. 调用 Evaluator 对每局生成 sample.json，收集所有 sample 目录
-            print("生成训练样本...")
-            evaluator = Evaluator(
-                ai_data_dir=ai_data_dir,
-                train_data_dir=train_data_dir,
-                decay_rate=rate
-            )
-            
-            round_dir = recorder.get_round_dir()
-            sample_dirs = []
-            for game_dir in os.listdir(round_dir):
-                game_path = os.path.join(round_dir, game_dir)
-                record_file = os.path.join(game_path, "record.json")
-                if os.path.isdir(game_path) and os.path.exists(record_file):
-                    try:
-                        sample_file = evaluator.evaluate_record(record_file)
-                        # 收集 sample 所在目录
-                        sample_dirs.append(os.path.dirname(sample_file))
-                    except Exception as e:
-                        print(f"  评价失败 {record_file}: {e}")
-            
-            print(f"生成 {len(sample_dirs)} 个样本文件")
-            
-            # 4. 调用 train_batch 将本轮所有 sample 合并训练
-            #    train_batch 内部会创建自己的 LossLogger（内层 epoch 级日志）
-            if sample_dirs:
-                print(f"训练模型 ({epochs} epochs，共 {len(sample_dirs)} 个样本合并训练)...")
-                avg_loss = self.train_batch(sample_dirs, epochs=epochs, verbose=True)
-                print(f"本轮平均损失: {avg_loss:.4f}")
-                
-                # 记录每轮的 avg_loss（外层 round 级日志）
-                if loss_logger:
-                    loss_logger.log(round_num, avg_loss)
-            
-            # 5. 保存更新后的模型
-            model_path = self.model.save()
-            print(f"模型已保存: {model_path}")
-            print("-" * 50)
-        
-        # 生成 loss 曲线图（外层轮次粒度）
-        if loss_logger:
-            loss_logger.plot()
-        
-        print(f"\n训练周期完成！共 {rounds} 轮，每轮 {games} 局")
+        SelfPlayCycle(self).run(
+            rounds=rounds,
+            games=games,
+            epochs=epochs,
+            rate=rate,
+            project_root=project_root
+        )
     
     def _compute_loss(self, estimated: List[float], sample: List[float], mask: List[int]) -> float:
         """计算损失（Python 纯实现，供单元测试使用）

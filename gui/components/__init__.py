@@ -17,6 +17,7 @@ from .heatmap import HeatmapCanvas, HeatmapLegend
 from .replay_viewer import ReplayViewer, ReplayWindow
 from .replay_browser import ReplayBrowser, RoundSelector, GameSelector
 from .ai_battle import AIBattleConfigDialog, AIBattleProgressWindow, AIBattleManager
+from .load_game_dialog import LoadGameDialog
 
 __all__ = [
     # 常量
@@ -36,4 +37,5 @@ __all__ = [
     "AIBattleConfigDialog",
     "AIBattleProgressWindow",
     "AIBattleManager",
+    "LoadGameDialog",
 ]
