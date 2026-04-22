@@ -197,5 +197,159 @@ class TestLossLoggerFileNaming(unittest.TestCase):
             self.assertNotEqual(logger1.get_log_path(), logger2.get_log_path())
 
 
+class TestLossLoggerSessionDir(unittest.TestCase):
+    """测试 session_dir 子目录隔离"""
+
+    def test_session_dir_creates_subdirectory(self):
+        """传入 session_dir 后日志应位于子目录下"""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp_path:
+            logger = LossLogger(
+                model_name="test_model",
+                log_dir=tmp_path,
+                session_dir="test_session"
+            )
+            log_path = logger.get_log_path()
+            expected_dir = os.path.join(tmp_path, "test_session")
+            self.assertTrue(os.path.isdir(expected_dir))
+            self.assertTrue(log_path.startswith(expected_dir + os.sep))
+
+    def test_round_level_filename(self):
+        """log_type=round_level 时文件名为 round_level.jsonl"""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp_path:
+            logger = LossLogger(
+                model_name="cnn_v1",
+                log_dir=tmp_path,
+                session_dir="session",
+                log_type="round_level",
+                total_rounds=3,
+                games=50
+            )
+            log_path = logger.get_log_path()
+            self.assertEqual(os.path.basename(log_path), "round_level.jsonl")
+
+    def test_epoch_level_filename_with_round_num(self):
+        """log_type=epoch_level 且提供 round_num 时文件名语义化"""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp_path:
+            logger = LossLogger(
+                model_name="cnn_v1",
+                log_dir=tmp_path,
+                session_dir="session",
+                log_type="epoch_level",
+                round_num=2,
+                total_rounds=3,
+                epochs=1000
+            )
+            log_path = logger.get_log_path()
+            self.assertEqual(os.path.basename(log_path), "round_2_epoch_level.jsonl")
+
+    def test_backward_compatibility_no_new_params(self):
+        """不传新参数时保持旧命名格式"""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp_path:
+            logger = LossLogger(model_name="fc_v1", log_dir=tmp_path)
+            log_path = logger.get_log_path()
+            basename = os.path.basename(log_path)
+            # 旧格式: fc_v1_YYYYMMDD_HHMMSS_xxxxxxxx.jsonl
+            import re
+            pattern = r'^fc_v1_\d{8}_\d{6}_[0-9a-f]{8}\.jsonl$'
+            self.assertRegex(basename, pattern)
+
+
+class TestLossLoggerPlotTitle(unittest.TestCase):
+    """测试图表标题语义化"""
+
+    @patch('ai.loss_logger.plt')
+    def test_plot_title_with_round_level(self, mock_plt):
+        """round_level 图表标题应包含轮次和对局数信息"""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp_path:
+            logger = LossLogger(
+                model_name="cnn_v1",
+                log_dir=tmp_path,
+                session_dir="session",
+                log_type="round_level",
+                total_rounds=5,
+                games=100
+            )
+            logger.log(1, 0.5)
+            logger.plot()
+            mock_plt.title.assert_called_once()
+            title = mock_plt.title.call_args[0][0]
+            self.assertIn("Round Level", title)
+            self.assertIn("5 rounds", title)
+            self.assertIn("100 games", title)
+
+    @patch('ai.loss_logger.plt')
+    def test_plot_title_with_epoch_level(self, mock_plt):
+        """epoch_level 图表标题应包含轮次编号和 epoch 数"""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp_path:
+            logger = LossLogger(
+                model_name="cnn_v1",
+                log_dir=tmp_path,
+                session_dir="session",
+                log_type="epoch_level",
+                round_num=1,
+                total_rounds=3,
+                epochs=1000
+            )
+            logger.log(200, 0.5)
+            logger.plot()
+            mock_plt.title.assert_called_once()
+            title = mock_plt.title.call_args[0][0]
+            self.assertIn("Round 1/3", title)
+            self.assertIn("Epoch Level", title)
+            self.assertIn("1000 epochs", title)
+
+
+class TestLossLoggerPlotComparison(unittest.TestCase):
+    """测试合并对比图功能"""
+
+    def test_plot_comparison_generates_merged_image(self):
+        """多个 epoch_level 日志合并为一张对比图"""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp_path:
+            session_dir = os.path.join(tmp_path, "test_session")
+            os.makedirs(session_dir)
+
+            # 创建 round_1_epoch_level.jsonl
+            with open(os.path.join(session_dir, "round_1_epoch_level.jsonl"), 'w') as f:
+                f.write(json.dumps({"epoch": 200, "loss": 0.0020}) + "\n")
+                f.write(json.dumps({"epoch": 400, "loss": 0.0015}) + "\n")
+
+            # 创建 round_2_epoch_level.jsonl
+            with open(os.path.join(session_dir, "round_2_epoch_level.jsonl"), 'w') as f:
+                f.write(json.dumps({"epoch": 200, "loss": 0.0018}) + "\n")
+                f.write(json.dumps({"epoch": 400, "loss": 0.0012}) + "\n")
+
+            img_path = LossLogger.plot_comparison(
+                session_dir="test_session",
+                model_name="cnn_v1",
+                log_dir=tmp_path
+            )
+
+            self.assertIsNotNone(img_path)
+            self.assertTrue(os.path.exists(img_path))
+            self.assertTrue(img_path.endswith("comparison.png"))
+
+    def test_plot_comparison_empty_returns_none(self):
+        """session_dir 下无 epoch_level 文件时返回 None"""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp_path:
+            session_dir = os.path.join(tmp_path, "empty_session")
+            os.makedirs(session_dir)
+
+            img_path = LossLogger.plot_comparison(
+                session_dir="empty_session",
+                model_name="cnn_v1",
+                log_dir=tmp_path
+            )
+
+            self.assertIsNone(img_path)
+
+
 if __name__ == '__main__':
     unittest.main()

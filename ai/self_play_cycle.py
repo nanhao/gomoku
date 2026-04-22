@@ -4,6 +4,8 @@
 """
 
 import os
+import uuid
+from datetime import datetime
 
 from ai.constants import AI_DATA_DIR, TRAIN_DATA_DIR
 from ai.loss_logger import LossLogger
@@ -61,11 +63,26 @@ class SelfPlayCycle:
         
         # 创建 AI 引擎（使用当前模型）
         engine = AIEngine(self.trainer.model)
-        
-        # 使用注入的 logger 或自动创建
-        loss_logger = self.trainer.loss_logger or LossLogger(model_name=self.trainer.model_name)
-        
+
+        # 生成训练会话唯一子目录名
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        short_uuid = uuid.uuid4().hex[:8]
+        session_dir = f"{self.trainer.model_name}_{timestamp}_{short_uuid}"
+
+        # 使用注入的 logger 或自动创建（带 session_dir 子目录隔离）
+        if self.trainer.loss_logger is not None:
+            loss_logger = self.trainer.loss_logger
+        else:
+            loss_logger = LossLogger(
+                model_name=self.trainer.model_name,
+                session_dir=session_dir,
+                log_type="round_level",
+                total_rounds=rounds,
+                games=games
+            )
+
         print(f"开始训练周期: {rounds} 轮，每轮 {games} 局，奖励衰减率 rate={rate}")
+        print(f"Loss 日志目录: {os.path.join(AI_DATA_DIR, 'loss_logs', session_dir)}")
         print(f"数据保存目录: {ai_data_dir}")
         print(f"训练数据目录: {train_data_dir}")
         print("-" * 50)
@@ -122,9 +139,17 @@ class SelfPlayCycle:
             #    train_batch 内部会创建自己的 LossLogger（内层 epoch 级日志）
             if sample_dirs:
                 print(f"训练模型 ({epochs} epochs，共 {len(sample_dirs)} 个样本合并训练)...")
-                avg_loss = self.trainer.train_batch(sample_dirs, epochs=epochs, verbose=True)
+                avg_loss = self.trainer.train_batch(
+                    sample_dirs,
+                    epochs=epochs,
+                    verbose=True,
+                    session_dir=session_dir,
+                    log_type="epoch_level",
+                    round_num=round_num,
+                    total_rounds=rounds
+                )
                 print(f"本轮平均损失: {avg_loss:.4f}")
-                
+
                 # 记录每轮的 avg_loss（外层 round 级日志）
                 if loss_logger:
                     loss_logger.log(round_num, avg_loss)
@@ -137,5 +162,14 @@ class SelfPlayCycle:
         # 生成 loss 曲线图（外层轮次粒度）
         if loss_logger:
             loss_logger.plot()
+
+        # 生成合并对比图（所有内层 epoch 级数据合并到一张图）
+        if session_dir:
+            comparison_path = LossLogger.plot_comparison(
+                session_dir=session_dir,
+                model_name=self.trainer.model_name
+            )
+            if comparison_path:
+                print(f"合并对比图已生成: {comparison_path}")
         
         print(f"\n训练周期完成！共 {rounds} 轮，每轮 {games} 局")

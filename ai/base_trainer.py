@@ -120,9 +120,21 @@ class BaseTrainer(ABC):
         """
         pass
     
-    def _setup_training(self):
-        """设置训练环境，返回 LossLogger"""
-        loss_logger = self.loss_logger or LossLogger(model_name=self.model_name)
+    def _setup_training(self, **kwargs):
+        """设置训练环境，返回 LossLogger
+
+        Args:
+            **kwargs: 传递给 LossLogger 的可选参数（session_dir、log_type 等）
+
+        Returns:
+            LossLogger 实例
+        """
+        if self.loss_logger is not None:
+            loss_logger = self.loss_logger
+        elif kwargs:
+            loss_logger = LossLogger(model_name=self.model_name, **kwargs)
+        else:
+            loss_logger = LossLogger(model_name=self.model_name)
         self.model.network.train()
         return loss_logger
 
@@ -132,7 +144,7 @@ class BaseTrainer(ABC):
             loss_logger.plot()
         return total_loss / count if count > 0 else 0.0
 
-    def train_single(self, sample_dir: str, epochs: int = 10, verbose: bool = False) -> float:
+    def train_single(self, sample_dir: str, epochs: int = 10, verbose: bool = False, **kwargs) -> float:
         """单轮次训练（单个 sample 文件）
 
         使用指定目录下的 sample.json 数据进行训练。
@@ -158,7 +170,10 @@ class BaseTrainer(ABC):
         # 准备训练数据
         inputs_tensor, targets_tensor, masks_expanded = self._sample_loader.prepare_tensors(sample_data)
 
-        loss_logger = self._setup_training()
+        # 将 epochs 自动传递给 LossLogger（用于图表标题）
+        setup_kwargs = dict(kwargs)
+        setup_kwargs.setdefault('epochs', epochs)
+        loss_logger = self._setup_training(**setup_kwargs)
         total_loss = 0.0
 
         for epoch in range(epochs):
@@ -183,8 +198,8 @@ class BaseTrainer(ABC):
                     print(f"Epoch {epoch + 1}/{epochs}, loss: {loss.item():.4f}")
 
         return self._finalize_training(loss_logger, total_loss, epochs)
-    
-    def train_batch(self, sample_dirs: List[str], epochs: int = 1000, verbose: bool = True) -> float:
+
+    def train_batch(self, sample_dirs: List[str], epochs: int = 1000, verbose: bool = True, **kwargs) -> float:
         """批量训练：将多个 sample 文件数据合并，每个 epoch 只做一次参数更新。
 
         正确实现"一个 epoch 只更新一次参数"的语义：
@@ -195,6 +210,7 @@ class BaseTrainer(ABC):
             sample_dirs: 包含 sample.json 的目录路径列表
             epochs: 训练轮数，默认 1000
             verbose: 是否输出每个 epoch 的损失值，默认 True
+            **kwargs: 传递给 LossLogger 的可选参数（session_dir、log_type、round_num 等）
 
         Returns:
             训练后的平均损失值
@@ -212,7 +228,10 @@ class BaseTrainer(ABC):
         # 准备合并后的训练数据（转换为张量）
         inputs_tensor, targets_tensor, masks_tensor = self._sample_loader.prepare_tensors(all_sample_data)
 
-        loss_logger = self._setup_training()
+        # 将 epochs 自动传递给 LossLogger（用于图表标题）
+        setup_kwargs = dict(kwargs)
+        setup_kwargs.setdefault('epochs', epochs)
+        loss_logger = self._setup_training(**setup_kwargs)
         total_loss = 0.0
 
         for epoch in range(epochs):
@@ -237,14 +256,15 @@ class BaseTrainer(ABC):
                     print(f"Epoch {epoch + 1}/{epochs}, loss: {loss.item():.4f}")
 
         return self._finalize_training(loss_logger, total_loss, epochs)
-    
+
     def train_mini_batch(
         self,
         sample_dirs: List[str],
         epochs: int = 1000,
         batch_size: int = 32,
         shuffle: bool = True,
-        verbose: bool = True
+        verbose: bool = True,
+        **kwargs
     ) -> float:
         """Mini-Batch 训练：将多个 sample 文件数据合并，分批次训练。
 
@@ -277,7 +297,10 @@ class BaseTrainer(ABC):
         # 获取样本总数
         n_samples = inputs_tensor.shape[0]
 
-        loss_logger = self._setup_training()
+        # 将 epochs 自动传递给 LossLogger（用于图表标题）
+        setup_kwargs = dict(kwargs)
+        setup_kwargs.setdefault('epochs', epochs)
+        loss_logger = self._setup_training(**setup_kwargs)
         total_loss = 0.0
         total_batches = 0
         epoch_loss_sum = 0.0
