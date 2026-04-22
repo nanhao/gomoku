@@ -36,19 +36,23 @@ class SelfPlayCycle:
         games: int = 100,
         epochs: int = 1000,
         rate: float = 0.9,
+        batch_size: int = None,
+        shuffle: bool = False,
         project_root: str = None
     ) -> None:
         """执行训练周期
-        
+
         让模型自己跟自己对战 n 个轮次，每个轮次 m 场对局。
-        每个轮次结束后，将本轮所有 sample 数据合并，调用 train_batch 训练模型。
-        train_batch 保证每个 epoch 只做一次参数更新。
-        
+        每个轮次结束后，将本轮所有 sample 数据合并训练模型。
+        提供 batch_size 时启用 mini-batch 训练，否则使用全量更新。
+
         Args:
             rounds: 轮次数 n，默认 10
             games: 每轮对局数 m，默认 100
             epochs: 每轮训练的轮数，默认 1000
             rate: 奖励衰减率 r，默认 0.9，传给 Evaluator 用于生成 sample
+            batch_size: 每批次样本数，提供时启用 mini-batch 训练，默认 None（全量更新）
+            shuffle: 每个 epoch 是否打乱数据顺序，仅 mini-batch 模式有效，默认 False
             project_root: 项目根目录，用于确定数据保存路径
         """
         # 确定项目根目录
@@ -139,15 +143,29 @@ class SelfPlayCycle:
             #    train_batch 内部会创建自己的 LossLogger（内层 epoch 级日志）
             if sample_dirs:
                 print(f"训练模型 ({epochs} epochs，共 {len(sample_dirs)} 个样本合并训练)...")
-                avg_loss = self.trainer.train_batch(
-                    sample_dirs,
-                    epochs=epochs,
-                    verbose=True,
-                    session_dir=session_dir,
-                    log_type="epoch_level",
-                    round_num=round_num,
-                    total_rounds=rounds
-                )
+                # 根据 batch_size 选择训练方法
+                if batch_size is not None and batch_size > 0:
+                    avg_loss = self.trainer.train_mini_batch(
+                        sample_dirs,
+                        epochs=epochs,
+                        batch_size=batch_size,
+                        shuffle=shuffle,
+                        verbose=True,
+                        session_dir=session_dir,
+                        log_type="epoch_level",
+                        round_num=round_num,
+                        total_rounds=rounds
+                    )
+                else:
+                    avg_loss = self.trainer.train_batch(
+                        sample_dirs,
+                        epochs=epochs,
+                        verbose=True,
+                        session_dir=session_dir,
+                        log_type="epoch_level",
+                        round_num=round_num,
+                        total_rounds=rounds
+                    )
                 print(f"本轮平均损失: {avg_loss:.4f}")
 
                 # 记录每轮的 avg_loss（外层 round 级日志）

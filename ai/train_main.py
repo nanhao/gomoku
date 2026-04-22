@@ -120,7 +120,20 @@ def main():
         action='store_true',
         help='从新模型开始训练（不加载已保存的模型）'
     )
-    
+
+    parser.add_argument(
+        '--batch-size',
+        type=int,
+        default=None,
+        help='每批次样本数，提供时启用 mini-batch 训练，默认全量更新'
+    )
+
+    parser.add_argument(
+        '--shuffle',
+        action='store_true',
+        help='每个 epoch 是否打乱数据顺序（仅 mini-batch 模式有效）'
+    )
+
     args = parser.parse_args()
     
     # 验证参数
@@ -172,17 +185,29 @@ def main():
     elif args.cycle:
         # 训练周期
         print(f"开始 {args.model} 训练周期...")
-        print(f"轮次数: {args.rounds}")
-        print(f"每轮对局数: {args.games}")
-        print(f"奖励衰减率: {args.rate}")
-        
+        print(f"训练参数:")
+        print(f"  轮次数 (rounds):     {args.rounds}")
+        print(f"  每轮对局数 (games):  {args.games}")
+        print(f"  每轮迭代数 (epochs): {args.epochs}")
+        print(f"  奖励衰减率 (rate):   {args.rate}")
+        if args.batch_size is not None:
+            print(f"  批次大小 (batch):    {args.batch_size}")
+            print(f"  数据打乱 (shuffle):  {args.shuffle}")
+            print(f"  训练方法:            mini-batch")
+        else:
+            print(f"  批次大小 (batch):    N/A (全量更新)")
+            print(f"  数据打乱 (shuffle):  N/A")
+            print(f"  训练方法:            train_batch (全量更新)")
+
         try:
             # 执行训练周期
             trainer.train_cycle(
                 rounds=args.rounds,
                 games=args.games,
                 epochs=args.epochs,
-                rate=args.rate
+                rate=args.rate,
+                batch_size=args.batch_size,
+                shuffle=args.shuffle
             )
             
             print("训练周期完成！")
