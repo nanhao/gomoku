@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
 from ai.models.fc_v1.model import FCv1Model
 from ai.models.fc_v1.trainer import FCv1Trainer
+from tests.ai.helpers import create_sample_dir, create_output
 import torch
 
 

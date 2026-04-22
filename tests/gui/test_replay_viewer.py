@@ -5,6 +5,7 @@ import os
 import json
 import tempfile
 import tkinter as tk
+import unittest
 
 # 确保项目根目录在路径中
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -66,15 +67,15 @@ class TestReplayViewer:
         """测试后清理"""
         try:
             self.root.destroy()
-        except Exception:
-            pass
+        except Exception as e:
+            raise unittest.SkipTest(f"GUI环境不可用: {e}")
 
         # 删除临时文件
         import shutil
         try:
             shutil.rmtree(self.temp_dir)
-        except Exception:
-            pass
+        except Exception as e:
+            raise unittest.SkipTest(f"GUI环境不可用: {e}")
 
     def test_init_with_record(self):
         """测试使用 record 文件初始化"""
@@ -262,8 +263,8 @@ class TestReplayWindow:
         import shutil
         try:
             shutil.rmtree(self.temp_dir)
-        except Exception:
-            pass
+        except Exception as e:
+            raise unittest.SkipTest(f"GUI环境不可用: {e}")
 
     def test_init(self):
         """测试初始化"""

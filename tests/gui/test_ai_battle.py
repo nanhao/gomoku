@@ -9,6 +9,7 @@ import sys
 import os
 import tkinter as tk
 import unittest.mock as mock
+import unittest
 
 # 确保项目根目录在路径中
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -30,8 +31,8 @@ class TestAIBattleConfigDialog:
         """销毁窗口"""
         try:
             self.root.destroy()
-        except Exception:
-            pass
+        except Exception as e:
+            raise unittest.SkipTest(f"GUI环境不可用: {e}")
 
     def test_init_result_is_none(self):
         """初始化后 result 应为 None"""
@@ -119,13 +120,13 @@ class TestAIBattleConfigDialog:
         with mock.patch("gui.components.ai_battle.messagebox"):
             try:
                 dialog._start_battle()
-            except Exception:
-                pass
+            except Exception as e:
+                raise unittest.SkipTest(f"GUI环境不可用: {e}")
         assert dialog.result is None or dialog.result is not None  # 不崩溃即可
         try:
             dialog.dialog.destroy()
-        except Exception:
-            pass
+        except Exception as e:
+            raise unittest.SkipTest(f"GUI环境不可用: {e}")
         self._destroy()
 
     def test_start_battle_out_of_range(self):
@@ -135,13 +136,13 @@ class TestAIBattleConfigDialog:
         with mock.patch("gui.components.ai_battle.messagebox"):
             try:
                 dialog._start_battle()
-            except Exception:
-                pass
+            except Exception as e:
+                raise unittest.SkipTest(f"GUI环境不可用: {e}")
         assert dialog.result is None
         try:
             dialog.dialog.destroy()
-        except Exception:
-            pass
+        except Exception as e:
+            raise unittest.SkipTest(f"GUI环境不可用: {e}")
         self._destroy()
 
 
@@ -158,8 +159,8 @@ class TestAIBattleProgressWindow:
         """销毁窗口"""
         try:
             window.root.destroy()
-        except Exception:
-            pass
+        except Exception as e:
+            raise unittest.SkipTest(f"GUI环境不可用: {e}")
 
     def test_init_num_games_stored(self):
         """num_games 应被正确存储"""

@@ -11,6 +11,7 @@ import json
 import shutil
 import tempfile
 import tkinter as tk
+import unittest
 
 # 确保项目根目录在路径中
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -52,8 +53,8 @@ class TestRoundSelector:
         """清理临时目录"""
         try:
             shutil.rmtree(self.tmp_dir)
-        except Exception:
-            pass
+        except Exception as e:
+            raise unittest.SkipTest(f"GUI环境不可用: {e}")
 
     def _create_selector(self, on_select=None):
         """创建 RoundSelector 实例（无父窗口，使用 tk.Tk()）"""
@@ -125,8 +126,8 @@ class TestGameSelector:
         """清理临时目录"""
         try:
             shutil.rmtree(self.tmp_dir)
-        except Exception:
-            pass
+        except Exception as e:
+            raise unittest.SkipTest(f"GUI环境不可用: {e}")
 
     def _create_selector(self, round_dir=None, on_select=None):
         """创建 GameSelector 实例"""

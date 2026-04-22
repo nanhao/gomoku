@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from ai.models.fc_v1.trainer import FCv1Trainer
 from ai.models.fc_v1.model import FCv1Model
+from tests.ai.helpers import create_sample_dir, create_output
 
 
 class TestFCv1Trainer(unittest.TestCase):
@@ -278,82 +279,78 @@ class TestFCv1TrainerCycle(unittest.TestCase):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
     
     def test_train_cycle_basic(self):
-        """测试训练周期基本功能"""
+        """测试训练周期基本功能
+        
+        验证 train_cycle 能完整执行，且创建 ai_data 和 train_data 目录。
+        不使用 try/except 吞异常，确保训练周期失败时测试快速暴露。
+        """
         trainer = FCv1Trainer()
         
         # 使用很小的参数进行快速测试
         # 1 轮，2 局，1 epoch
-        try:
-            trainer.train_cycle(
-                rounds=1,
-                games=2,
-                epochs=1,
-                project_root=self.temp_dir
-            )
-            # 如果执行到这里，说明功能正常
-            success = True
-        except Exception as e:
-            # 记录异常但测试继续
-            print(f"训练周期执行异常: {e}")
-            success = False
+        trainer.train_cycle(
+            rounds=1,
+            games=2,
+            epochs=1,
+            project_root=self.temp_dir
+        )
         
         # 验证 ai_data 目录被创建并包含数据
-        self.assertTrue(os.path.exists(self.ai_data_dir))
+        self.assertTrue(os.path.exists(self.ai_data_dir),
+                        "train_cycle 应创建 ai_data 目录")
         
         # 验证 train_data 目录被创建
-        self.assertTrue(os.path.exists(self.train_data_dir))
+        self.assertTrue(os.path.exists(self.train_data_dir),
+                        "train_cycle 应创建 train_data 目录")
     
     def test_train_cycle_creates_model_file(self):
-        """测试训练周期后模型文件被保存"""
+        """测试训练周期后模型文件被保存
+        
+        验证 train_cycle 执行后模型可保存。不使用 try/except 容错，
+        确保训练周期失败时测试快速暴露。
+        """
         trainer = FCv1Trainer()
         
         # 临时模型路径
         model_path = os.path.join(self.temp_dir, "test_model.pth")
         
-        try:
-            trainer.train_cycle(
-                rounds=1,
-                games=1,
-                epochs=1,
-                project_root=self.temp_dir
-            )
-            
-            # 保存模型到临时路径
-            saved_path = trainer.model.save(model_path)
-            
-            # 验证模型文件存在
-            self.assertTrue(os.path.exists(saved_path))
-            
-        except Exception as e:
-            # 如果执行失败，至少验证模型可以保存
-            print(f"训练周期执行异常，测试模型保存: {e}")
-            saved_path = trainer.model.save(model_path)
-            self.assertTrue(os.path.exists(saved_path))
+        # 执行训练周期
+        trainer.train_cycle(
+            rounds=1,
+            games=1,
+            epochs=1,
+            project_root=self.temp_dir
+        )
+        
+        # 保存模型到临时路径
+        saved_path = trainer.model.save(model_path)
+        
+        # 验证模型文件存在
+        self.assertTrue(os.path.exists(saved_path),
+                        "训练后模型文件应被保存")
     
     def test_train_cycle_with_existing_model(self):
-        """测试使用已有模型进行训练周期"""
+        """测试使用已有模型进行训练周期
+        
+        验证传入已有模型时 train_cycle 能正常执行，且训练后模型仍可用。
+        不使用 try/except 容错，确保训练周期失败时测试快速暴露。
+        """
         # 创建初始模型
         initial_model = FCv1Model()
         trainer = FCv1Trainer(initial_model)
         
-        try:
-            # 执行训练周期
-            trainer.train_cycle(
-                rounds=1,
-                games=1,
-                epochs=1,
-                project_root=self.temp_dir
-            )
-            
-            # 验证模型仍然可用
-            result = trainer.model.predict([0] * 226)
-            self.assertEqual(len(result), 225)
-            
-        except Exception as e:
-            print(f"使用已有模型训练周期异常: {e}")
-            # 至少验证模型可用
-            result = trainer.model.predict([0] * 226)
-            self.assertEqual(len(result), 225)
+        # 执行训练周期
+        trainer.train_cycle(
+            rounds=1,
+            games=1,
+            epochs=1,
+            project_root=self.temp_dir
+        )
+        
+        # 验证模型仍然可用
+        result = trainer.model.predict([0] * 226)
+        self.assertEqual(len(result), 225,
+                         "训练后模型应仍能正确预测")
 
 
 class TestTrainMainScript(unittest.TestCase):

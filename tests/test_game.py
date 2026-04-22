@@ -163,10 +163,44 @@ class TestGomokuGame:
         assert winner == 1
     
     def test_draw(self):
-        """测试平局"""
-        # 这个测试比较复杂，需要填满棋盘但无五连
-        # 实现时再填充具体逻辑
-        pass
+        """测试平局检测：满盘无五连时 _is_draw 返回 True
+
+        使用模7线性模式构造无五连的满盘棋盘。原理：在任意直线方向上，
+        (3i + 5j) mod 7 的周期为7，因此任意连续5格中必然出现两种颜色，
+        从根本上杜绝五连。验证 _is_draw 能在棋盘满且无获胜方时正确判定平局。
+
+        注意：GomokuGame 通过状态初始化时不自动重新检测胜负/平局，
+        _is_draw 由 make_move 内部调用。
+        """
+        # 构造无五连的满盘棋盘：模7线性模式，周期7>5，任意方向无五连
+        board = [[0] * 15 for _ in range(15)]
+        for i in range(15):
+            for j in range(15):
+                board[i][j] = ((i * 3 + j * 5) % 7) % 2 + 1
+
+        draw_state = {
+            "board": board,
+            "current_player": 1,
+            "history": [],
+            "winner": 0
+        }
+        draw_game = GomokuGame(draw_state)
+
+        # 验证棋盘已满
+        assert all(cell != 0 for row in draw_game.board for cell in row), \
+            "平局棋盘应已满"
+
+        # 验证无五连（抽查关键位置）
+        assert not draw_game._check_winner(0, 0), \
+            "模7模式不应在角落形成五连"
+        assert not draw_game._check_winner(7, 7), \
+            "模7模式不应在中心形成五连"
+        assert not draw_game._check_winner(14, 14), \
+            "模7模式不应在对角末端形成五连"
+
+        # 验证 _is_draw 返回 True
+        assert draw_game._is_draw(), \
+            "满盘无五连应判定为平局"
     
     def test_get_state(self):
         """测试获取游戏状态"""

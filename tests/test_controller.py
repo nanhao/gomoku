@@ -3,6 +3,7 @@
 import sys
 import os
 import shutil
+import unittest
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -109,12 +110,12 @@ class TestGomokuController:
         assert "已存在" in result["error"]
     
     def test_draw(self):
-        """测试平局"""
-        self.controller.new_game("测试游戏9")
-        # 模拟平局：填满棋盘但无五连（这里简化为一个小棋盘测试）
-        # 实际测试需要更复杂的落子序列
-        # 暂时留空，实现时再补充具体落子序列
-        pass
+        """测试平局
+
+        TODO: Controller 层平局测试需要构造完整的落子序列，
+        暂时跳过。游戏逻辑层的平局测试见 test_game.py。
+        """
+        raise unittest.SkipTest("TODO: 补充 Controller 层平局测试")
     
     def test_load_game(self):
         """测试加载存档

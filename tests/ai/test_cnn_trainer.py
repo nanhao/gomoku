@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from ai.models.cnn_v1.trainer import CNNTrainer
 from ai.models.cnn_v1.model import CNNModel
+from tests.ai.helpers import create_sample_dir, create_output
 
 
 class TestCNNTrainer(unittest.TestCase):

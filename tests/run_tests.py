@@ -3,6 +3,7 @@
 import sys
 import os
 import traceback
+import unittest
 
 # 获取项目根目录（tests 的父目录）
 current_dir = os.path.abspath(os.path.dirname(__file__))
@@ -29,17 +30,31 @@ from tests.gui.test_ai_battle import TestAIBattleConfigDialog, TestAIBattleProgr
 from tests.gui.test_gomoku_gui import TestGomokuGUIOnBoardClick, TestGomokuGUIPveAiPlayer2, TestGomokuGUIPveAiPlayer1
 
 def run_test_method(test_class, method_name):
-    """运行单个测试方法"""
+    """运行单个测试方法
+
+    支持 unittest.TestCase 的 setUp/tearDown 和
+    pytest 风格的 setup_method/teardown_method。
+    """
+    instance = test_class()
+    method = getattr(instance, method_name)
+
     try:
-        instance = test_class()
-        method = getattr(instance, method_name)
-        
-        # 如果存在 setup_method，先调用
-        if hasattr(instance, 'setup_method'):
+        # 检查子类是否自己定义了 setUp（而非继承自 unittest.TestCase 的空实现）
+        has_custom_setUp = (
+            hasattr(instance, 'setUp') and
+            type(instance).setUp is not unittest.TestCase.setUp
+        )
+        if has_custom_setUp:
+            instance.setUp()
+        # 兼容 pytest 风格的 setup_method
+        elif hasattr(instance, 'setup_method'):
             instance.setup_method()
-        
+
         method()
         print(f"  PASS {method_name}")
+        return True
+    except unittest.SkipTest as e:
+        print(f"  SKIP {method_name}: {e}")
         return True
     except Exception as e:
         print(f"  FAIL {method_name}")
@@ -47,6 +62,19 @@ def run_test_method(test_class, method_name):
         import traceback
         traceback.print_exc()
         return False
+    finally:
+        # 确保调用 tearDown/teardown_method 清理资源
+        try:
+            has_custom_tearDown = (
+                hasattr(instance, 'tearDown') and
+                type(instance).tearDown is not unittest.TestCase.tearDown
+            )
+            if has_custom_tearDown:
+                instance.tearDown()
+            elif hasattr(instance, 'teardown_method'):
+                instance.teardown_method()
+        except Exception as teardown_err:
+            print(f"  TEARDOWN ERROR: {teardown_err}")
 
 def run_all_tests():
     """运行所有测试"""
