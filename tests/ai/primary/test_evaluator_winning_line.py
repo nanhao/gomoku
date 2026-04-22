@@ -268,16 +268,15 @@ class TestBlendRewards(unittest.TestCase):
         self.evaluator = Evaluator()
 
     def test_blend_with_line_bonus(self):
-        """有五连奖励时，加法融合两种信号"""
+        """有五连奖励时，加法融合两种信号（Bug M2: 裁剪到 MAX_REWARD）"""
         shape_reward = 500000
         line_bonus = 1000000
         
         blended = self.evaluator.blend_rewards(shape_reward, line_bonus)
         
-        # 加法融合：shape_reward + alpha * line_bonus
-        # alpha 默认为 BLEND_ALPHA = 1.0
-        expected = shape_reward + self.evaluator.BLEND_ALPHA * line_bonus
-        self.assertEqual(blended, expected)
+        # 加法融合：shape_reward + alpha * line_bonus = 500000 + 1000000 = 1500000
+        # Bug M2 修复后裁剪到 MAX_REWARD = 1000000
+        self.assertEqual(blended, self.evaluator.MAX_REWARD)
 
     def test_blend_without_line_bonus(self):
         """无五连奖励时，结果等于棋型评估"""
@@ -290,27 +289,32 @@ class TestBlendRewards(unittest.TestCase):
         self.assertEqual(blended, 500000)
 
     def test_blend_shape_higher(self):
-        """棋型评估更高时，两者仍然叠加"""
+        """棋型评估更高时，两者仍然叠加（Bug M2: 裁剪到 MAX_REWARD）"""
         shape_reward = 855000
         line_bonus = 729000
         
         blended = self.evaluator.blend_rewards(shape_reward, line_bonus)
         
-        # 加法融合：两种信号叠加
-        expected = shape_reward + self.evaluator.BLEND_ALPHA * line_bonus
-        self.assertEqual(blended, expected)
-        # 结果应大于单独的 shape_reward
+        # 加法融合：855000 + 729000 = 1584000
+        # Bug M2 修复后裁剪到 MAX_REWARD = 1000000
+        self.assertEqual(blended, self.evaluator.MAX_REWARD)
+        # 结果仍大于单独的 shape_reward
         self.assertGreater(blended, shape_reward)
 
     def test_blend_equal(self):
-        """两者相等时，加法融合结果为两倍"""
+        """两者相等时，加法融合后裁剪到 MAX_REWARD
+        
+        Bug M2 修复：blend_rewards 裁剪到 [MIN_REWARD, MAX_REWARD] 范围。
+        当 shape_reward = line_bonus = MAX_REWARD 时，
+        理论上 1000000 + 1000000 = 2000000，但裁剪后为 MAX_REWARD。
+        """
         shape_reward = 1000000
         line_bonus = 1000000
         
         blended = self.evaluator.blend_rewards(shape_reward, line_bonus)
         
-        expected = shape_reward + self.evaluator.BLEND_ALPHA * line_bonus
-        self.assertEqual(blended, expected)
+        # 裁剪到 MAX_REWARD
+        self.assertEqual(blended, self.evaluator.MAX_REWARD)
 
     def test_blend_early_step_not_dropped(self):
         """五连追溯早期步骤的信号不被丢弃
@@ -318,6 +322,9 @@ class TestBlendRewards(unittest.TestCase):
         这是 max 融合改为加法融合的核心修复验证：
         早期步骤的 line_bonus 较小（衰减后），
         加法融合确保它不会被完全丢弃。
+        
+        Bug M2 修复：融合结果裁剪到 [MIN_REWARD, MAX_REWARD]，
+        超出 MAX_REWARD 的值会被截断。
         """
         shape_reward = 500000  # 活三的评估值
         line_bonus = 656100    # 五连第1步（0.9^4 * MAX_REWARD）
@@ -328,9 +335,9 @@ class TestBlendRewards(unittest.TestCase):
         self.assertGreater(blended, shape_reward)
         self.assertGreater(blended, line_bonus)
         # 旧 max 融合会返回 max(500000, 656100) = 656100
-        # 新加法融合返回 500000 + 656100 = 1156100
-        expected = shape_reward + self.evaluator.BLEND_ALPHA * line_bonus
-        self.assertEqual(blended, expected)
+        # 加法融合理论上返回 500000 + 656100 = 1156100
+        # 但 Bug M2 修复后裁剪到 MAX_REWARD = 1000000
+        self.assertEqual(blended, self.evaluator.MAX_REWARD)
 
     def test_blend_custom_alpha(self):
         """自定义 alpha 参数控制融合权重"""

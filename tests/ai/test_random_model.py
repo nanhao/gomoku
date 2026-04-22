@@ -54,6 +54,66 @@ class TestRandomModelContract(unittest.TestCase):
         """模型名称应为 random"""
         self.assertEqual(self.model.name, "random")
 
+    def test_has_save_method(self):
+        """Bug M11: RandomModel 应实现 save 方法（BaseModel 接口契约）"""
+        self.assertTrue(hasattr(self.model, 'save'),
+                        "RandomModel 应实现 save 方法")
+        self.assertTrue(callable(self.model.save),
+                        "save 应为可调用方法")
+
+    def test_has_load_method(self):
+        """Bug M11: RandomModel 应实现 load 方法（BaseModel 接口契约）"""
+        self.assertTrue(hasattr(self.model, 'load'),
+                        "RandomModel 应实现 load 方法")
+        self.assertTrue(callable(self.model.load),
+                        "load 应为可调用方法")
+
+    def test_has_network_property(self):
+        """Bug M11: RandomModel 应实现 network 属性（BaseModel 接口契约）"""
+        # RandomModel 不使用神经网络，但属性必须存在以满足 BaseTrainer 的依赖
+        self.assertTrue(hasattr(self.model, 'network'),
+                        "RandomModel 应实现 network 属性")
+        # RandomModel 的 network 应为 None
+        self.assertIsNone(self.model.network,
+                         "RandomModel 的 network 应为 None")
+
+
+class TestBaseModelInterface(unittest.TestCase):
+    """Bug M11: BaseModel 抽象基类接口完整性测试"""
+
+    def test_base_model_defines_save(self):
+        """BaseModel 应声明 save 为抽象方法"""
+        from ai.base_model import BaseModel
+        self.assertTrue(hasattr(BaseModel, 'save'),
+                        "BaseModel 应声明 save 方法")
+
+    def test_base_model_defines_load(self):
+        """BaseModel 应声明 load 为抽象方法"""
+        from ai.base_model import BaseModel
+        self.assertTrue(hasattr(BaseModel, 'load'),
+                        "BaseModel 应声明 load 方法")
+
+    def test_base_model_documents_network(self):
+        """BaseModel 文档中应声明 network 为必要属性"""
+        from ai.base_model import BaseModel
+        # network 不是抽象方法（因为是实例属性），但文档中明确声明
+        self.assertIn('network', BaseModel.__doc__)
+
+    def test_cannot_instantiate_without_save_load(self):
+        """缺少 save/load 实现的类不能被实例化"""
+        from ai.base_model import BaseModel
+        
+        class IncompleteModel(BaseModel):
+            @property
+            def name(self):
+                return "incomplete"
+            def predict(self, board_vector):
+                return [0.0] * 225
+            # 缺少 save 和 load
+        
+        with self.assertRaises(TypeError):
+            IncompleteModel()
+
 
 if __name__ == '__main__':
     unittest.main()

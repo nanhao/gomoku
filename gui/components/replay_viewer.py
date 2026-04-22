@@ -252,6 +252,11 @@ class ReplayViewer:
             
             # 更新信息文本
             self._update_info_text(step, move)
+        else:
+            # 步骤 0 时清除热力图（显示空白棋盘）
+            self._clear_heatmaps()
+            # 清除信息文本
+            self._clear_info_text()
     
     def _draw_board_grid(self):
         """绘制棋盘网格"""
@@ -353,6 +358,17 @@ class ReplayViewer:
         player = "黑" if step % 2 == 1 else "白"
         self.info_text.insert(tk.END, f"\n落子方: {player}\n")
         self.info_text.insert(tk.END, f"落子位置: ({pos[0]}, {pos[1]})\n")
+    
+    def _clear_heatmaps(self):
+        """清除热力图（步骤归零时调用）"""
+        self.ai_heatmap.canvas.delete("all")
+        if self.sample_heatmap:
+            self.sample_heatmap.canvas.delete("all")
+    
+    def _clear_info_text(self):
+        """清除信息文本（步骤归零时调用）"""
+        self.info_text.delete(1.0, tk.END)
+        self.info_text.insert(tk.END, "=== 空白棋盘 ===\n\n重置到初始状态。\n")
     
     def _on_cell_hover(self, reward, row, col, x_root, y_root):
         """处理格子悬停"""

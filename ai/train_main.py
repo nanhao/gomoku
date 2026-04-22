@@ -9,8 +9,8 @@
     # 训练周期（fc_v1 模型）
     python ai/train_main.py --model fc_v1 --cycle [--rounds 100] [--games 100]
     
-    # 单轮次训练（cnn 模型）
-    python ai/train_main.py --model cnn --sample-dir train_data/{轮次目录}/{局数目录}
+    # 单轮次训练（cnn_v1 模型）
+    python ai/train_main.py --model cnn_v1 --sample-dir train_data/{轮次目录}/{局数目录}
 """
 
 import sys

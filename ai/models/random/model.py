@@ -19,6 +19,19 @@ class RandomModel(BaseModel):
         """模型名称"""
         return "random"
     
+    @property
+    def network(self):
+        """神经网络模块 - RandomModel 不使用神经网络，返回 None"""
+        return None
+    
+    def save(self, model_path: str = None) -> str:
+        """保存模型 - RandomModel 无参数需要保存，返回占位路径"""
+        return model_path or "random_model(no_file)"
+    
+    def load(self, model_path: str = None):
+        """加载模型 - RandomModel 无参数需要加载，空操作"""
+        pass
+    
     def predict(self, board_vector: List[int]) -> List[float]:
         """
         预测每个落子位置的概率

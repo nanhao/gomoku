@@ -7,7 +7,7 @@
 用法:
     python ai/battle.py --ai1 random --ai2 fc_v1 --games 10
     python ai/battle.py --ai1 random --ai2 random --games 50
-    python ai/battle.py --ai1 cnn --ai2 fc_v1 --games 10
+    python ai/battle.py --ai1 cnn_v1 --ai2 fc_v1 --games 10
 """
 
 import sys
@@ -178,8 +178,8 @@ def main():
   # random vs fc_v1，对战 50 局
   python ai/battle.py --ai1 random --ai2 fc_v1 --games 50
 
-  # cnn vs fc_v1，对战 10 局
-  python ai/battle.py --ai1 cnn --ai2 fc_v1 --games 10
+  # cnn_v1 vs fc_v1，对战 10 局
+  python ai/battle.py --ai1 cnn_v1 --ai2 fc_v1 --games 10
         """
     )
     
@@ -187,14 +187,14 @@ def main():
         "--ai1",
         type=str,
         required=True,
-        help="第一方 AI 名称（如 random, fc_v1, cnn）"
+        help="第一方 AI 名称（如 random, fc_v1, cnn_v1)"
     )
 
     parser.add_argument(
         "--ai2",
         type=str,
         required=True,
-        help="第二方 AI 名称（如 random, fc_v1, cnn）"
+        help="第二方 AI 名称（如 random, fc_v1, cnn_v1)"
     )
     
     parser.add_argument(

@@ -56,12 +56,12 @@ class GomokuGame:
         return 0
     
     def get_state(self):
-        """返回游戏状态，dict 格式"""
+        """返回游戏状态，dict 格式（深拷贝防止外部修改影响游戏状态）"""
         return {
-            "board": self.board,
+            "board": [row[:] for row in self.board],
             "current_player": self.current_player,
             "winner": self.winner,
-            "history": self.history
+            "history": [move.copy() for move in self.history]
         }
     
     def _check_winner(self, x, y):

@@ -151,11 +151,13 @@ class GameBoard:
     def _on_click(self, event):
         """处理点击事件"""
         # 计算点击的格子位置
+        # 使用 // 运算符确保负数坐标正确映射到 -1（被边界检查拒绝），
+        # 而非 int() 截断将负数映射到 0
         x = event.x - self.BOARD_MARGIN + self.CELL_SIZE // 2
         y = event.y - self.BOARD_MARGIN + self.CELL_SIZE // 2
         
-        col = int(x / self.CELL_SIZE)
-        row = int(y / self.CELL_SIZE)
+        col = x // self.CELL_SIZE
+        row = y // self.CELL_SIZE
         
         # 检查边界
         if 0 <= row < self.BOARD_SIZE and 0 <= col < self.BOARD_SIZE:

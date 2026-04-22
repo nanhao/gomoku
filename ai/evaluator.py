@@ -280,8 +280,8 @@ class Evaluator:
             result.append({"shape": "眠二", "directions": raw_shapes["眠二"]})
         
         
-        # 独一（只在没有任何其他棋型时返回）
-        if "独一" in raw_shapes and len(raw_shapes) == 1:
+        # 独一（保留所有方向，即使同时存在其他棋型）
+        if "独一" in raw_shapes:
             result.append({"shape": "独一", "directions": raw_shapes["独一"]})
         
         
@@ -730,6 +730,9 @@ class Evaluator:
         使用加法融合，确保两种信号都能贡献到最终奖励。
         加法融合避免了取 max 时弱信号被完全丢弃的问题，
         使得五连追溯的早期步骤（衰减后奖励较小）也能影响训练信号。
+        
+        融合后的奖励限制在 [MIN_REWARD, MAX_REWARD] 范围内，
+        确保 Softmax 缩放的一致性。
     
         Args:
             shape_reward: 棋型评估奖励
@@ -737,8 +740,10 @@ class Evaluator:
             alpha: 五连追溯奖励权重，默认使用 BLEND_ALPHA
     
         Returns:
-            融合后的奖励
+            融合后的奖励，裁剪到 [MIN_REWARD, MAX_REWARD] 范围
         """
         if alpha is None:
             alpha = self.BLEND_ALPHA
-        return shape_reward + alpha * line_bonus
+        blended = shape_reward + alpha * line_bonus
+        # 裁剪到合法范围，防止超出 MAX_REWARD
+        return max(self.MIN_REWARD, min(self.MAX_REWARD, blended))

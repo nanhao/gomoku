@@ -18,6 +18,7 @@ class GomokuController:
         """
         self.game = None
         self.current_save_name = None
+        self._start_time = None  # 游戏创建时间（加载存档时保留原始时间）
         
         # 默认使用项目根目录下的 game/save/
         if save_dir is None:
@@ -50,7 +51,8 @@ class GomokuController:
         # 保存初始状态
         state = self.game.get_state()
         state["name"] = save_name
-        state["start_time"] = self._get_current_time()
+        self._start_time = self._get_current_time()
+        state["start_time"] = self._start_time
         
         self.save.save_game(state, save_name)
         
@@ -110,6 +112,9 @@ class GomokuController:
             # 加载存档
             state = self.save.load_game(save_name)
             
+            # 保留原始 start_time
+            self._start_time = state.get("start_time", None)
+            
             # 创建游戏实例
             self.game = GomokuGame(state)
             self.current_save_name = save_name
@@ -161,11 +166,11 @@ class GomokuController:
             }
         else:
             # 完整版：包含所有信息
-            # 如果是新游戏，需要添加 name 和 start_time
             if "name" not in state:
                 state["name"] = self.current_save_name or "未知游戏"
             if "start_time" not in state:
-                state["start_time"] = self._get_current_time()
+                # 使用保存的 start_time（加载存档时保留的原始时间）
+                state["start_time"] = self._start_time or self._get_current_time()
             
             return state
     

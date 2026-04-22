@@ -469,7 +469,6 @@ class BaseTrainer(ABC):
             loss_logger.plot()
         
         print(f"\n训练周期完成！共 {rounds} 轮，每轮 {games} 局")
-        print(f"最终模型保存于: {self.model.save()}")
     
     def _compute_loss(self, estimated: List[float], sample: List[float], mask: List[int]) -> float:
         """计算损失（Python 纯实现，供单元测试使用）

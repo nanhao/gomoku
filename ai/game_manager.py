@@ -190,7 +190,6 @@ class AIGameManager:
             winner = controller.get_winner()
             end_state = controller.get_state()
             end_board = AIEngine.board_to_vector(end_state["board"], 0)
-            end_board.append(0)  # 添加占位符，使长度为 226
             recorder.save_game_result(current_game_id, winner, end_board)
             
             results.append({
@@ -258,6 +257,7 @@ class AIGameManager:
             
             # 开始记录
             recorder.new_game()
+            current_game_id = recorder.current_game_id
             
             # 游戏循环
             while not controller.is_over():
@@ -276,7 +276,7 @@ class AIGameManager:
                 x, y = engine.get_move(board, player)
                 
                 # 记录数据
-                recorder.record_move(game_num, board_vector, rewards, (x, y))
+                recorder.record_move(current_game_id, board_vector, rewards, (x, y))
                 
                 # 执行落子
                 controller.make_move(x, y)
@@ -285,8 +285,7 @@ class AIGameManager:
             winner = controller.get_winner()
             end_state = controller.get_state()
             end_board = AIEngine.board_to_vector(end_state["board"], 0)
-            end_board.append(0)  # 添加占位符，使长度为 226
-            recorder.save_game_result(game_num, winner, end_board)
+            recorder.save_game_result(current_game_id, winner, end_board)
             
             # 判断各方是否获胜（平局时两方都不算赢）
             ai1_won = (winner == ai1_color)

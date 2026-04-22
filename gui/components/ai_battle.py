@@ -138,6 +138,9 @@ class AIBattleConfigDialog:
         """获取可用的 AI 列表 - 动态扫描 ai/models/ 目录下的子目录"""
         ai_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
         ai_dir = os.path.join(ai_dir, "ai", "models")
+        # 目录不存在时返回空列表而非崩溃
+        if not os.path.exists(ai_dir):
+            return []
         ais = []
         for name in os.listdir(ai_dir):
             # 排除 __ 开头的目录（如 __pycache__）

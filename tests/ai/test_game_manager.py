@@ -260,5 +260,120 @@ class TestAIGameManagerAIvsAI(unittest.TestCase):
             self.assertTrue(os.path.exists(record_file2), f"第二轮第{i}局记录不存在")
 
 
+class TestEndBoardDimension(unittest.TestCase):
+    """回归测试：Bug M1 - end_board 应为 226 维而非 227 维
+
+    board_to_vector 已返回 226 维（225棋盘+1落子方），
+    多余的 append(0) 会使长度变为 227。
+    """
+
+    def setUp(self):
+        """测试前准备"""
+        self.test_save_dir = "test_game_save_end_board"
+        self.test_ai_data_dir = "test_ai_data_end_board"
+        for d in [self.test_save_dir, self.test_ai_data_dir]:
+            if os.path.exists(d):
+                shutil.rmtree(d)
+
+    def tearDown(self):
+        """测试后清理"""
+        for d in [self.test_save_dir, self.test_ai_data_dir]:
+            if os.path.exists(d):
+                shutil.rmtree(d)
+
+    def test_start_ai_vs_ai_end_board_dimension(self):
+        """Bug M1: start_ai_vs_ai 保存的 end_board 应为 226 维"""
+        engine1 = AIEngine(RandomModel())
+        engine2 = AIEngine(RandomModel())
+        recorder = DataRecorder("test_dim", self.test_ai_data_dir)
+
+        AIGameManager.start_ai_vs_ai(
+            engine1, engine2, num_games=1, recorder=recorder,
+            project_root=os.path.dirname(os.path.dirname(__file__))
+        )
+
+        # 读取 record.json 验证 end_board 维度
+        import json
+        round_dir = recorder.get_round_dir()
+        record_path = os.path.join(round_dir, "1", "record.json")
+        with open(record_path, "r", encoding="utf-8") as f:
+            record = json.load(f)
+
+        # end_board 应为 226 维（225 棋盘格 + 1 落子方），而非 227
+        self.assertEqual(len(record["end_board"]), 226,
+                         f"end_board 应为 226 维，实际为 {len(record['end_board'])} 维")
+
+    def test_start_ai_vs_ai_random_end_board_dimension(self):
+        """Bug M1: start_ai_vs_ai_random 保存的 end_board 应为 226 维"""
+        engine1 = AIEngine(RandomModel())
+        engine2 = AIEngine(RandomModel())
+        recorder = DataRecorder("test_dim_rnd", self.test_ai_data_dir)
+
+        AIGameManager.start_ai_vs_ai_random(
+            engine1, engine2, num_games=1, recorder=recorder
+        )
+
+        # 读取 record.json 验证 end_board 维度
+        import json
+        round_dir = recorder.get_round_dir()
+        record_path = os.path.join(round_dir, "1", "record.json")
+        with open(record_path, "r", encoding="utf-8") as f:
+            record = json.load(f)
+
+        # end_board 应为 226 维
+        self.assertEqual(len(record["end_board"]), 226,
+                         f"end_board 应为 226 维，实际为 {len(record['end_board'])} 维")
+
+
+class TestGameIdConsistency(unittest.TestCase):
+    """回归测试：Bug L3 - start_ai_vs_ai_random 应使用 recorder.current_game_id
+
+    而非循环变量 game_num 作为 game_id，与 start_ai_vs_ai 保持一致。
+    """
+
+    def setUp(self):
+        """测试前准备"""
+        self.test_save_dir = "test_game_save_id"
+        self.test_ai_data_dir = "test_ai_data_id"
+        for d in [self.test_save_dir, self.test_ai_data_dir]:
+            if os.path.exists(d):
+                shutil.rmtree(d)
+
+    def tearDown(self):
+        """测试后清理"""
+        for d in [self.test_save_dir, self.test_ai_data_dir]:
+            if os.path.exists(d):
+                shutil.rmtree(d)
+
+    def test_ai_vs_ai_random_uses_recorder_game_id(self):
+        """Bug L3: start_ai_vs_ai_random 使用 recorder.current_game_id 而非 game_num"""
+        engine1 = AIEngine(RandomModel())
+        engine2 = AIEngine(RandomModel())
+
+        # 使用已有的 recorder（模拟 recorder 被复用的情况）
+        recorder = DataRecorder("test_gid", self.test_ai_data_dir)
+        # 先调用一次 start_ai_vs_ai 使 recorder.current_game_id 递增
+        AIGameManager.start_ai_vs_ai(
+            engine1, engine2, num_games=1, recorder=recorder,
+            project_root=os.path.dirname(os.path.dirname(__file__))
+        )
+
+        # 此时 recorder.current_game_id = 1
+        # 再调用 start_ai_vs_ai_random，新游戏应从 id=2 开始
+        results = AIGameManager.start_ai_vs_ai_random(
+            engine1, engine2, num_games=1, recorder=recorder
+        )
+
+        # 验证对战成功完成（如果使用了错误的 game_num=1，会触发 game_id 不匹配异常）
+        self.assertEqual(len(results), 1)
+        # 验证 record.json 存在于正确的目录
+        round_dir = recorder.get_round_dir()
+        import json
+        # 游戏应该在 id=2 的子目录中
+        record_path = os.path.join(round_dir, "2", "record.json")
+        self.assertTrue(os.path.exists(record_path),
+                        "start_ai_vs_ai_random 应使用 recorder.current_game_id")
+
+
 if __name__ == "__main__":
     unittest.main()

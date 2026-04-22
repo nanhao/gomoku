@@ -19,7 +19,7 @@ from ai.models.fc_v1.sample_inspector import SampleInspector
 
 
 def _make_sample_json(tmpdir: str, steps: int = 3) -> str:
-    """创建用于测试的临时 sample.json。
+    """创建用于测试的临时 sample.json（旧格式，保留兼容性）。
 
     最后一步的第0个空位 reward=+1000000，其余空位=0，已占位=-1000000。
     """
@@ -38,6 +38,42 @@ def _make_sample_json(tmpdir: str, steps: int = 3) -> str:
         data.append({"input": inp, "output": out, "mask": mask})
 
     sample_path = os.path.join(tmpdir, "sample.json")
+    with open(sample_path, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+    return sample_path
+
+
+def _make_softmax_sample_json(tmpdir: str, steps: int = 3) -> str:
+    """创建 Softmax 格式的 sample.json（与 Evaluator 实际输出一致）。
+
+    output 为 225 维 Softmax 概率分布：
+    - 已占位位置概率为 0.0（被 mask 排除）
+    - 空位位置概率为 1/empty_count（均匀分布）
+    - 最后一步的胜利位置概率最高
+    """
+    data = []
+    for i in range(steps):
+        occupied = i  # 前 i 个位置已落子
+        inp = [1] * occupied + [0] * (225 - occupied)  # 棋盘
+        inp.append(1)  # 当前落子方=黑
+
+        # 构建 Softmax 概率分布
+        empty_count = 225 - occupied
+        if i == steps - 1 and occupied < 225:
+            # 最后一步：胜利位置高概率，其余低概率
+            win_prob = 0.9
+            remaining_prob = (1.0 - win_prob) / max(1, empty_count - 1)
+            out = [0.0] * occupied  # 已占位为 0
+            out.append(win_prob)  # 第一个空位为胜利位置
+            out.extend([remaining_prob] * (empty_count - 1))  # 其余空位
+        else:
+            # 非最后一步：均匀分布
+            prob = 1.0 / max(1, empty_count)
+            out = [0.0] * occupied + [prob] * empty_count
+
+        data.append({"input": inp, "output": out})
+
+    sample_path = os.path.join(tmpdir, "sample_softmax.json")
     with open(sample_path, "w", encoding="utf-8") as f:
         json.dump(data, f)
     return sample_path
@@ -143,6 +179,59 @@ class TestSampleInspectorEdge(unittest.TestCase):
         results = self.inspector.inspect(sample_path)
         for r in results:
             self.assertEqual(r["occupied_count"] + r["empty_count"], 225)
+
+
+class TestSampleInspectorSoftmaxFormat(unittest.TestCase):
+    """Bug H4 回归测试：SampleInspector 应正确处理 Softmax 概率格式的 target"""
+
+    def setUp(self):
+        self.model = FCv1Model(fresh=True)
+        self.inspector = SampleInspector(self.model)
+        self.tmpdir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_softmax_format_win_pos_detected(self):
+        """Bug H4: Softmax 格式下，最后一步应检测到概率最高的胜利位置"""
+        sample_path = _make_softmax_sample_json(self.tmpdir, steps=3)
+        results = self.inspector.inspect(sample_path)
+        last = results[-1]
+        # 最后一步应检测到胜利位置（概率最高的位置）
+        self.assertIsNotNone(last["win_pos"],
+                             "Softmax 格式下最后一步应检测到概率最高的胜利位置")
+
+    def test_softmax_format_occupied_detected(self):
+        """Bug H4: Softmax 格式下，已占位位置概率应为 0"""
+        sample_path = _make_softmax_sample_json(self.tmpdir, steps=3)
+        results = self.inspector.inspect(sample_path)
+        for r in results:
+            # 已占位位置的 target 应为 0.0（被 Softmax mask 排除）
+            target = r["target"]
+            board = [1] * r["occupied_count"] + [0] * r["empty_count"]
+            for i, val in enumerate(board):
+                if val > 0:  # 已占位
+                    self.assertAlmostEqual(target[i], 0.0, places=5,
+                                           msg=f"步骤{r['step']}位置{i}已占位，概率应为0")
+
+    def test_softmax_format_loss_meaningful(self):
+        """Bug H4: Softmax 格式下，loss 应在合理范围内（0~1）"""
+        sample_path = _make_softmax_sample_json(self.tmpdir, steps=3)
+        results = self.inspector.inspect(sample_path)
+        for r in results:
+            # Softmax 概率范围 0~1，模型输出也是 0~1，loss 应在 0~1
+            self.assertLessEqual(r["loss"], 2.0,
+                                 f"步骤{r['step']}的loss={r['loss']}过大，Softmax格式下应在0~1范围")
+
+    def test_softmax_format_format_step_no_error(self):
+        """Bug H4: Softmax 格式下，format_step 不应出错"""
+        sample_path = _make_softmax_sample_json(self.tmpdir, steps=3)
+        results = self.inspector.inspect(sample_path)
+        for r in results:
+            text = self.inspector.format_step(r)
+            self.assertIsInstance(text, str)
+            self.assertGreater(len(text.strip()), 0)
 
 
 if __name__ == "__main__":

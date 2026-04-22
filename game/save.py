@@ -14,10 +14,15 @@ class GomokuSave:
         self._ensure_save_dir()
     
     def save_game(self, game_state, save_name):
-        """保存游戏状态"""
+        """保存游戏状态
+        
+        不修改传入的 game_state 字典，创建副本后写入文件。
+        """
+        # 创建副本避免修改调用者的字典
+        state_copy = dict(game_state)
         # 确保存档名称存在
-        if "name" not in game_state:
-            game_state["name"] = save_name
+        if "name" not in state_copy:
+            state_copy["name"] = save_name
         
         # 生成文件名：存档名称_YYYY-MM-DD.json
         filename = self._generate_filename(save_name)
@@ -25,7 +30,7 @@ class GomokuSave:
         
         # 写入JSON文件
         with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(game_state, f, ensure_ascii=False, indent=4)
+            json.dump(state_copy, f, ensure_ascii=False, indent=4)
     
     def load_game(self, save_name):
         """加载游戏状态，返回 dict 格式"""

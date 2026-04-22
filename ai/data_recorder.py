@@ -76,7 +76,7 @@ class DataRecorder:
         return self.current_game_id
     
     def record_move(self, game_id: int, input_vector: List[int],
-                    output_vector: List[int], position: Tuple[int, int]):
+                    output_vector: List[float], position: Tuple[int, int]):
         """
         记录一次落子
         
@@ -85,7 +85,7 @@ class DataRecorder:
         Args:
             game_id: 游戏编号（由 new_game 返回）
             input_vector: 226 维输入向量（棋盘 + 当前落子方）
-            output_vector: 675 维输出向量（x, y, reward 列表）
+            output_vector: 225 维输出向量（Softmax 概率分布，每个元素为 0~1 的浮点数）
             position: 引擎最终成功落子的位置 (x, y)
             
         Raises:
