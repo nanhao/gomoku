@@ -9,10 +9,12 @@ gomoku/
 ├── cli/              # 命令行界面
 ├── gui/              # 图形界面
 ├── game/             # 游戏核心逻辑
+├── app/              # 应用层（会话管理、GUI辅助）
 ├── ai/               # AI 模块
+│   ├── ai_data/      # AI 对战记录数据
+│   └── train_data/   # 训练样本数据
 ├── tests/            # 测试脚本
-├── ai_data/          # AI 对战记录数据
-└── train_data/       # 训练样本数据
+└── design/           # 设计文档
 ```
 
 ## 快速开始
@@ -69,7 +71,7 @@ python ai/train_main.py --model <模型名称> --sample-dir <sample目录> [--ep
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `--model` | 模型名称（fc_v1/cnn_v1） | 必填 |
+| `--model` | 模型名称（fc_v1/cnn_v1） | `fc_v1` |
 | `--sample-dir` | 训练样本目录 | 必填 |
 | `--epochs` | 训练迭代数 | 1000 |
 
@@ -111,13 +113,15 @@ python ai/models/fc_v1/inspect_main.py --sample <sample.json路径> [--model-pat
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
 | `--sample` | sample.json 文件路径 | 必填 |
-| `--model-path` | 模型文件路径 | ai/models/fc_v1/fc_v1.pth |
+| `--model-path` | 模型文件路径 | 默认加载 `ai/models/fc_v1/fc_v1.pth` |
 
 ### 运行测试
 
 ```bash
 python tests/run_tests.py
 ```
+
+> 覆盖全部 474 个测试（基础测试 212 + AI 测试 262）
 
 ---
 
