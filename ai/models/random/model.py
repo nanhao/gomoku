@@ -40,8 +40,8 @@ class RandomModel(BaseModel):
         empty_count = sum(1 for cell in board if cell == 0)
         
         if empty_count == 0:
-            # 没有空位，返回全 0
-            return [0.0] * 225
+            # 棋盘已满，返回均匀分布以遵守接口契约（概率之和为1）
+            return [1.0 / 225] * 225
         
         # 空位均匀分布概率
         prob = 1.0 / empty_count

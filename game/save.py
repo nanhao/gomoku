@@ -55,13 +55,19 @@ class GomokuSave:
         if not os.path.exists(self.save_dir):
             return []
         
+        import re
         saves = set()
         for filename in os.listdir(self.save_dir):
             if filename.endswith('.json'):
-                # 提取存档名称（去掉日期后缀）
-                # 格式：存档名称_YYYY-MM-DD.json
-                name_part = filename.rsplit('_', 1)[0]
-                saves.add(name_part)
+                # 提取存档名称（去掉日期时间后缀）
+                # 格式：存档名称_YYYY-MM-DD_HHMMSS.json 或 存档名称_YYYY-MM-DD.json（旧格式）
+                # 匹配末尾的 _YYYY-MM-DD_HHMMSS 或 _YYYY-MM-DD
+                match = re.match(r'(.+)_(\d{4}-\d{2}-\d{2})(_\d{6})?\.json$', filename)
+                if match:
+                    saves.add(match.group(1))
+                else:
+                    # 不匹配日期格式的文件，忽略
+                    pass
         
         # 返回排序后的列表
         return sorted(list(saves))
@@ -71,6 +77,10 @@ class GomokuSave:
         os.makedirs(self.save_dir, exist_ok=True)
     
     def _generate_filename(self, save_name):
-        """生成存档文件名"""
-        today = datetime.now().strftime('%Y-%m-%d')
-        return f"{save_name}_{today}.json"
+        """生成存档文件名
+        
+        格式：{save_name}_YYYY-MM-DD_HHMMSS.json
+        包含时间戳确保同一天多次保存不会覆盖
+        """
+        now = datetime.now()
+        return f"{save_name}_{now.strftime('%Y-%m-%d_%H%M%S')}.json"

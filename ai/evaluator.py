@@ -24,6 +24,7 @@ class Evaluator:
     MAX_REWARD = 1000000
     MIN_REWARD = -1000000
     DECAY_RATE = 0.9
+    BLEND_ALPHA = 1.0  # 五连追溯奖励融合权重
     
     # 四个检测方向：横向、纵向、主对角线、副对角线
     DIRECTIONS = [
@@ -190,14 +191,14 @@ class Evaluator:
         # 检测当前落子方在此位置落子后的棋型
         shapes1 = self.detect_shapes(board, (x, y), current_player)
         if shapes1:
-            reward1 = max([self.shape_to_reward(board, shape, current_player, True) for shape in shapes1])
+            reward1 = max([self.shape_to_reward(board, shape, current_player, True, (x, y)) for shape in shapes1])
         else:
             reward1 = 0
         
         # 检测对手方在此位置落子后的棋型
         shapes2 = self.detect_shapes(board, (x, y), opponent)
         if shapes2:
-            reward2 = max([self.shape_to_reward(board, shape, opponent, False) for shape in shapes2])
+            reward2 = max([self.shape_to_reward(board, shape, opponent, False, (x, y)) for shape in shapes2])
         else:
             reward2 = 0
         
@@ -360,7 +361,7 @@ class Evaluator:
         return None
     
     def shape_to_reward(self, board: List[int], shape_info: Dict, 
-                        player: int, is_current_player: bool) -> int:
+                        player: int, is_current_player: bool, position=None) -> int:
         """
         将棋型转换为 reward 值
         
@@ -369,6 +370,7 @@ class Evaluator:
             shape_info: 棋型信息 {"shape": 类型, "directions": [方向列表]}
             player: 落子方
             is_current_player: 是否是当前落子方（True=我方，False=敌方）
+            position: 落子位置 (x, y)，用于冲四递归计算
             
         Returns:
             reward 值
@@ -391,7 +393,7 @@ class Evaluator:
         
         elif shape_type == "冲四":
             # 需要递归计算
-            return self._compute_four_reward(board, shape_info, player, is_current_player)
+            return self._compute_four_reward(board, shape_info, player, is_current_player, position)
         
         elif shape_type == "多活三":
             return int(0.8 * self.MAX_REWARD * factor)
@@ -409,9 +411,8 @@ class Evaluator:
             return 0
     
     def _compute_four_reward(self, board: List[int], shape_info: Dict,
-                              player: int, is_current_player: bool) -> int:
-        """
-        计算冲四的递归 reward
+                              player: int, is_current_player: bool, position=None) -> int:
+        """计算冲四的递归 reward
         
         冲四递归流程：
         1. 模拟落子形成冲四
@@ -420,60 +421,132 @@ class Evaluator:
         4. 返回后续棋型的 reward
         
         Args:
-            board: 当前棋盘状态
+            board: 当前棋盘状态（225 维）
             shape_info: 冲四棋型信息
             player: 落子方
             is_current_player: 是否是当前落子方
+            position: 落子位置 (x, y)
             
         Returns:
             递归计算的 reward 值
         """
         opponent = 3 - player
-        
-        # 找到冲四的防守位置
-        # 冲四：四子相连，一端被阻挡，另一端空
-        # 防守位置就是那个空端
-        
-        # 由于 detect_shapes 已经模拟落子，我们需要找到防守位置
-        # 这里需要重新分析棋盘找到防守点
-        
-        # 简化处理：冲四递归后通常会形成更低级别的棋型
-        # 根据需求文档，需要递归计算
-        
-        # 对于我方冲四：
-        # 1. 模拟我方落子形成冲四
-        # 2. 找防守位置
-        # 3. 模拟敌方防守
-        # 4. 检测我方后续棋型
-        
-        # 由于当前 board 是落子前的状态，需要先模拟落子
-        # 然后找防守位置
-        
-        # 这里使用一个简化的方法：
-        # 查找所有方向，找到形成冲四的那个方向
-        # 然后找到防守位置
-        
-        for dx, dy in self.DIRECTIONS:
-            # 模拟落子
-            test_board = list(board)
-            # 注意：这里需要知道当前位置，但我们没有传进来
-            # 需要重构
-            
-            # 由于设计复杂性，这里采用简化的递归计算
-            # 冲四的防守方必须防守，否则会形成连五
-            # 防守后，进攻方的棋型会被打断
-        
-        # 简化实现：冲四的递归 reward 通常较低
-        # 因为防守后会形成眠三或更低级别
-        # 根据棋理，冲四 ≈ 0.5 * MAX_REWARD
-        # 但需要考虑递归后的实际棋型
-        
         factor = 1.0 if is_current_player else 0.95
         
-        # 简化处理：返回一个基于冲四逻辑的 reward
-        # 实际应该递归计算防守后的棋型
-        # 这里暂时返回一个合理的估值
-        return int(0.5 * self.MAX_REWARD * factor)
+        # 如果没有传 position，回退到简化计算
+        if position is None:
+            return int(0.5 * self.MAX_REWARD * factor)
+        
+        x, y = position
+        
+        # 1. 模拟落子
+        simulated_board = list(board)
+        simulated_board[x * 15 + y] = player
+        
+        # 2. 找防守位置并模拟防守，检测后续棋型
+        best_subsequent_reward = 0
+        
+        for dir_name in shape_info["directions"]:
+            # 找到方向对应的 (dx, dy)
+            direction_tuple = None
+            for dxdy, name in self.DIRECTION_NAMES.items():
+                if name == dir_name:
+                    direction_tuple = dxdy
+                    break
+            
+            if direction_tuple is None:
+                continue
+            
+            dx, dy = direction_tuple
+            defense_pos = self._find_four_defense(simulated_board, x, y, player, dx, dy)
+            
+            if defense_pos is None:
+                continue
+            
+            def_x, def_y = defense_pos
+            
+            # 3. 模拟防守
+            defense_board = list(simulated_board)
+            defense_board[def_x * 15 + def_y] = opponent
+            
+            # 4. 检测防守后我方在原位置的后续棋型
+            for ddx, ddy in self.DIRECTIONS:
+                shape_type = self._detect_shape_in_direction(defense_board, x, y, player, ddx, ddy)
+                if shape_type:
+                    # 使用非递归方法获取奖励值（避免无限递归）
+                    subsequent_reward = self._shape_reward_value(shape_type, 1, factor)
+                    best_subsequent_reward = max(best_subsequent_reward, subsequent_reward)
+        
+        # 冲四的基础价值 = 防守后最佳后续棋型的奖励
+        if best_subsequent_reward > 0:
+            return best_subsequent_reward
+        else:
+            # 防守后无后续棋型，冲四价值较低
+            return int(0.2 * self.MAX_REWARD * factor)
+    
+    def _find_four_defense(self, simulated_board, x, y, player, dx, dy):
+        """找到冲四的防守位置（空端）
+        
+        冲四：四子连续，一端被阻挡，另一端为空。
+        防守位置就是那个空端。
+        """
+        # 正方向：从(x,y)沿(dx,dy)找到最后一个己方棋子之后的空位
+        nx, ny = x + dx, y + dy
+        while 0 <= nx < 15 and 0 <= ny < 15 and simulated_board[nx * 15 + ny] == player:
+            nx += dx
+            ny += dy
+        # 检查正方向端点是否为空
+        positive_open = (0 <= nx < 15 and 0 <= ny < 15 and simulated_board[nx * 15 + ny] == 0)
+        
+        # 反方向
+        nx, ny = x - dx, y - dy
+        while 0 <= nx < 15 and 0 <= ny < 15 and simulated_board[nx * 15 + ny] == player:
+            nx -= dx
+            ny -= dy
+        # 检查反方向端点是否为空
+        negative_open = (0 <= nx < 15 and 0 <= ny < 15 and simulated_board[nx * 15 + ny] == 0)
+        
+        # 冲四：恰好一端开放
+        if positive_open and not negative_open:
+            # 正方向端点
+            nx, ny = x + dx, y + dy
+            while 0 <= nx < 15 and 0 <= ny < 15 and simulated_board[nx * 15 + ny] == player:
+                nx += dx
+                ny += dy
+            return (nx, ny) if (0 <= nx < 15 and 0 <= ny < 15) else None
+        elif negative_open and not positive_open:
+            # 反方向端点
+            nx, ny = x - dx, y - dy
+            while 0 <= nx < 15 and 0 <= ny < 15 and simulated_board[nx * 15 + ny] == player:
+                nx -= dx
+                ny -= dy
+            return (nx, ny) if (0 <= nx < 15 and 0 <= ny < 15) else None
+        
+        return None
+    
+    def _shape_reward_value(self, shape_type, count_directions, factor):
+        """获取棋型的奖励值（不包含冲四递归计算，避免无限递归）
+        
+        用于冲四递归计算中获取防守后棋型的奖励值。
+        """
+        if shape_type == "连五":
+            return int(self.MAX_REWARD * factor)
+        elif shape_type == "活四":
+            return int(0.9 * self.MAX_REWARD * factor)
+        elif shape_type == "多冲四":
+            return int(0.9 * self.MAX_REWARD * factor)
+        elif shape_type == "冲四":
+            return int(0.5 * self.MAX_REWARD * factor)
+        elif shape_type == "多活三":
+            return int(0.8 * self.MAX_REWARD * factor)
+        elif shape_type == "活三":
+            return int(0.5 * self.MAX_REWARD * factor)
+        elif shape_type == "眠三":
+            return int((0.1 + count_directions * 0.1) * self.MAX_REWARD * factor)
+        elif shape_type == "活二":
+            return int((0.3 + count_directions * 0.1) * self.MAX_REWARD * factor)
+        else:  # 眠二, 独一
+            return 0
     
     # Softmax 缩放因子：将 reward 从 [-1000000, 1000000] 缩放到 [-10, 10]
     # 避免 exp(x) 在大数值时的下溢问题
@@ -652,17 +725,20 @@ class Evaluator:
     
     def blend_rewards(self, shape_reward: float, line_bonus: float,
                       alpha: float = None) -> float:
-        """
-        融合棋型评估奖励和五连追溯奖励
-            
-        取两者中的最大值，确保五连追溯信号不被稀释。
+        """融合棋型评估奖励和五连追溯奖励
+        
+        使用加法融合，确保两种信号都能贡献到最终奖励。
+        加法融合避免了取 max 时弱信号被完全丢弃的问题，
+        使得五连追溯的早期步骤（衰减后奖励较小）也能影响训练信号。
     
         Args:
             shape_reward: 棋型评估奖励
             line_bonus: 五连追溯奖励
-            alpha: 已弃用（保留参数兼容性）
+            alpha: 五连追溯奖励权重，默认使用 BLEND_ALPHA
     
         Returns:
-            融合后的奖励（两者最大值）
+            融合后的奖励
         """
-        return max(shape_reward, line_bonus)
+        if alpha is None:
+            alpha = self.BLEND_ALPHA
+        return shape_reward + alpha * line_bonus

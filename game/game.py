@@ -13,11 +13,11 @@ class GomokuGame:
             self.winner = 0  # 0=未结束, 1=黑胜, 2=白胜, 3=平局
             self.history = []
         else:
-            # 从状态字典初始化
-            self.board = state["board"]
+            # 从状态字典初始化（深拷贝防止外部修改影响游戏状态）
+            self.board = [row[:] for row in state["board"]]
             self.current_player = state["current_player"]
             self.winner = state["winner"]
-            self.history = state.get("history", [])
+            self.history = [move.copy() for move in state.get("history", [])]
     
     def make_move(self, x, y):
         """在当前玩家落子，返回获胜方（1=黑, 2=白, 3=平局, 0=未结束）"""

@@ -215,3 +215,30 @@ class TestGomokuGame:
         assert state["board"][7][7] == 1
         assert state["current_player"] == 2
         assert len(state["history"]) == 1
+
+    def test_state_isolation(self):
+        """测试从 state 初始化时的深拷贝保护
+        
+        修复的 bug：__init__(state) 直接赋值导致游戏状态与外部 state 共享列表。
+        修改后使用深拷贝，确保外部修改不影响游戏内部状态。
+        """
+        # 创建一个游戏
+        game = GomokuGame()
+        game.make_move(7, 7)
+        state = game.get_state()
+        
+        # 从 state 创建新游戏
+        game2 = GomokuGame(state)
+        
+        # 修改原始 state 的 board
+        state["board"][0][0] = 99
+        
+        # game2 的 board 不应受影响
+        assert game2.board[0][0] == 0
+        
+        # 修改原始 state 的 history
+        if state["history"]:
+            original_x = state["history"][0]["x"]
+            state["history"][0]["x"] = 999
+            # game2 的 history 不应受影响
+            assert game2.history[0]["x"] == original_x

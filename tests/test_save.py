@@ -250,3 +250,49 @@ class TestGomokuSave:
             assert len(saves) == 3
         finally:
             cleanup_temp_dir(temp_dir)
+
+    def test_save_same_name_same_day(self):
+        """测试同一天同一存档名多次保存不覆盖
+        
+        修复的 bug：旧格式 {name}_{date}.json 同天保存会覆盖。
+        新格式 {name}_{date}_{time}.json 包含时间戳，不会覆盖。
+        """
+        save_dir, temp_dir = create_temp_save_dir()
+        try:
+            save = GomokuSave(save_dir=save_dir)
+            
+            # 保存第一次
+            state1 = {"board": [[0]*15 for _ in range(15)], "current_player": 1, "winner": 0}
+            save.save_game(state1, "test_same_day")
+            
+            # 稍等确保时间戳不同
+            import time
+            time.sleep(1.1)
+            
+            # 保存第二次（同一存档名，同一天）
+            state2 = {"board": [[0]*15 for _ in range(15)], "current_player": 2, "winner": 0}
+            save.save_game(state2, "test_same_day")
+            
+            # 应该能加载（取最新的）
+            loaded = save.load_game("test_same_day")
+            assert loaded["current_player"] == 2
+        finally:
+            cleanup_temp_dir(temp_dir)
+
+    def test_list_saves_with_underscore_in_name(self):
+        """测试存档名包含下划线时的正确提取
+        
+        修复的 bug：旧 rsplit('_', 1) 对含下划线的存档名解析错误。
+        新正则匹配确保正确提取。
+        """
+        save_dir, temp_dir = create_temp_save_dir()
+        try:
+            save = GomokuSave(save_dir=save_dir)
+            
+            state = {"board": [[0]*15 for _ in range(15)], "current_player": 1, "winner": 0}
+            save.save_game(state, "my_game_v1")
+            
+            saves = save.list_saves()
+            assert "my_game_v1" in saves
+        finally:
+            cleanup_temp_dir(temp_dir)

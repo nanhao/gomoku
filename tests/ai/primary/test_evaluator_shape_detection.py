@@ -311,6 +311,65 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         expected = int(0.9 * Evaluator.MAX_REWARD * 0.95)
         self.assertEqual(reward, expected)
 
+    # ==================== 冲四递归计算测试 ====================
+    
+    def test_four_recursive_with_subsequent_shape(self):
+        """测试冲四递归计算：防守后有后续棋型"""
+        board = [0] * 225
+        # 黑方在横向形成冲四：(7,4), (7,5), (7,6)，白方阻挡 (7,3)
+        # 落子 (7,7) 后横向冲四，防守位 (7,8)
+        # 同时黑方在纵向有 (5,7), (6,7)，防守后 (7,7) 仍有纵向活三
+        for col in range(4, 7):
+            board[7 * 15 + col] = 1
+        board[7 * 15 + 3] = 2  # 横向左端阻挡
+        # 纵向活三基础
+        board[5 * 15 + 7] = 1
+        board[6 * 15 + 7] = 1
+        
+        reward = self.evaluator._compute_position_reward(board, 7, 7, 1)
+        # 冲四递归计算：防守后仍有活三，reward 应大于等于简单的 0.5*MAX
+        # （冲四防守后的活三 = 0.5*MAX，恰好等于活三本身）
+        self.assertGreaterEqual(reward, int(0.5 * Evaluator.MAX_REWARD))
+    
+    def test_four_recursive_no_subsequent_shape(self):
+        """测试冲四递归计算：防守后无后续棋型"""
+        board = [0] * 225
+        # 黑方在横向形成冲四，但无其他方向棋型
+        # 防守后无后续，冲四价值较低
+        for col in range(4, 7):
+            board[7 * 15 + col] = 1
+        board[7 * 15 + 3] = 2  # 左端阻挡
+        
+        reward = self.evaluator._compute_position_reward(board, 7, 7, 1)
+        # 防守后无后续棋型，reward 应为 0.2 * MAX_REWARD
+        expected = int(0.2 * Evaluator.MAX_REWARD)
+        self.assertEqual(reward, expected)
+    
+    def test_four_recursive_distinct_from_live_three(self):
+        """测试冲四递归计算：冲四与活三不再等价
+        
+        修复前的 bug：冲四硬编码返回 0.5*MAX_REWARD，与活三完全等价。
+        修复后冲四通过递归计算，与活三有明显区别。
+        """
+        board_four = [0] * 225
+        # 冲四：3子+落子=4子，一端阻挡
+        for col in range(4, 7):
+            board_four[7 * 15 + col] = 1
+        board_four[7 * 15 + 3] = 2  # 阻挡
+
+        board_three = [0] * 225
+        # 活三：2子+落子=3子，两端开放
+        board_three[7 * 15 + 5] = 1
+        board_three[7 * 15 + 6] = 1
+
+        reward_four = self.evaluator._compute_position_reward(board_four, 7, 7, 1)
+        reward_three = self.evaluator._compute_position_reward(board_three, 7, 7, 1)
+
+        # 冲四（防守后无后续）应低于活三
+        # 活三 = 0.5 * MAX_REWARD = 500000
+        # 冲四（无后续）= 0.2 * MAX_REWARD = 200000
+        self.assertLess(reward_four, reward_three)
+
 
 class TestEvaluatorSoftmax(unittest.TestCase):
     """Evaluator Softmax 转换测试"""

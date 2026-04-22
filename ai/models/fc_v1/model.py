@@ -109,9 +109,7 @@ class FCv1Model(BaseModel):
         # 创建神经网络
         self.network = FCv1Network()
         
-        # 自动检测并使用 GPU
-        if torch.cuda.is_available():
-            self.network.to('cuda')
+        # GPU 移动由 BaseTrainer 统一管理，模型创建时保持在 CPU
 
         # fresh=True 时，不加载任何模型，使用随机初始化的参数
         if fresh:

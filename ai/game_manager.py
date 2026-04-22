@@ -233,8 +233,7 @@ class AIGameManager:
                 "ai2_won": bool
             }
         """
-        import importlib as _importlib
-        _random = _importlib.import_module("random")
+        import random as _random
         import time
         results = []
         

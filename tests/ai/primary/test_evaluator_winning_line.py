@@ -262,49 +262,89 @@ class TestTraceWinningLine(unittest.TestCase):
 
 
 class TestBlendRewards(unittest.TestCase):
-    """测试奖励融合"""
+    """测试奖励融合（加法融合）"""
 
     def setUp(self):
         self.evaluator = Evaluator()
 
     def test_blend_with_line_bonus(self):
-        """有五连奖励时，取最大值"""
+        """有五连奖励时，加法融合两种信号"""
         shape_reward = 500000
         line_bonus = 1000000
         
         blended = self.evaluator.blend_rewards(shape_reward, line_bonus)
         
-        # 取最大值
-        self.assertEqual(blended, 1000000)
+        # 加法融合：shape_reward + alpha * line_bonus
+        # alpha 默认为 BLEND_ALPHA = 1.0
+        expected = shape_reward + self.evaluator.BLEND_ALPHA * line_bonus
+        self.assertEqual(blended, expected)
 
     def test_blend_without_line_bonus(self):
-        """无五连奖励时，取棋型评估"""
+        """无五连奖励时，结果等于棋型评估"""
         shape_reward = 500000
         line_bonus = 0
         
         blended = self.evaluator.blend_rewards(shape_reward, line_bonus)
         
-        # 取最大值 = 棋型评估
+        # 加法融合：shape_reward + 0 = shape_reward
         self.assertEqual(blended, 500000)
 
     def test_blend_shape_higher(self):
-        """棋型评估更高时，取棋型评估"""
+        """棋型评估更高时，两者仍然叠加"""
         shape_reward = 855000
         line_bonus = 729000
         
         blended = self.evaluator.blend_rewards(shape_reward, line_bonus)
         
-        # 取最大值 = 棋型评估
-        self.assertEqual(blended, 855000)
+        # 加法融合：两种信号叠加
+        expected = shape_reward + self.evaluator.BLEND_ALPHA * line_bonus
+        self.assertEqual(blended, expected)
+        # 结果应大于单独的 shape_reward
+        self.assertGreater(blended, shape_reward)
 
     def test_blend_equal(self):
-        """两者相等时，返回该值"""
+        """两者相等时，加法融合结果为两倍"""
         shape_reward = 1000000
         line_bonus = 1000000
         
         blended = self.evaluator.blend_rewards(shape_reward, line_bonus)
         
-        self.assertEqual(blended, 1000000)
+        expected = shape_reward + self.evaluator.BLEND_ALPHA * line_bonus
+        self.assertEqual(blended, expected)
+
+    def test_blend_early_step_not_dropped(self):
+        """五连追溯早期步骤的信号不被丢弃
+        
+        这是 max 融合改为加法融合的核心修复验证：
+        早期步骤的 line_bonus 较小（衰减后），
+        加法融合确保它不会被完全丢弃。
+        """
+        shape_reward = 500000  # 活三的评估值
+        line_bonus = 656100    # 五连第1步（0.9^4 * MAX_REWARD）
+        
+        blended = self.evaluator.blend_rewards(shape_reward, line_bonus)
+        
+        # 加法融合：两种信号都贡献
+        self.assertGreater(blended, shape_reward)
+        self.assertGreater(blended, line_bonus)
+        # 旧 max 融合会返回 max(500000, 656100) = 656100
+        # 新加法融合返回 500000 + 656100 = 1156100
+        expected = shape_reward + self.evaluator.BLEND_ALPHA * line_bonus
+        self.assertEqual(blended, expected)
+
+    def test_blend_custom_alpha(self):
+        """自定义 alpha 参数控制融合权重"""
+        shape_reward = 500000
+        line_bonus = 1000000
+        
+        # alpha = 0.5
+        blended = self.evaluator.blend_rewards(shape_reward, line_bonus, alpha=0.5)
+        expected = shape_reward + 0.5 * line_bonus
+        self.assertEqual(blended, expected)
+        
+        # alpha = 0（不考虑五连追溯）
+        blended_zero = self.evaluator.blend_rewards(shape_reward, line_bonus, alpha=0)
+        self.assertEqual(blended_zero, shape_reward)
 
 
 class TestNoWinnerNoBonus(unittest.TestCase):

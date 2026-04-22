@@ -218,7 +218,7 @@ class GomokuGUI:
         result = self.helper.handle_player_move(row, col)
 
         if result["status"] == "success":
-            self._update_board()
+            self._update_display()
 
             if result["game_over"]:
                 self._show_game_over(result["winner"])
@@ -237,7 +237,7 @@ class GomokuGUI:
             messagebox.showerror("错误", result.get("error", "启动游戏失败"))
             return
 
-        self._update_board()
+        self._update_display()
 
         if result.get("game_over"):
             self._show_game_over(result["winner"])
@@ -247,7 +247,7 @@ class GomokuGUI:
         result = self.helper.handle_ai_move()
 
         if result["status"] == "success":
-            self._update_board()
+            self._update_display()
 
             if result["game_over"]:
                 self._show_game_over(result["winner"])
@@ -320,10 +320,7 @@ class GomokuGUI:
         winner_text = self.helper.get_winner_text(winner)
         messagebox.showinfo("游戏结束", f"{winner_text}！")
     
-    def _update_board(self):
-        """更新棋盘显示（兼容旧代码）"""
-        self._update_display()
-    
+
     def _create_control_buttons(self, parent):
         """创建控制按钮"""
         button_frame = tk.Frame(parent, bg=self.COLOR_BG)

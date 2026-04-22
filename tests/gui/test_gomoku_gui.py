@@ -24,6 +24,7 @@ from game import GomokuController
 from app import GameSession
 from ai import AIGameManager, AIEngine
 from ai.models.random import RandomModel
+from gui.main import GomokuGUI
 
 
 def _make_gui(game_mode="pvp", ai_player=None, ai_model="random"):
@@ -39,7 +40,7 @@ def _make_gui(game_mode="pvp", ai_player=None, ai_model="random"):
     gui = GomokuGUI.__new__(GomokuGUI)
     gui.root = root
     gui.controller = GomokuController()
-    gui._board_update_called = False   # 用于追踪 _update_board 是否被调用
+    gui._display_update_called = False   # 用于追踪 _update_display 是否被调用
     gui._ai_move_scheduled = False     # 用于追踪 _ai_move 是否被调度
 
     # 创建 GameSession
@@ -53,8 +54,8 @@ def _make_gui(game_mode="pvp", ai_player=None, ai_model="random"):
     # 创建 GUIHelper
     gui.helper = GUIHelper(gui.controller, gui.session)
 
-    # 替换会弹窗或依赖界面的方法
-    gui._update_board = lambda: setattr(gui, '_board_update_called', True)
+    # 替换 _update_display，避免依赖界面组件（self.board 等）
+    gui._update_display = lambda: setattr(gui, '_display_update_called', True)
 
     def _fake_after(ms, func):
         """记录 after 调度，不真正等待"""
@@ -85,12 +86,20 @@ class TestGomokuGUIOnBoardClick:
 
     def test_on_board_click_no_game_does_not_crash(self):
         """无游戏时点击不应崩溃"""
-        gui, root = _make_gui()
-        try:
-            _click(gui, 7, 7)
-        except Exception as e:
-            raise unittest.SkipTest(f"GUI环境不可用: {e}")
-        root.destroy()
+        # 复用 setup_method 已创建的 gui，不创建新实例
+        # 新建一个无游戏的 controller 来模拟无游戏状态
+        gui_no_game = GomokuGUI.__new__(GomokuGUI)
+        gui_no_game.root = self.root
+        gui_no_game.controller = GomokuController()  # 无游戏状态
+        gui_no_game._display_update_called = False
+        gui_no_game._ai_move_scheduled = False
+        gui_no_game.session = self.gui.session
+        gui_no_game.helper = self.gui.helper
+        gui_no_game._update_display = lambda: setattr(gui_no_game, '_display_update_called', True)
+        gui_no_game.root.after = lambda ms, func: setattr(gui_no_game, '_ai_move_scheduled', True)
+
+        with mock.patch("gui.main.messagebox"):
+            gui_no_game._on_board_click(7, 7)  # 不应崩溃
 
     def test_make_move_returns_dict_not_tuple(self):
         """make_move 返回 dict，_on_board_click 不应用元组解包"""
@@ -101,14 +110,14 @@ class TestGomokuGUIOnBoardClick:
     def test_on_board_click_valid_move_updates_board(self):
         """合法落子后应刷新棋盘"""
         _click(self.gui, 7, 7)
-        assert self.gui._board_update_called, "合法落子后应调用 _update_board"
+        assert self.gui._display_update_called, "合法落子后应调用 _update_display"
 
     def test_on_board_click_invalid_move_silent(self):
         """重复落子应静默处理，不崩溃"""
         _click(self.gui, 7, 7)
-        self.gui._board_update_called = False
+        self.gui._display_update_called = False
         _click(self.gui, 7, 7)   # 重复落子
-        assert not self.gui._board_update_called, "重复落子不应刷新棋盘"
+        assert not self.gui._display_update_called, "重复落子不应刷新棋盘"
 
     def test_is_over_method_exists(self):
         """controller 应有 is_over() 方法，不应有 is_game_over()"""
@@ -249,12 +258,12 @@ class TestGomokuGUIPveAiFirstMove:
 
     def test_start_game_with_ai_first_updates_board(self):
         """AI先走后应更新显示"""
-        self.gui._board_update_called = False
+        self.gui._display_update_called = False
 
         with mock.patch("gui.main.messagebox"):
             self.gui._start_game_with_ai_first()
 
-        assert self.gui._board_update_called, "AI先走后应调用 _update_board"
+        assert self.gui._display_update_called, "AI先走后应调用 _update_display"
 
     def test_start_game_with_ai_first_current_player_is_white(self):
         """AI先走后，当前玩家应为白方（轮到玩家）"""

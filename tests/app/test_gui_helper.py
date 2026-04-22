@@ -22,7 +22,7 @@ from app.gui_helper import GUIHelper, get_ai_data_dir, create_pve_config
 class TestGUIHelper(unittest.TestCase):
     """测试 GUIHelper 类"""
 
-    def setup_method(self):
+    def setUp(self):
         """测试前准备"""
         self.test_save_dir = os.path.join(os.path.dirname(__file__), 'primary', '_test_saves')
         os.makedirs(self.test_save_dir, exist_ok=True)
@@ -30,7 +30,7 @@ class TestGUIHelper(unittest.TestCase):
         self.controller = GomokuController()
         self.controller.save = GomokuSave(self.test_save_dir)
 
-    def teardown_method(self):
+    def tearDown(self):
         """测试后清理"""
         import shutil
         if os.path.exists(self.test_save_dir):

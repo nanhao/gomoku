@@ -177,7 +177,11 @@ class TestRandomModel(unittest.TestCase):
                 self.assertAlmostEqual(prob, expected_prob, places=5)
     
     def test_predict_all_occupied(self):
-        """[primary] 测试棋盘满时的输出"""
+        """[primary] 测试棋盘满时的输出
+        
+        修复后的行为：满棋盘时返回均匀分布 [1/225]*225，
+        确保概率之和为1（满足接口契约），而非全0。
+        """
         model = RandomModel()
         
         # 创建满棋盘
@@ -186,9 +190,14 @@ class TestRandomModel(unittest.TestCase):
         
         result = model.predict(board)
         
-        # 验证所有概率为 0
+        # 修复后：满棋盘返回均匀分布，概率之和为1
         self.assertEqual(len(result), 225)
-        self.assertTrue(all(p == 0.0 for p in result))
+        expected_prob = 1.0 / 225
+        for prob in result:
+            self.assertAlmostEqual(prob, expected_prob, places=5,
+                                   msg="满棋盘应返回均匀分布")
+        self.assertAlmostEqual(sum(result), 1.0, places=5,
+                               msg="概率之和应为1")
     
     def test_predict_index_mapping(self):
         """测试索引映射：索引 i 对应位置 (i//15, i%15)"""
