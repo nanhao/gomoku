@@ -351,5 +351,171 @@ class TestLossLoggerPlotComparison(unittest.TestCase):
             self.assertIsNone(img_path)
 
 
+class TestLossLoggerDenseLog(unittest.TestCase):
+    """测试密集日志模式（mini-batch 模式）"""
+
+    def test_log_dense_buffers_in_memory(self):
+        """log_dense 应存入内存缓冲区，不直接写文件"""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp_path:
+            logger = LossLogger(
+                model_name="test_model",
+                log_dir=tmp_path,
+                dense_log=True
+            )
+
+            logger.log_dense(1, 0.5, 0.1)
+            logger.log_dense(2, 0.4, 0.08)
+
+            # flush 前文件应为空
+            with open(logger.get_log_path(), 'r', encoding='utf-8') as f:
+                content = f.read()
+            self.assertEqual(content, "")
+
+            # flush 后文件应有数据
+            logger.flush()
+            with open(logger.get_log_path(), 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            self.assertEqual(len(lines), 2)
+
+    def test_log_dense_format(self):
+        """flush 后的数据格式应包含 step/loss/grad_norm"""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp_path:
+            logger = LossLogger(
+                model_name="test_model",
+                log_dir=tmp_path,
+                dense_log=True
+            )
+
+            logger.log_dense(1, 0.5, 0.1)
+            logger.flush()
+
+            with open(logger.get_log_path(), 'r', encoding='utf-8') as f:
+                entry = json.loads(f.readline())
+
+            self.assertEqual(entry["step"], 1)
+            self.assertEqual(entry["loss"], 0.5)
+            self.assertEqual(entry["grad_norm"], 0.1)
+
+    def test_flush_clears_buffer(self):
+        """flush 后缓冲区应被清空"""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp_path:
+            logger = LossLogger(
+                model_name="test_model",
+                log_dir=tmp_path,
+                dense_log=True
+            )
+
+            logger.log_dense(1, 0.5, 0.1)
+            logger.flush()
+
+            # 再次 flush 不应写入重复数据
+            logger.flush()
+            with open(logger.get_log_path(), 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            self.assertEqual(len(lines), 1)
+
+
+class TestLossLoggerPlotGradNorm(unittest.TestCase):
+    """测试双 Y 轴图（含 grad_norm）"""
+
+    @patch('ai.loss_logger.plt')
+    def test_plot_with_grad_norm_dual_axis(self, mock_plt):
+        """含 grad_norm 的数据应绘制双 Y 轴图"""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp_path:
+            logger = LossLogger(
+                model_name="cnn_v1",
+                log_dir=tmp_path,
+                dense_log=True
+            )
+            logger.log_dense(1, 0.5, 0.1)
+            logger.log_dense(2, 0.4, 0.08)
+            logger.flush()
+
+            # mock subplots 返回 (fig, ax1)
+            mock_ax1 = MagicMock()
+            mock_ax2 = MagicMock()
+            mock_plt.subplots.return_value = (MagicMock(), mock_ax1)
+            mock_ax1.twinx.return_value = mock_ax2
+
+            logger.plot()
+
+            # 断言创建了双 Y 轴
+            mock_ax1.twinx.assert_called_once()
+            # 断言 ax1 画了 loss（蓝色）
+            mock_ax1.plot.assert_called_once()
+            plot_call = mock_ax1.plot.call_args
+            self.assertEqual(plot_call[0][2], 'b-')
+            # 断言 ax2 画了 grad_norm（红色）
+            mock_ax2.plot.assert_called_once()
+            plot_call2 = mock_ax2.plot.call_args
+            self.assertEqual(plot_call2[0][2], 'r-')
+
+    @patch('ai.loss_logger.plt')
+    def test_plot_without_grad_norm_single_axis(self, mock_plt):
+        """不含 grad_norm 的数据保持单 Y 轴图（向后兼容）"""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp_path:
+            logger = LossLogger(model_name="cnn_v1", log_dir=tmp_path)
+            logger.log(200, 0.0020)
+            logger.log(400, 0.0015)
+
+            mock_ax1 = MagicMock()
+            mock_plt.subplots.return_value = (MagicMock(), mock_ax1)
+
+            logger.plot()
+
+            # 不应创建双 Y 轴
+            mock_ax1.twinx.assert_not_called()
+
+
+class TestLossLoggerDownsample(unittest.TestCase):
+    """测试自动降采样"""
+
+    def test_downsample_reduces_points(self):
+        """超过 5000 点时自动降采样"""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp_path:
+            logger = LossLogger(
+                model_name="test_model",
+                log_dir=tmp_path,
+                dense_log=True
+            )
+
+            # 构造 10000 条密集数据
+            for i in range(1, 10001):
+                logger.log_dense(i, 1.0 / i, 0.1 / i)
+            logger.flush()
+
+            # 手动调用 _downsample 验证
+            entries = logger._read_entries()
+            # 原始数据应为 10000 条
+            self.assertEqual(len(entries), 10000)
+
+            downsampled = logger._downsample(entries, max_points=5000)
+            self.assertLessEqual(len(downsampled), 5000)
+
+    def test_downsample_preserves_small_dataset(self):
+        """不超过 5000 点时不应降采样"""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp_path:
+            logger = LossLogger(
+                model_name="test_model",
+                log_dir=tmp_path,
+                dense_log=True
+            )
+
+            for i in range(1, 101):
+                logger.log_dense(i, 0.1, 0.01)
+            logger.flush()
+
+            entries = logger._read_entries()
+            downsampled = logger._downsample(entries, max_points=5000)
+            self.assertEqual(len(downsampled), 100)
+
+
 if __name__ == '__main__':
     unittest.main()

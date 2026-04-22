@@ -44,7 +44,8 @@ class LossLogger:
         round_num: int = None,
         total_rounds: int = None,
         epochs: int = None,
-        games: int = None
+        games: int = None,
+        dense_log: bool = False
     ):
         """初始化日志记录器
 
@@ -57,6 +58,7 @@ class LossLogger:
             total_rounds: 总轮次数
             epochs: 该轮次训练的总 epoch 数
             games: 每轮对局数
+            dense_log: 是否启用密集日志模式（仅 mini-batch 有效），默认 False
         """
         self.model_name = model_name
         self.log_dir = log_dir if log_dir is not None else LOSS_LOG_DIR
@@ -66,6 +68,8 @@ class LossLogger:
         self.total_rounds = total_rounds
         self.epochs = epochs
         self.games = games
+        self.dense_log = dense_log
+        self._buffer = []  # 密集日志内存缓冲区
 
         # 确定实际日志目录（支持 session_dir 子目录隔离）
         if session_dir is not None:
@@ -128,8 +132,35 @@ class LossLogger:
         with open(self._log_path, 'a', encoding='utf-8') as f:
             f.write(json.dumps(entry) + "\n")
 
+    def log_dense(self, step: int, loss: float, grad_norm: float) -> None:
+        """记录一条密集日志（存入内存缓冲区，不直接写文件）
+
+        用于 mini-batch 模式下记录每个 batch 的 loss 和梯度范数。
+        数据先缓存在内存中，调用 flush() 时才批量写入磁盘。
+
+        Args:
+            step: 全局步数（batch 序号）
+            loss: 当前 batch 的 loss 值
+            grad_norm: 当前 batch 的梯度 L2 范数
+        """
+        self._buffer.append({"step": step, "loss": loss, "grad_norm": grad_norm})
+
+    def flush(self) -> None:
+        """将内存缓冲区中的所有日志批量写入文件
+
+        应在每个 epoch 结束后或训练结束时调用，确保数据落盘。
+        """
+        if self._buffer:
+            with open(self._log_path, 'a', encoding='utf-8') as f:
+                for entry in self._buffer:
+                    f.write(json.dumps(entry) + "\n")
+            self._buffer.clear()
+
     def plot(self, output_path: str = None) -> str:
         """根据已记录的日志生成 loss 曲线图
+
+        如果日志中包含 grad_norm 字段，绘制双 Y 轴图（左轴 Loss，右轴 Grad Norm）。
+        数据点超过 5000 时自动降采样，防止图表过于密集。
 
         Args:
             output_path: 图片保存路径，默认为日志目录下同名 .png
@@ -154,21 +185,54 @@ class LossLogger:
         if output_path is None:
             output_path = self._log_path.replace(".jsonl", ".png")
 
-        # 提取 epoch 和 loss 数据
-        epochs = [entry["epoch"] for entry in entries]
-        losses = [entry["loss"] for entry in entries]
+        # 判断是否包含 grad_norm（密集日志模式）
+        has_grad_norm = "grad_norm" in entries[0]
 
         try:
-            # 绘制曲线图
-            plt.figure(figsize=(10, 6))
-            plt.plot(epochs, losses, marker='o', linestyle='-', linewidth=1.5, markersize=3)
-            plt.xlabel("Epoch")
-            plt.ylabel("Loss")
-            plt.title(self._generate_title())
-            plt.grid(True, linestyle='--', alpha=0.7)
-            plt.tight_layout()
-            plt.savefig(output_path, dpi=150)
-            plt.close()
+            if has_grad_norm:
+                # 密集模式：双 Y 轴图（Loss + Grad Norm）
+                entries = self._downsample(entries, max_points=5000)
+                steps = [entry["step"] for entry in entries]
+                losses = [entry["loss"] for entry in entries]
+                grad_norms = [entry["grad_norm"] for entry in entries]
+
+                fig, ax1 = plt.subplots(figsize=(12, 7))
+                ax2 = ax1.twinx()
+
+                ax1.plot(steps, losses, 'b-', label='Loss', linewidth=1)
+                ax2.plot(steps, grad_norms, 'r-', label='Grad Norm', linewidth=1, alpha=0.7)
+
+                ax1.set_xlabel("Step")
+                ax1.set_ylabel("Loss", color='b')
+                ax2.set_ylabel("Gradient Norm", color='r')
+                ax1.tick_params(axis='y', labelcolor='b')
+                ax2.tick_params(axis='y', labelcolor='r')
+
+                # 合并图例
+                lines1, labels1 = ax1.get_legend_handles_labels()
+                lines2, labels2 = ax2.get_legend_handles_labels()
+                ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper right')
+
+                ax1.grid(True, linestyle='--', alpha=0.7)
+                plt.title(self._generate_title())
+                plt.tight_layout()
+                plt.savefig(output_path, dpi=150)
+                plt.close()
+            else:
+                # 稀疏模式：单 Y 轴图（向后兼容）
+                epochs = [entry["epoch"] for entry in entries]
+                losses = [entry["loss"] for entry in entries]
+
+                plt.figure(figsize=(10, 6))
+                plt.plot(epochs, losses, marker='o', linestyle='-', linewidth=1.5, markersize=3)
+                plt.xlabel("Epoch")
+                plt.ylabel("Loss")
+                plt.title(self._generate_title())
+                plt.grid(True, linestyle='--', alpha=0.7)
+                plt.tight_layout()
+                plt.savefig(output_path, dpi=150)
+                plt.close()
+
             return output_path
         except Exception:
             # 运行时 matplotlib 异常也优雅降级，不影响训练流程
@@ -185,12 +249,14 @@ class LossLogger:
     def clear(self) -> None:
         """清空当前日志文件（新训练开始时调用）"""
         open(self._log_path, 'w', encoding='utf-8').close()
+        self._buffer.clear()
 
     def _read_entries(self) -> list:
         """读取日志文件中的所有记录
 
         Returns:
             日志记录列表，每个元素为 {"epoch": int, "loss": float}
+            或 {"step": int, "loss": float, "grad_norm": float}
         """
         entries = []
         if not os.path.exists(self._log_path):
@@ -207,6 +273,31 @@ class LossLogger:
                         continue
 
         return entries
+
+    def _downsample(self, entries: list, max_points: int = 5000) -> list:
+        """降采样：超过 max_points 时合并相邻点
+
+        通过滑动窗口取平均的方式减少数据点数量，防止图表过于密集。
+
+        Args:
+            entries: 原始日志记录列表
+            max_points: 最大允许的数据点数，默认 5000
+
+        Returns:
+            降采样后的记录列表
+        """
+        if len(entries) <= max_points:
+            return entries
+
+        window = max(1, len(entries) // max_points)
+        result = []
+        for i in range(0, len(entries), window):
+            chunk = entries[i:i + window]
+            avg_step = sum(e["step"] for e in chunk) / len(chunk)
+            avg_loss = sum(e["loss"] for e in chunk) / len(chunk)
+            avg_grad = sum(e["grad_norm"] for e in chunk) / len(chunk)
+            result.append({"step": avg_step, "loss": avg_loss, "grad_norm": avg_grad})
+        return result
 
     @classmethod
     def plot_comparison(

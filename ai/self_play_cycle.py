@@ -154,7 +154,8 @@ class SelfPlayCycle:
                         session_dir=session_dir,
                         log_type="epoch_level",
                         round_num=round_num,
-                        total_rounds=rounds
+                        total_rounds=rounds,
+                        dense_log=True
                     )
                 else:
                     avg_loss = self.trainer.train_batch(

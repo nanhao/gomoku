@@ -98,6 +98,9 @@ python ai/train_main.py --model <模型名称> --cycle [选项]
 | `--batch-size` | 每批次样本数（启用 mini-batch） | 无（全量更新） |
 | `--shuffle` | 每轮打乱数据顺序（mini-batch 有效） | False |
 
+> **注意**：使用 `--batch-size` 启用 mini-batch 训练时，系统会自动生成**密集 loss log**，
+> 记录每个 batch 的 loss 和梯度大小，并在曲线图上以双 Y 轴形式叠加展示（Loss + Gradient Norm）。
+
 ```bash
 # 示例
 python ai/train_main.py --model fc_v1 --cycle              # 默认参数（全量更新）
@@ -124,7 +127,7 @@ python ai/models/fc_v1/inspect_main.py --sample <sample.json路径> [--model-pat
 python tests/run_tests.py
 ```
 
-> 覆盖全部 487 个测试（基础测试 212 + AI 测试 275）
+> 覆盖全部 494 个测试（基础测试 212 + AI 测试 282）
 
 ---
 
@@ -179,6 +182,7 @@ python tests/run_tests.py
 |------|------|
 | `game/save/` | 游戏存档 |
 | `ai/ai_data/` | AI 对战记录（record.json） |
+| `ai/ai_data/loss_logs/` | 训练 loss 日志和曲线图 |
 | `ai/train_data/` | 训练样本（sample.json） |
 
 ---

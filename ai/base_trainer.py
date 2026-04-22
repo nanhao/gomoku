@@ -141,6 +141,7 @@ class BaseTrainer(ABC):
     def _finalize_training(self, loss_logger, total_loss, count):
         """生成 loss 曲线图并返回平均损失"""
         if loss_logger:
+            loss_logger.flush()  # 确保最后一批密集日志落盘
             loss_logger.plot()
         return total_loss / count if count > 0 else 0.0
 
@@ -305,6 +306,10 @@ class BaseTrainer(ABC):
         total_batches = 0
         epoch_loss_sum = 0.0
         epoch_batches = 0
+        global_step = 0
+
+        # 判断是否启用密集日志（mini-batch 模式下默认启用）
+        dense_log = getattr(loss_logger, 'dense_log', False)
 
         for epoch in range(epochs):
             # 生成批次索引
@@ -332,6 +337,16 @@ class BaseTrainer(ABC):
 
                 # 反向传播
                 loss.backward()
+
+                # 计算梯度 L2 范数（用于密集日志）
+                grad_norm = 0.0
+                if dense_log and loss_logger is not None:
+                    grad_norm = sum(
+                        p.grad.norm().item()
+                        for p in self.model.network.parameters()
+                        if p.grad is not None
+                    )
+
                 self.optimizer.step()
 
                 total_loss += loss.item()
@@ -339,13 +354,22 @@ class BaseTrainer(ABC):
                 epoch_loss_sum += loss.item()
                 epoch_batches += 1
 
-            # 记录 loss 日志（每 LOSS_LOG_INTERVAL 个 epoch 记录该 epoch 的平均 loss）
+                # 密集日志：每个 batch 记录一次
+                if dense_log and loss_logger is not None:
+                    loss_logger.log_dense(global_step, loss.item(), grad_norm)
+                    global_step += 1
+
+            # 稀疏日志：每 LOSS_LOG_INTERVAL 个 epoch 记录该 epoch 的平均 loss
             if (epoch + 1) % LOSS_LOG_INTERVAL == 0:
                 epoch_avg_loss = epoch_loss_sum / epoch_batches if epoch_batches > 0 else 0.0
-                if loss_logger:
+                if loss_logger and not dense_log:
                     loss_logger.log(epoch + 1, epoch_avg_loss)
                 if verbose:
                     print(f"Epoch {epoch + 1}/{epochs}, avg_loss: {epoch_avg_loss:.4f}")
+
+            # 密集日志：每个 epoch 结束后批量写入
+            if dense_log and loss_logger is not None:
+                loss_logger.flush()
 
             epoch_loss_sum = 0.0
             epoch_batches = 0
