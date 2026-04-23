@@ -139,6 +139,79 @@ class TestBaseTrainerWithCompleteSubclass(unittest.TestCase):
             self.assertTrue(mock_logger.log.called)
             self.assertTrue(mock_logger.plot.called)
 
+    def test_no_scheduler_by_default(self):
+        """默认情况下 lr_scheduler 应为 None"""
+        trainer = self.TrainerClass(fresh=True)
+        self.assertIsNone(trainer.lr_scheduler)
+
+    def test_step_scheduler_created(self):
+        """lr_scheduler_type='step' 时创建 StepLR"""
+        trainer = self.TrainerClass(
+            fresh=True,
+            lr_scheduler_type="step",
+            lr_step_size=2,
+            lr_gamma=0.5
+        )
+        self.assertIsNotNone(trainer.lr_scheduler)
+        self.assertEqual(trainer.lr_scheduler_type, "step")
+
+    def test_plateau_scheduler_created(self):
+        """lr_scheduler_type='plateau' 时创建 ReduceLROnPlateau"""
+        trainer = self.TrainerClass(
+            fresh=True,
+            lr_scheduler_type="plateau",
+            lr_patience=5,
+            lr_factor=0.5
+        )
+        self.assertIsNotNone(trainer.lr_scheduler)
+        self.assertEqual(trainer.lr_scheduler_type, "plateau")
+
+    def test_step_lr_decay_during_training(self):
+        """StepLR 在训练中使学习率按 gamma 衰减"""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sample_dir = os.path.join(tmp_dir, "sample")
+            os.makedirs(sample_dir)
+            sample_data = [{
+                "input": [0.0] * 226,
+                "output": [1.0 / 225.0] * 225,
+                "mask": [1] * 225
+            }]
+            with open(os.path.join(sample_dir, "sample.json"), 'w', encoding='utf-8') as f:
+                json.dump(sample_data, f)
+
+            trainer = self.TrainerClass(
+                fresh=True,
+                lr_scheduler_type="step",
+                lr_step_size=2,
+                lr_gamma=0.5
+            )
+            initial_lr = trainer.optimizer.param_groups[0]['lr']
+
+            # 训练 3 个 epoch，step_size=2，gamma=0.5
+            # epoch 0-1: lr 不变；epoch 2: lr *= 0.5
+            trainer.train_single(sample_dir, epochs=3, verbose=False)
+
+            final_lr = trainer.optimizer.param_groups[0]['lr']
+            self.assertEqual(final_lr, initial_lr * 0.5)
+
+    def test_plateau_lr_decay_on_flat_loss(self):
+        """ReduceLROnPlateau 在 loss 不下降时降低学习率"""
+        trainer = self.TrainerClass(
+            fresh=True,
+            lr_scheduler_type="plateau",
+            lr_patience=0,
+            lr_factor=0.5
+        )
+        initial_lr = trainer.optimizer.param_groups[0]['lr']
+
+        # 直接调用 scheduler.step() 模拟 loss 平台期
+        # patience=0，第一个不改善的 epoch 就触发
+        trainer.lr_scheduler.step(0.01)  # epoch 1，best=0.01
+        trainer.lr_scheduler.step(0.01)  # epoch 2，不改善，触发衰减
+
+        final_lr = trainer.optimizer.param_groups[0]['lr']
+        self.assertLess(final_lr, initial_lr)
+
 
 if __name__ == '__main__':
     unittest.main()

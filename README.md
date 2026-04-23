@@ -97,6 +97,11 @@ python ai/train_main.py --model <模型名称> --cycle [选项]
 | `--fresh` | 从新模型开始 | - |
 | `--batch-size` | 每批次样本数（启用 mini-batch） | 无（全量更新） |
 | `--shuffle` | 每轮打乱数据顺序（mini-batch 有效） | False |
+| `--lr-scheduler` | 学习率调度：`step` / `plateau` | 无（固定学习率） |
+| `--lr-step-size` | StepLR 衰减间隔（epoch） | 500 |
+| `--lr-gamma` | StepLR 衰减系数 | 0.9 |
+| `--lr-patience` | ReduceLROnPlateau 耐心值 | 100 |
+| `--lr-factor` | ReduceLROnPlateau 衰减系数 | 0.5 |
 
 > **注意**：使用 `--batch-size` 启用 mini-batch 训练时，系统会自动生成**密集 loss log**，
 > 记录每个 batch 的 loss 和梯度大小，并在曲线图上以双 Y 轴形式叠加展示（Loss + Gradient Norm）。
@@ -108,6 +113,10 @@ python ai/train_main.py --model cnn_v1 --cycle             # CNN 训练
 python ai/train_main.py --model fc_v1 --cycle --rounds 50 --games 50  # 自定义
 python ai/train_main.py --model fc_v1 --cycle --fresh      # 从新模型开始
 python ai/train_main.py --model cnn_v1 --cycle --batch-size 32 --shuffle  # mini-batch 训练
+
+# 使用学习率衰减（推荐后期训练使用）
+python ai/train_main.py --model cnn_v1 --cycle --batch-size 32 --lr-scheduler step --lr-step-size 300
+python ai/train_main.py --model cnn_v1 --cycle --batch-size 32 --lr-scheduler plateau --lr-patience 50
 ```
 
 ### 样本检视
@@ -127,7 +136,7 @@ python ai/models/fc_v1/inspect_main.py --sample <sample.json路径> [--model-pat
 python tests/run_tests.py
 ```
 
-> 覆盖全部 494 个测试（基础测试 212 + AI 测试 282）
+> 覆盖全部 499 个测试（基础测试 212 + AI 测试 287）
 
 ---
 

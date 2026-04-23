@@ -20,26 +20,27 @@ import argparse
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-def get_trainer(model_name: str, fresh: bool = False):
+def get_trainer(model_name: str, fresh: bool = False, **kwargs):
     """
     根据模型名称创建对应的训练器
-    
+
     Args:
         model_name: 模型名称，如 "fc_v1"、"cnn_v1"
         fresh: 是否从新模型开始训练
-        
+        **kwargs: 额外参数传递给训练器（如 lr_scheduler_type 等）
+
     Returns:
         对应的训练器实例
-        
+
     Raises:
         ValueError: 不支持的模型名称
     """
     if model_name == "fc_v1":
         from ai.models.fc_v1.trainer import FCv1Trainer
-        return FCv1Trainer(fresh=fresh)
+        return FCv1Trainer(fresh=fresh, **kwargs)
     elif model_name == "cnn_v1":
         from ai.models.cnn_v1.trainer import CNNTrainer
-        return CNNTrainer(fresh=fresh)
+        return CNNTrainer(fresh=fresh, **kwargs)
     else:
         raise ValueError(f"不支持的模型: {model_name}。目前支持: fc_v1, cnn_v1")
 
@@ -134,6 +135,42 @@ def main():
         help='每个 epoch 是否打乱数据顺序（仅 mini-batch 模式有效）'
     )
 
+    parser.add_argument(
+        '--lr-scheduler',
+        type=str,
+        default=None,
+        choices=['step', 'plateau'],
+        help='学习率调度类型：step（固定间隔衰减）或 plateau（按平台衰减）'
+    )
+
+    parser.add_argument(
+        '--lr-step-size',
+        type=int,
+        default=500,
+        help='StepLR 衰减间隔（epoch），默认 500'
+    )
+
+    parser.add_argument(
+        '--lr-gamma',
+        type=float,
+        default=0.9,
+        help='StepLR 衰减系数，默认 0.9'
+    )
+
+    parser.add_argument(
+        '--lr-patience',
+        type=int,
+        default=100,
+        help='ReduceLROnPlateau 耐心值，默认 100'
+    )
+
+    parser.add_argument(
+        '--lr-factor',
+        type=float,
+        default=0.5,
+        help='ReduceLROnPlateau 衰减系数，默认 0.5'
+    )
+
     args = parser.parse_args()
     
     # 验证参数
@@ -144,8 +181,18 @@ def main():
         parser.error("--cycle 和 --sample-dir 不能同时使用")
     
     # 创建训练器
+    scheduler_kwargs = {}
+    if args.lr_scheduler:
+        scheduler_kwargs = {
+            'lr_scheduler_type': args.lr_scheduler,
+            'lr_step_size': args.lr_step_size,
+            'lr_gamma': args.lr_gamma,
+            'lr_patience': args.lr_patience,
+            'lr_factor': args.lr_factor
+        }
+
     try:
-        trainer = get_trainer(args.model, fresh=args.fresh)
+        trainer = get_trainer(args.model, fresh=args.fresh, **scheduler_kwargs)
     except ValueError as e:
         print(f"错误: {e}")
         sys.exit(1)
@@ -198,6 +245,16 @@ def main():
             print(f"  批次大小 (batch):    N/A (全量更新)")
             print(f"  数据打乱 (shuffle):  N/A")
             print(f"  训练方法:            train_batch (全量更新)")
+        if args.lr_scheduler:
+            print(f"  学习率调度:          {args.lr_scheduler}")
+            if args.lr_scheduler == 'step':
+                print(f"    衰减间隔:          {args.lr_step_size} epoch")
+                print(f"    衰减系数:          {args.lr_gamma}")
+            else:
+                print(f"    耐心值:            {args.lr_patience} epoch")
+                print(f"    衰减系数:          {args.lr_factor}")
+        else:
+            print(f"  学习率调度:          无（固定学习率）")
 
         try:
             # 执行训练周期

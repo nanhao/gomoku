@@ -48,39 +48,57 @@ class BaseTrainer(ABC):
     # 默认学习率，子类可覆盖
     DEFAULT_LR = 0.001
     
-    def __init__(self, model: Optional[BaseModel] = None, fresh: bool = False, device: Optional[torch.device] = None, loss_logger=None):
+    def __init__(self, model: Optional[BaseModel] = None, fresh: bool = False,
+                 device: Optional[torch.device] = None, loss_logger=None,
+                 lr_scheduler_type: str = None, lr_step_size: int = 500,
+                 lr_gamma: float = 0.9, lr_patience: int = 100,
+                 lr_factor: float = 0.5):
         """初始化训练器
-        
+
         Args:
             model: 模型实例，如果为 None 则根据 fresh 参数创建
             fresh: 是否强制创建新模型（不加载已保存的模型）
             device: 训练设备，如果为 None 则自动检测（优先 GPU）
             loss_logger: LossLogger 实例，None 表示由训练方法内部自动创建
+            lr_scheduler_type: 学习率调度类型，可选 "step" / "plateau" / None
+            lr_step_size: StepLR 衰减间隔（epoch），默认 500
+            lr_gamma: StepLR 衰减系数，默认 0.9
+            lr_patience: ReduceLROnPlateau 耐心值，默认 100
+            lr_factor: ReduceLROnPlateau 衰减系数，默认 0.5
         """
         # 设置设备
         self.device = device if device is not None else get_device()
-        
+
         # 创建或保存模型
         if model is not None:
             self.model = model
         else:
             self.model = self._create_model(fresh)
-        
+
         # 将模型移到 GPU（如果可用）
         self.model.network.to(self.device)
-        
+
         # 初始化优化器（Adam）
         self.optimizer = optim.Adam(
-            self.model.network.parameters(), 
+            self.model.network.parameters(),
             lr=self.DEFAULT_LR
         )
-        
+
         # 损失函数使用 L1Loss（MAE）
         self.criterion = nn.L1Loss(reduction='none')
-        
+
         # LossLogger 支持依赖注入（测试时可传入 mock，None 则内部自动创建）
         self.loss_logger = loss_logger
-        
+
+        # 学习率调度器配置
+        self.lr_scheduler_type = lr_scheduler_type
+        self.lr_step_size = lr_step_size
+        self.lr_gamma = lr_gamma
+        self.lr_patience = lr_patience
+        self.lr_factor = lr_factor
+        self.lr_scheduler = None
+        self._setup_lr_scheduler()
+
         # 打印设备信息
         if self.device.type == "cuda":
             print(f"使用 GPU 加速: {torch.cuda.get_device_name(self.device)}")
@@ -92,6 +110,22 @@ class BaseTrainer(ABC):
             device=self.device,
             input_converter=self._convert_inputs
         )
+
+    def _setup_lr_scheduler(self):
+        """根据 lr_scheduler_type 初始化学习率调度器"""
+        if self.lr_scheduler_type == "step":
+            self.lr_scheduler = optim.lr_scheduler.StepLR(
+                self.optimizer,
+                step_size=self.lr_step_size,
+                gamma=self.lr_gamma
+            )
+        elif self.lr_scheduler_type == "plateau":
+            self.lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+                self.optimizer,
+                mode='min',
+                factor=self.lr_factor,
+                patience=self.lr_patience
+            )
     
     @abstractmethod
     def _create_model(self, fresh: bool) -> BaseModel:
@@ -196,7 +230,11 @@ class BaseTrainer(ABC):
             if (epoch + 1) % LOSS_LOG_INTERVAL == 0:
                 loss_logger.log(epoch + 1, loss.item())
                 if verbose:
-                    print(f"Epoch {epoch + 1}/{epochs}, loss: {loss.item():.4f}")
+                    current_lr = self.optimizer.param_groups[0]['lr']
+                    print(f"Epoch {epoch + 1}/{epochs}, loss: {loss.item():.4f}, lr: {current_lr:.6f}")
+
+            # 学习率衰减
+            self._step_lr_scheduler(loss.item())
 
         return self._finalize_training(loss_logger, total_loss, epochs)
 
@@ -254,7 +292,11 @@ class BaseTrainer(ABC):
             if (epoch + 1) % LOSS_LOG_INTERVAL == 0:
                 loss_logger.log(epoch + 1, loss.item())
                 if verbose:
-                    print(f"Epoch {epoch + 1}/{epochs}, loss: {loss.item():.4f}")
+                    current_lr = self.optimizer.param_groups[0]['lr']
+                    print(f"Epoch {epoch + 1}/{epochs}, loss: {loss.item():.4f}, lr: {current_lr:.6f}")
+
+            # 学习率衰减
+            self._step_lr_scheduler(loss.item())
 
         return self._finalize_training(loss_logger, total_loss, epochs)
 
@@ -365,17 +407,38 @@ class BaseTrainer(ABC):
                 if loss_logger and not dense_log:
                     loss_logger.log(epoch + 1, epoch_avg_loss)
                 if verbose:
-                    print(f"Epoch {epoch + 1}/{epochs}, avg_loss: {epoch_avg_loss:.4f}")
+                    current_lr = self.optimizer.param_groups[0]['lr']
+                    print(f"Epoch {epoch + 1}/{epochs}, avg_loss: {epoch_avg_loss:.4f}, lr: {current_lr:.6f}")
 
             # 密集日志：每个 epoch 结束后批量写入
             if dense_log and loss_logger is not None:
                 loss_logger.flush()
 
+            # 学习率衰减
+            epoch_avg_loss = epoch_loss_sum / epoch_batches if epoch_batches > 0 else 0.0
+            self._step_lr_scheduler(epoch_avg_loss)
+
             epoch_loss_sum = 0.0
             epoch_batches = 0
 
         return self._finalize_training(loss_logger, total_loss, total_batches)
-    
+
+    def _step_lr_scheduler(self, loss=None):
+        """执行学习率衰减步进
+
+        统一封装 StepLR 和 ReduceLROnPlateau 的 step 调用。
+        StepLR 不需要参数，ReduceLROnPlateau 需要当前 loss。
+
+        Args:
+            loss: 当前 loss 值，用于 ReduceLROnPlateau
+        """
+        if self.lr_scheduler is None:
+            return
+        if isinstance(self.lr_scheduler, optim.lr_scheduler.ReduceLROnPlateau):
+            self.lr_scheduler.step(loss)
+        else:
+            self.lr_scheduler.step()
+
     def train_cycle(
         self,
         rounds: int = 10,
