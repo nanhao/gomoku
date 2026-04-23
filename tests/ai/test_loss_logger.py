@@ -350,6 +350,27 @@ class TestLossLoggerPlotComparison(unittest.TestCase):
 
             self.assertIsNone(img_path)
 
+    def test_plot_comparison_with_dense_log_step_format(self):
+        """密集日志格式（step 而非 epoch）也能生成对比图"""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp_path:
+            session_dir = os.path.join(tmp_path, "dense_session")
+            os.makedirs(session_dir)
+
+            # 创建密集格式的 round_1_epoch_level.jsonl
+            with open(os.path.join(session_dir, "round_1_epoch_level.jsonl"), 'w') as f:
+                f.write(json.dumps({"step": 1, "loss": 0.0020, "grad_norm": 0.01}) + "\n")
+                f.write(json.dumps({"step": 2, "loss": 0.0015, "grad_norm": 0.008}) + "\n")
+
+            img_path = LossLogger.plot_comparison(
+                session_dir="dense_session",
+                model_name="cnn_v1",
+                log_dir=tmp_path
+            )
+
+            self.assertIsNotNone(img_path)
+            self.assertTrue(os.path.exists(img_path))
+
 
 class TestLossLoggerDenseLog(unittest.TestCase):
     """测试密集日志模式（mini-batch 模式）"""

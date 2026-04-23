@@ -362,16 +362,22 @@ class LossLogger:
         try:
             # 绘制合并对比图
             plt.figure(figsize=(12, 7))
+            xlabel = "Epoch"
             for round_num, entries in sorted(all_data, key=lambda x: x[0]):
-                epochs = [entry["epoch"] for entry in entries]
+                # 兼容稀疏日志（epoch）和密集日志（step）两种格式
+                if entries and "step" in entries[0]:
+                    xs = [entry["step"] for entry in entries]
+                    xlabel = "Step"
+                else:
+                    xs = [entry["epoch"] for entry in entries]
                 losses = [entry["loss"] for entry in entries]
                 plt.plot(
-                    epochs, losses,
+                    xs, losses,
                     marker='o', linestyle='-', linewidth=1.5, markersize=3,
                     label=f"Round {round_num}"
                 )
 
-            plt.xlabel("Epoch")
+            plt.xlabel(xlabel)
             plt.ylabel("Loss")
             plt.title(f"Loss Comparison - {model_name or 'Model'}")
             plt.legend()
