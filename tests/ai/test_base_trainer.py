@@ -7,6 +7,7 @@ import json
 import os
 import sys
 import tempfile
+import shutil
 import unittest
 from unittest.mock import MagicMock
 
@@ -62,6 +63,11 @@ class TestBaseTrainerWithCompleteSubclass(unittest.TestCase):
         """创建完整子类"""
         from ai.models.fc_v1.model import FCv1Model
         
+        # 重定向模型路径，避免测试污染真实模型文件
+        self.temp_dir = tempfile.mkdtemp()
+        self._original_path = FCv1Model.DEFAULT_MODEL_PATH
+        FCv1Model.DEFAULT_MODEL_PATH = os.path.join(self.temp_dir, "fc_v1.pth")
+        
         class TestTrainer(BaseTrainer):
             def _create_model(self, fresh):
                 return FCv1Model(fresh=fresh)
@@ -71,6 +77,12 @@ class TestBaseTrainerWithCompleteSubclass(unittest.TestCase):
                 return "test_model"
         
         self.TrainerClass = TestTrainer
+    
+    def tearDown(self):
+        """恢复模型路径并清理临时目录"""
+        from ai.models.fc_v1.model import FCv1Model
+        FCv1Model.DEFAULT_MODEL_PATH = self._original_path
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
     
     def test_complete_subclass_can_instantiate(self):
         """测试：完整子类可以实例化"""

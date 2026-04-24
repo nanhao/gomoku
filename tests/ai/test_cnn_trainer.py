@@ -29,11 +29,16 @@ class TestCNNTrainer(unittest.TestCase):
         self.sample_dir = os.path.join(self.temp_dir, "sample_data")
         os.makedirs(self.sample_dir, exist_ok=True)
         
+        # 重定向模型路径，避免测试污染真实模型文件
+        self._original_path = CNNV1Model.DEFAULT_MODEL_PATH
+        CNNV1Model.DEFAULT_MODEL_PATH = os.path.join(self.temp_dir, "cnn_v1.pth")
+        
         # 创建测试用的 sample.json
         self._create_test_sample()
     
     def tearDown(self):
         """测试后清理"""
+        CNNV1Model.DEFAULT_MODEL_PATH = self._original_path
         shutil.rmtree(self.temp_dir, ignore_errors=True)
     
     def _create_test_sample(self):
@@ -197,9 +202,13 @@ class TestCNNTrainerEdgeCases(unittest.TestCase):
     def setUp(self):
         """测试前准备"""
         self.temp_dir = tempfile.mkdtemp()
+        # 重定向模型路径，避免测试污染真实模型文件
+        self._original_path = CNNV1Model.DEFAULT_MODEL_PATH
+        CNNV1Model.DEFAULT_MODEL_PATH = os.path.join(self.temp_dir, "cnn_v1.pth")
     
     def tearDown(self):
         """测试后清理"""
+        CNNV1Model.DEFAULT_MODEL_PATH = self._original_path
         shutil.rmtree(self.temp_dir, ignore_errors=True)
     
     def test_train_single_with_nonexistent_sample(self):

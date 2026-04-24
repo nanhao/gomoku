@@ -28,11 +28,16 @@ class TestFCv1TrainerIntegration(unittest.TestCase):
         self.sample_dir = os.path.join(self.temp_dir, "sample_data")
         os.makedirs(self.sample_dir, exist_ok=True)
         
+        # 重定向模型路径，避免测试污染真实模型文件
+        self._original_path = FCv1Model.DEFAULT_MODEL_PATH
+        FCv1Model.DEFAULT_MODEL_PATH = os.path.join(self.temp_dir, "fc_v1.pth")
+        
         # 创建测试用的 sample.json
         self._create_test_sample()
     
     def tearDown(self):
         """测试后清理"""
+        FCv1Model.DEFAULT_MODEL_PATH = self._original_path
         shutil.rmtree(self.temp_dir, ignore_errors=True)
     
     def _create_test_sample(self):

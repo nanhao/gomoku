@@ -15,6 +15,7 @@ from unittest.mock import MagicMock
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from ai.models.fc_v1.trainer import FCv1Trainer
+from ai.models.fc_v1.model import FCv1Model
 
 
 class TestTrainMainScript(unittest.TestCase):
@@ -48,10 +49,13 @@ class TestTrainMainScript(unittest.TestCase):
     
     def test_trainer_train_single_epochs_default(self):
         """测试 trainer.train_single 默认 epochs 为 10"""
-        trainer = FCv1Trainer()
+        # 重定向模型路径，避免测试污染真实模型文件
+        original_model_path = FCv1Model.DEFAULT_MODEL_PATH
         
-        # 创建临时 sample 数据
         with tempfile.TemporaryDirectory() as tmpdir:
+            FCv1Model.DEFAULT_MODEL_PATH = os.path.join(tmpdir, "fc_v1.pth")
+            trainer = FCv1Trainer()
+            
             sample_data = [{
                 "input": [0] * 226,
                 "output": [0] * 225,
@@ -62,7 +66,7 @@ class TestTrainMainScript(unittest.TestCase):
             with open(sample_path, 'w') as f:
                 json.dump(sample_data, f)
             
-            # 使用默认 epochs 调用（不传 epochs 参数）
+            # 注入 mock logger 避免污染真实 loss_logs 目录
             trainer.loss_logger = MagicMock()
             trainer.loss_logger.dense_log = False
             loss = trainer.train_single(tmpdir)
@@ -70,6 +74,8 @@ class TestTrainMainScript(unittest.TestCase):
             # 验证返回了损失值
             self.assertIsInstance(loss, float)
             self.assertGreaterEqual(loss, 0)
+        
+        FCv1Model.DEFAULT_MODEL_PATH = original_model_path
     
     def test_trainer_train_cycle_defaults(self):
         """测试 trainer.train_cycle 默认参数值"""
