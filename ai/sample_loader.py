@@ -10,6 +10,53 @@ from typing import List, Tuple, Callable, Optional
 import torch
 
 
+def discover_all_data(data_dir: str) -> dict:
+    """发现目录下所有训练数据源
+
+    扫描 data_dir：
+    1. 找到所有根目录下的 merge_*.json 文件
+    2. 找到所有包含 sample.json 的直接子目录
+    3. 返回二者列表
+
+    Args:
+        data_dir: 训练数据目录路径
+
+    Returns:
+        {
+            "merge_files": List[str],    # merge_*.json 文件路径列表
+            "sample_dirs": List[str]     # 包含 sample.json 的子目录列表
+        }
+    """
+    merge_files = []
+    sample_dirs = []
+
+    if not os.path.exists(data_dir):
+        return {"merge_files": [], "sample_dirs": []}
+
+    try:
+        entries = os.listdir(data_dir)
+    except OSError:
+        return {"merge_files": [], "sample_dirs": []}
+
+    for entry in entries:
+        entry_path = os.path.join(data_dir, entry)
+        if os.path.isfile(entry_path) and entry.startswith("merge_") and entry.endswith(".json"):
+            merge_files.append(entry_path)
+        elif os.path.isdir(entry_path):
+            sample_path = os.path.join(entry_path, "sample.json")
+            if os.path.exists(sample_path):
+                sample_dirs.append(entry_path)
+
+    # 按文件名排序，保证结果稳定
+    merge_files.sort()
+    sample_dirs.sort(key=lambda p: os.path.basename(p))
+
+    return {
+        "merge_files": merge_files,
+        "sample_dirs": sample_dirs,
+    }
+
+
 class SampleLoader:
     """样本数据加载器"""
 
@@ -58,6 +105,52 @@ class SampleLoader:
                 raise FileNotFoundError(f"Sample file not found: {sample_path}")
             all_sample_data.extend(self.load(sample_path))
         return all_sample_data
+
+    def load_merge_file(self, merge_path: str) -> list:
+        """加载合并后的样本文件
+
+        与 load 方法行为一致，但语义上专用于加载 merge_*.json 文件。
+
+        Args:
+            merge_path: merge_*.json 文件路径
+
+        Returns:
+            sample 数据列表
+
+        Raises:
+            FileNotFoundError: 文件不存在
+            json.JSONDecodeError: JSON 格式错误
+        """
+        with open(merge_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+
+    def discover_and_load(self, data_dir: str) -> list:
+        """从目录发现并加载所有训练数据（merge 文件 + 个体 sample.json）
+
+        扫描指定目录：
+        1. 找到所有 merge_*.json 文件 → 加载
+        2. 找到所有包含 sample.json 的子目录 → 加载
+        3. 合并所有数据返回
+
+        Args:
+            data_dir: 训练数据目录路径
+
+        Returns:
+            合并后的 sample 数据列表
+        """
+        result = discover_all_data(data_dir)
+        all_data = []
+
+        # 加载所有 merge 文件
+        for merge_file in result["merge_files"]:
+            all_data.extend(self.load_merge_file(merge_file))
+
+        # 加载所有个体 sample.json
+        for sample_dir in result["sample_dirs"]:
+            sample_path = os.path.join(sample_dir, "sample.json")
+            all_data.extend(self.load(sample_path))
+
+        return all_data
 
     def prepare_tensors(self, sample_data: list) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """将 sample 数据转换为训练所需的 PyTorch 张量

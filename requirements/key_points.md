@@ -588,3 +588,9 @@ agent 给了我一份建议书，在 design/learn_rate 下面，我准备采用�
 
 # 第二十五次追加
 训练实在太久了，先做一次性能优化。 design\performance\performance_optimization_proposal.md
+
+# 第二十六次追加
+使自我对弈产生训练数据跟训练这两个步骤可以单独执行
+
+# 第二十七次追加
+增加 merge_samples.py

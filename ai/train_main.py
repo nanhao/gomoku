@@ -19,9 +19,14 @@
 import sys
 import os
 import argparse
+import json
+import tempfile
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+from ai.sample_loader import discover_all_data, SampleLoader
+from ai.merge_samples import merge_directories
 
 def get_trainer(model_name: str, fresh: bool = False, **kwargs):
     """
@@ -91,6 +96,24 @@ def discover_sample_dirs(train_data_dir: str) -> list:
 
     sample_dirs.sort(key=_sort_key)
     return sample_dirs
+
+
+def _create_temp_sample_dir(sample_data: list) -> str:
+    """创建临时目录并将样本数据写入 sample.json
+
+    用于兼容仅接收目录路径的 trainer 接口。
+
+    Args:
+        sample_data: 样本数据列表
+
+    Returns:
+        临时目录路径（调用方负责清理）
+    """
+    tmp_dir = tempfile.mkdtemp()
+    sample_path = os.path.join(tmp_dir, "sample.json")
+    with open(sample_path, 'w', encoding='utf-8') as f:
+        json.dump(sample_data, f, ensure_ascii=False)
+    return tmp_dir
 
 
 def main():
@@ -186,7 +209,14 @@ def main():
         '--train-from-dir',
         type=str,
         default=None,
-        help='训练数据目录路径（自动发现其下所有 sample.json 合并训练）'
+        help='训练数据目录路径（自动发现其下所有 sample.json 合并训练），或直接指定 .json 文件'
+    )
+
+    parser.add_argument(
+        '--merge-output',
+        type=str,
+        default=None,
+        help='--self-play 模式下，对局完成后自动合并样本到指定文件'
     )
 
     parser.add_argument(
@@ -326,29 +356,62 @@ def main():
             print(f"训练数据目录: {result['train_data_dir']}")
             print(f"（可使用 --train-from-dir {result['train_data_dir']} 训练模型）")
 
+            # 如果指定了 --merge-output，自动合并样本
+            if args.merge_output:
+                print(f"\n正在自动合并样本到: {args.merge_output}")
+                merge_result = merge_directories(
+                    [result["train_data_dir"]],
+                    args.merge_output
+                )
+                print(f"自动合并完成:")
+                print(f"  合并文件数: {merge_result['total_files']}")
+                print(f"  总样本数:   {merge_result['total_samples']}")
+                print(f"  输出路径:   {merge_result['output_path']}")
+
         except Exception as e:
             print(f"自我对弈失败: {e}")
             sys.exit(1)
 
     elif args.train_from_dir:
-        # 从已有数据目录训练模式
-        train_data_dir = args.train_from_dir
+        # 从已有数据训练模式（支持目录或 .json 文件）
+        train_data_path = args.train_from_dir
 
-        # 检查目录是否存在
-        if not os.path.exists(train_data_dir):
-            print(f"错误: 目录不存在: {train_data_dir}")
+        # 检查路径是否存在
+        if not os.path.exists(train_data_path):
+            print(f"错误: 路径不存在: {train_data_path}")
             sys.exit(1)
 
-        # 发现所有 sample 目录
-        sample_dirs = discover_sample_dirs(train_data_dir)
+        # 判断是 .json 文件还是目录
+        if os.path.isfile(train_data_path) and train_data_path.endswith('.json'):
+            # 直接加载 .json 文件
+            with open(train_data_path, 'r', encoding='utf-8') as f:
+                sample_data = json.load(f)
 
-        if not sample_dirs:
-            print(f"错误: 未找到训练数据（{train_data_dir} 下没有包含 sample.json 的子目录）")
-            sys.exit(1)
+            if not sample_data:
+                print(f"错误: 训练数据为空: {train_data_path}")
+                sys.exit(1)
+
+            # 创建临时目录存放数据，兼容 trainer 接口
+            tmp_dir = _create_temp_sample_dir(sample_data)
+            sample_dirs = [tmp_dir]
+            data_source_desc = f"文件: {train_data_path}"
+        else:
+            # 目录：自动发现 merge 文件和个体 sample.json
+            loader = SampleLoader(trainer.device)
+            sample_data = loader.discover_and_load(train_data_path)
+
+            if not sample_data:
+                print(f"错误: 未找到训练数据（{train_data_path} 下没有 merge 文件或包含 sample.json 的子目录）")
+                sys.exit(1)
+
+            # 创建临时目录存放合并后的数据，兼容 trainer 接口
+            tmp_dir = _create_temp_sample_dir(sample_data)
+            sample_dirs = [tmp_dir]
+            data_source_desc = f"目录: {train_data_path}"
 
         print(f"开始训练 {args.model} 模型...")
-        print(f"训练数据目录: {train_data_dir}")
-        print(f"发现 {len(sample_dirs)} 个样本目录")
+        print(f"训练数据源: {data_source_desc}")
+        print(f"加载样本数: {len(sample_data)}")
         print(f"训练参数:")
         print(f"  迭代数 (epochs):     {args.epochs}")
         if args.batch_size is not None:

@@ -83,7 +83,7 @@ python ai/train_main.py --model fc_v1 --sample-dir train_data/random_vs_random_1
 #### 自我对弈生成数据（不训练）
 
 ```bash
-python ai/train_main.py --model <模型名称> --self-play --games <对局数> [--rate <衰减率>]
+python ai/train_main.py --model <模型名称> --self-play --games <对局数> [--rate <衰减率>] [--merge-output <合并文件路径>]
 ```
 
 | 参数 | 说明 | 默认值 |
@@ -91,10 +91,12 @@ python ai/train_main.py --model <模型名称> --self-play --games <对局数> [
 | `--self-play` | 仅生成训练数据（自我对弈+评价） | - |
 | `--games` | 对局数 | 100 |
 | `--rate` | 奖励衰减率 | 0.9 |
+| `--merge-output` | 对局完成后自动合并样本到指定文件 | 无（不合并） |
 
 ```bash
 # 示例
 python ai/train_main.py --model cnn_v1 --self-play --games 100
+python ai/train_main.py --model cnn_v1 --self-play --games 100 --merge-output ai/train_data/merge_cnn_v1.json
 ```
 
 > **提示**：运行结束后会输出训练数据目录路径，可用 `--train-from-dir` 继续训练。
@@ -102,20 +104,27 @@ python ai/train_main.py --model cnn_v1 --self-play --games 100
 #### 从已有数据训练
 
 ```bash
-python ai/train_main.py --model <模型名称> --train-from-dir <数据目录> [选项]
+python ai/train_main.py --model <模型名称> --train-from-dir <数据目录或文件> [选项]
 ```
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `--train-from-dir` | 训练数据目录（自动发现其下所有 sample.json） | 必填 |
+| `--train-from-dir` | 训练数据目录或 `.json` 文件路径 | 必填 |
 | `--epochs` | 训练迭代数 | 1000 |
 | `--batch-size` | 每批次样本数（启用 mini-batch） | 无（全量更新） |
 | `--shuffle` | 每轮打乱数据顺序（mini-batch 有效） | False |
 | `--lr-scheduler` | 学习率调度：`step` / `plateau` | 无（固定学习率） |
 
+> 指定目录时自动发现 `merge_*.json` 合并文件和子目录下的 `sample.json`；指定 `.json` 文件时直接加载。
+
 ```bash
-# 示例
+# 示例：从目录训练
 python ai/train_main.py --model cnn_v1 --train-from-dir ai/train_data/cnn_v1_self_play_1 --epochs 1000
+
+# 示例：从合并文件训练
+python ai/train_main.py --model cnn_v1 --train-from-dir ai/train_data/merge_cnn_v1.json --epochs 1000
+
+# 示例：mini-batch 训练
 python ai/train_main.py --model cnn_v1 --train-from-dir ai/train_data/cnn_v1_self_play_1 --epochs 1000 --batch-size 32 --shuffle
 ```
 
@@ -163,7 +172,28 @@ python ai/train_main.py --model cnn_v1 --cycle --batch-size 32 --lr-scheduler pl
 python ai/train_main.py --model cnn_v2 --cycle --batch-size 32 --lr-scheduler plateau --lr-patience 50
 
 # 常用
-python ai/train_main.py --model cnn_v2 --cycle --batch-size 32 --shuffle --lr-scheduler plateau --lr-patience 50 --rounds 1 --games 200 --epochs 2000
+python ai/train_main.py --model cnn_v2 --cycle --batch-size 128 --shuffle --rounds 1 --games 600 --epochs 2000
+```
+
+### 样本合并
+
+将分散的 `sample.json` 合并为单个大文件，减少训练时的 I/O 开销：
+
+```bash
+python ai/merge_samples.py <目录1> [目录2] ... -o <输出文件路径>
+```
+
+| 参数 | 说明 |
+|------|------|
+| 位置参数 | 一个或多个包含 sample.json 的数据目录 |
+| `-o` / `--output` | 合并后的输出文件路径（必需） |
+
+```bash
+# 示例：合并单个目录
+python ai/merge_samples.py ai/train_data/cnn_v2_self_play_1 -o ai/train_data/merge_cnn_v2.json
+
+# 示例：合并多个目录
+python ai/merge_samples.py ai/train_data/cnn_v2_cycle_1_1 ai/train_data/cnn_v2_cycle_1_2 -o ai/train_data/merge_cnn_v2_all.json
 ```
 
 ### 样本检视
@@ -247,6 +277,7 @@ python tests/run_tests.py
 | `ai/ai_data/` | AI 对战记录（record.json） |
 | `ai/ai_data/loss_logs/` | 训练 loss 日志和曲线图 |
 | `ai/train_data/` | 训练样本（sample.json） |
+| `ai/train_data/merge_*.json` | 合并后的训练样本大文件 |
 
 ---
 
