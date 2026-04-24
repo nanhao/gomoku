@@ -185,6 +185,10 @@ class TestBaseTrainerWithCompleteSubclass(unittest.TestCase):
                 lr_step_size=2,
                 lr_gamma=0.5
             )
+            # 注入 mock logger 避免污染真实 loss_logs 目录
+            trainer.loss_logger = MagicMock()
+            trainer.loss_logger.dense_log = False
+
             initial_lr = trainer.optimizer.param_groups[0]['lr']
 
             # 训练 3 个 epoch，step_size=2，gamma=0.5

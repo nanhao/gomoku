@@ -10,6 +10,7 @@ import tempfile
 import shutil
 import json
 import io
+from unittest.mock import MagicMock
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -55,6 +56,9 @@ class TestFCv1TrainerVerboseOutput(unittest.TestCase):
         """测试 verbose=False（默认）时不输出每个 epoch 的 loss"""
         sample_dir = self._create_test_sample()
         trainer = FCv1Trainer(fresh=True)
+        trainer.loss_logger = MagicMock()
+        trainer.loss_logger.dense_log = False
+        trainer.loss_logger.plot.return_value = None
         
         # 捕获 stdout
         captured_output = io.StringIO()
@@ -74,6 +78,8 @@ class TestFCv1TrainerVerboseOutput(unittest.TestCase):
         """测试 verbose=True 时每 200 个 epoch 输出一次 loss"""
         sample_dir = self._create_test_sample()
         trainer = FCv1Trainer(fresh=True)
+        trainer.loss_logger = MagicMock()
+        trainer.loss_logger.dense_log = False
         
         # 捕获 stdout
         captured_output = io.StringIO()
@@ -98,6 +104,8 @@ class TestFCv1TrainerVerboseOutput(unittest.TestCase):
         """测试 verbose 输出格式正确（每 200 个 epoch 打印一次）"""
         sample_dir = self._create_test_sample()
         trainer = FCv1Trainer(fresh=True)
+        trainer.loss_logger = MagicMock()
+        trainer.loss_logger.dense_log = False
         
         import re
         

@@ -10,6 +10,7 @@ import tempfile
 import shutil
 import json
 import torch
+from unittest.mock import MagicMock
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -78,7 +79,9 @@ class TestCNNTrainer(unittest.TestCase):
     def test_trainer_train_single(self):
         """测试单轮次训练"""
         trainer = CNNV1Trainer()
-        
+        trainer.loss_logger = MagicMock()
+        trainer.loss_logger.dense_log = False
+
         # 训练
         loss = trainer.train_single(self.sample_dir)
         
@@ -89,7 +92,9 @@ class TestCNNTrainer(unittest.TestCase):
     def test_trainer_train_single_returns_loss(self):
         """测试单轮次训练返回损失值"""
         trainer = CNNV1Trainer()
-        
+        trainer.loss_logger = MagicMock()
+        trainer.loss_logger.dense_log = False
+
         loss = trainer.train_single(self.sample_dir)
         
         # 损失应该是非负数
@@ -145,7 +150,9 @@ class TestCNNTrainer(unittest.TestCase):
     def test_trainer_train_batch(self):
         """测试批量训练"""
         trainer = CNNV1Trainer()
-        
+        trainer.loss_logger = MagicMock()
+        trainer.loss_logger.dense_log = False
+
         # 创建第二个 sample 目录
         sample_dir2 = os.path.join(self.temp_dir, "sample_data2")
         os.makedirs(sample_dir2, exist_ok=True)

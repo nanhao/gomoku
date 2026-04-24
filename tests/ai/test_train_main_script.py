@@ -9,6 +9,7 @@ import unittest
 import tempfile
 import json
 import inspect
+from unittest.mock import MagicMock
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -62,6 +63,8 @@ class TestTrainMainScript(unittest.TestCase):
                 json.dump(sample_data, f)
             
             # 使用默认 epochs 调用（不传 epochs 参数）
+            trainer.loss_logger = MagicMock()
+            trainer.loss_logger.dense_log = False
             loss = trainer.train_single(tmpdir)
             
             # 验证返回了损失值

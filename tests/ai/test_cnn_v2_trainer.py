@@ -10,6 +10,7 @@ import tempfile
 import shutil
 import json
 import torch
+from unittest.mock import MagicMock
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -74,6 +75,8 @@ class TestCNNv2Trainer(unittest.TestCase):
     def test_trainer_train_single(self):
         """测试单轮次训练"""
         trainer = CNNV2Trainer()
+        trainer.loss_logger = MagicMock()
+        trainer.loss_logger.dense_log = False
 
         loss = trainer.train_single(self.sample_dir)
 

@@ -9,6 +9,7 @@ import unittest
 import tempfile
 import shutil
 import json
+from unittest.mock import MagicMock
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -52,7 +53,9 @@ class TestFCv1TrainerIntegration(unittest.TestCase):
         """测试训练是否能改善模型（损失应该降低）"""
         model = FCv1Model()
         trainer = FCv1Trainer(model)
-        
+        trainer.loss_logger = MagicMock()
+        trainer.loss_logger.dense_log = False
+
         # 训练前预测
         board_vector = [0] * 225 + [1]
         result_before = model.predict(board_vector)

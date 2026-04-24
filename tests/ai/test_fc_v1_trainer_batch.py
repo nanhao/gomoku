@@ -13,6 +13,7 @@ import tempfile
 import shutil
 import json
 import copy
+from unittest.mock import MagicMock
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -43,6 +44,13 @@ class TestFCv1TrainerBatch(unittest.TestCase):
         self._patcher.stop()
         shutil.rmtree(self.temp_dir, ignore_errors=True)
     
+    def _create_trainer(self) -> FCv1Trainer:
+        """创建训练器并注入 mock logger 避免污染真实 loss_logs 目录"""
+        trainer = FCv1Trainer(fresh=True)
+        trainer.loss_logger = MagicMock()
+        trainer.loss_logger.dense_log = False
+        return trainer
+
     def _create_sample_dir(self, name: str, n_items: int = 2) -> str:
         """创建一个包含 sample.json 的目录"""
         sample_dir = os.path.join(self.temp_dir, name)
@@ -71,7 +79,7 @@ class TestFCv1TrainerBatch(unittest.TestCase):
         """测试 train_batch 返回 float 损失值"""
         dir1 = self._create_sample_dir("s1")
         dir2 = self._create_sample_dir("s2")
-        trainer = FCv1Trainer(fresh=True)
+        trainer = self._create_trainer()
         
         result = trainer.train_batch([dir1, dir2], epochs=3)
         
@@ -81,7 +89,7 @@ class TestFCv1TrainerBatch(unittest.TestCase):
     def test_train_batch_single_sample_dir(self):
         """测试 train_batch 处理单个 sample 目录"""
         dir1 = self._create_sample_dir("s1")
-        trainer = FCv1Trainer(fresh=True)
+        trainer = self._create_trainer()
         
         result = trainer.train_batch([dir1], epochs=2)
         
@@ -97,7 +105,7 @@ class TestFCv1TrainerBatch(unittest.TestCase):
         dir1 = self._create_sample_dir("s1")
         dir2 = self._create_sample_dir("s2")
         dir3 = self._create_sample_dir("s3")
-        trainer = FCv1Trainer(fresh=True)
+        trainer = self._create_trainer()
         
         import io
         captured = io.StringIO()
@@ -116,7 +124,7 @@ class TestFCv1TrainerBatch(unittest.TestCase):
         """测试 verbose=True 时每 200 个 epoch 输出一次 loss"""
         dir1 = self._create_sample_dir("s1")
         dir2 = self._create_sample_dir("s2")
-        trainer = FCv1Trainer(fresh=True)
+        trainer = self._create_trainer()
         
         import io
         captured = io.StringIO()
@@ -138,7 +146,7 @@ class TestFCv1TrainerBatch(unittest.TestCase):
     def test_train_batch_verbose_false_no_epoch_output(self):
         """测试 verbose=False 时不输出 epoch 信息"""
         dir1 = self._create_sample_dir("s1")
-        trainer = FCv1Trainer(fresh=True)
+        trainer = self._create_trainer()
         
         import io
         captured = io.StringIO()
@@ -155,13 +163,13 @@ class TestFCv1TrainerBatch(unittest.TestCase):
     
     def test_train_batch_empty_list_raises(self):
         """测试 sample_dirs 为空列表时抛出异常"""
-        trainer = FCv1Trainer(fresh=True)
+        trainer = self._create_trainer()
         with self.assertRaises(ValueError):
             trainer.train_batch([], epochs=1)
     
     def test_train_batch_missing_sample_file_raises(self):
         """测试 sample 目录不存在时抛出异常"""
-        trainer = FCv1Trainer(fresh=True)
+        trainer = self._create_trainer()
         fake_dir = os.path.join(self.temp_dir, "nonexistent")
         with self.assertRaises(FileNotFoundError):
             trainer.train_batch([fake_dir], epochs=1)
@@ -171,7 +179,7 @@ class TestFCv1TrainerBatch(unittest.TestCase):
         import torch
         dir1 = self._create_sample_dir("s1")
         dir2 = self._create_sample_dir("s2")
-        trainer = FCv1Trainer(fresh=True)
+        trainer = self._create_trainer()
         
         # 记录训练前的参数
         params_before = copy.deepcopy(
