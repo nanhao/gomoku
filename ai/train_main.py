@@ -9,8 +9,11 @@
     # 训练周期（fc_v1 模型）
     python ai/train_main.py --model fc_v1 --cycle [--rounds 100] [--games 100]
     
-    # 单轮次训练（cnn_v1 模型）
-    python ai/train_main.py --model cnn_v1 --sample-dir train_data/{轮次目录}/{局数目录}
+    # 仅自我对弈生成数据（不训练）
+    python ai/train_main.py --model fc_v1 --self-play --games 100
+    
+    # 从已有数据目录训练模型
+    python ai/train_main.py --model fc_v1 --train-from-dir ai/train_data/fc_v1_self_play_1
 """
 
 import sys
@@ -48,6 +51,48 @@ def get_trainer(model_name: str, fresh: bool = False, **kwargs):
         raise ValueError(f"不支持的模型: {model_name}。目前支持: fc_v1, cnn_v1, cnn_v2")
 
 
+def discover_sample_dirs(train_data_dir: str) -> list:
+    """发现目录下所有包含 sample.json 的子目录
+
+    扫描 train_data_dir 下的直接子目录，返回包含 sample.json 的子目录列表。
+
+    Args:
+        train_data_dir: 训练数据根目录（如 ai/train_data/fc_v1_cycle_1_5）
+
+    Returns:
+        包含 sample.json 的子目录路径列表，按子目录名数字排序
+    """
+    # 目录不存在时返回空列表
+    if not os.path.exists(train_data_dir):
+        return []
+
+    sample_dirs = []
+    try:
+        entries = os.listdir(train_data_dir)
+    except OSError:
+        return []
+
+    for entry in entries:
+        entry_path = os.path.join(train_data_dir, entry)
+        # 仅检查直接子目录
+        if os.path.isdir(entry_path):
+            sample_path = os.path.join(entry_path, "sample.json")
+            if os.path.exists(sample_path):
+                sample_dirs.append(entry_path)
+
+    # 按子目录名数字排序（如 "1", "2", "10" → 1, 2, 10）
+    def _sort_key(path: str) -> int:
+        dirname = os.path.basename(path)
+        try:
+            return int(dirname)
+        except ValueError:
+            # 非数字目录名排到最后
+            return float('inf')
+
+    sample_dirs.sort(key=_sort_key)
+    return sample_dirs
+
+
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(
@@ -69,6 +114,12 @@ def main():
   
   # 从新模型开始训练 fc_v1
   python ai/train_main.py --model fc_v1 --cycle --fresh
+
+  # 仅自我对弈生成数据（不训练）
+  python ai/train_main.py --model fc_v1 --self-play --games 100
+
+  # 从已有数据目录训练模型
+  python ai/train_main.py --model fc_v1 --train-from-dir ai/train_data/fc_v1_self_play_1 --epochs 1000
         """
     )
     
@@ -126,6 +177,19 @@ def main():
     )
 
     parser.add_argument(
+        '--self-play',
+        action='store_true',
+        help='仅执行自我对弈+评价，生成训练数据（不训练）'
+    )
+
+    parser.add_argument(
+        '--train-from-dir',
+        type=str,
+        default=None,
+        help='训练数据目录路径（自动发现其下所有 sample.json 合并训练）'
+    )
+
+    parser.add_argument(
         '--batch-size',
         type=int,
         default=None,
@@ -176,12 +240,21 @@ def main():
 
     args = parser.parse_args()
     
-    # 验证参数
-    if not args.cycle and not args.sample_dir:
-        parser.error("请指定 --sample-dir 或 --cycle 参数")
-    
-    if args.cycle and args.sample_dir:
-        parser.error("--cycle 和 --sample-dir 不能同时使用")
+    # 验证参数：四个模式互斥（--cycle、--self-play、--sample-dir、--train-from-dir 四选一）
+    active_modes = []
+    if args.cycle:
+        active_modes.append('--cycle')
+    if args.self_play:
+        active_modes.append('--self-play')
+    if args.sample_dir:
+        active_modes.append('--sample-dir')
+    if args.train_from_dir:
+        active_modes.append('--train-from-dir')
+
+    if len(active_modes) == 0:
+        parser.error("请指定 --sample-dir、--cycle、--self-play 或 --train-from-dir 参数")
+    elif len(active_modes) > 1:
+        parser.error(f"以下参数不能同时使用: {', '.join(active_modes)}")
     
     # 创建训练器
     scheduler_kwargs = {}
@@ -232,6 +305,86 @@ def main():
             print(f"训练失败: {e}")
             sys.exit(1)
     
+    elif args.self_play:
+        # 仅自我对弈生成数据模式
+        print(f"开始 {args.model} 自我对弈数据生成...")
+        print(f"参数:")
+        print(f"  对局数 (games):      {args.games}")
+        print(f"  奖励衰减率 (rate):   {args.rate}")
+
+        try:
+            from ai.self_play_generator import SelfPlayGenerator
+            generator = SelfPlayGenerator(trainer.model)
+            result = generator.generate(games=args.games, rate=args.rate)
+
+            # 打印结果统计
+            black_wins = sum(1 for r in result["results"] if r["winner"] == 1)
+            white_wins = sum(1 for r in result["results"] if r["winner"] == 2)
+            draws = sum(1 for r in result["results"] if r["winner"] == 3)
+            print(f"\n对局统计: 黑胜 {black_wins}, 白胜 {white_wins}, 平局 {draws}")
+            print(f"生成样本数: {result['sample_count']}")
+            print(f"训练数据目录: {result['train_data_dir']}")
+            print(f"（可使用 --train-from-dir {result['train_data_dir']} 训练模型）")
+
+        except Exception as e:
+            print(f"自我对弈失败: {e}")
+            sys.exit(1)
+
+    elif args.train_from_dir:
+        # 从已有数据目录训练模式
+        train_data_dir = args.train_from_dir
+
+        # 检查目录是否存在
+        if not os.path.exists(train_data_dir):
+            print(f"错误: 目录不存在: {train_data_dir}")
+            sys.exit(1)
+
+        # 发现所有 sample 目录
+        sample_dirs = discover_sample_dirs(train_data_dir)
+
+        if not sample_dirs:
+            print(f"错误: 未找到训练数据（{train_data_dir} 下没有包含 sample.json 的子目录）")
+            sys.exit(1)
+
+        print(f"开始训练 {args.model} 模型...")
+        print(f"训练数据目录: {train_data_dir}")
+        print(f"发现 {len(sample_dirs)} 个样本目录")
+        print(f"训练参数:")
+        print(f"  迭代数 (epochs):     {args.epochs}")
+        if args.batch_size is not None:
+            print(f"  批次大小 (batch):    {args.batch_size}")
+            print(f"  数据打乱 (shuffle):  {args.shuffle}")
+            print(f"  训练方法:            mini-batch")
+        else:
+            print(f"  批次大小 (batch):    N/A (全量更新)")
+            print(f"  数据打乱 (shuffle):  N/A")
+            print(f"  训练方法:            train_batch (全量更新)")
+
+        try:
+            # 根据 batch_size 选择训练方法
+            if args.batch_size is not None and args.batch_size > 0:
+                avg_loss = trainer.train_mini_batch(
+                    sample_dirs,
+                    epochs=args.epochs,
+                    batch_size=args.batch_size,
+                    shuffle=args.shuffle
+                )
+            else:
+                avg_loss = trainer.train_batch(
+                    sample_dirs,
+                    epochs=args.epochs
+                )
+
+            print(f"训练完成！平均损失: {avg_loss:.4f}")
+
+            # 保存模型
+            model_path = trainer.model.save()
+            print(f"模型已保存到: {model_path}")
+
+        except Exception as e:
+            print(f"训练失败: {e}")
+            sys.exit(1)
+
     elif args.cycle:
         # 训练周期
         print(f"开始 {args.model} 训练周期...")
