@@ -91,95 +91,118 @@ class SelfPlayCycle:
         print(f"训练数据目录: {train_data_dir}")
         print("-" * 50)
         
-        for round_num in range(1, rounds + 1):
-            print(f"\n===== 第 {round_num}/{rounds} 轮 =====")
-            
-            # 1. 创建数据记录器
-            recorder = DataRecorder(
-                ai_name=f"{self.trainer.model_name}_cycle_{round_num}",
-                ai_data_dir=ai_data_dir
-            )
-            
-            # 2. 执行 AI 内战（模型自我对弈）
-            print(f"执行 {games} 局自我对弈...")
-            results = AIGameManager.start_ai_vs_ai(
-                engine1=engine,
-                engine2=engine,
-                num_games=games,
-                recorder=recorder,
-                project_root=project_root
-            )
-            
-            # 统计结果
-            black_wins = sum(1 for r in results if r["winner"] == 1)
-            white_wins = sum(1 for r in results if r["winner"] == 2)
-            draws = sum(1 for r in results if r["winner"] == 3)
-            print(f"对局结果: 黑胜 {black_wins}, 白胜 {white_wins}, 平局 {draws}")
-            
-            # 3. 调用 Evaluator 对每局生成 sample.json，收集所有 sample 目录
-            print("生成训练样本...")
-            evaluator = Evaluator(
-                ai_data_dir=ai_data_dir,
-                train_data_dir=train_data_dir,
-                decay_rate=rate
-            )
-            
-            round_dir = recorder.get_round_dir()
-            sample_dirs = []
-            for game_dir in os.listdir(round_dir):
-                game_path = os.path.join(round_dir, game_dir)
-                record_file = os.path.join(game_path, "record.json")
-                if os.path.isdir(game_path) and os.path.exists(record_file):
-                    try:
-                        sample_file = evaluator.evaluate_record(record_file)
-                        # 收集 sample 所在目录
-                        sample_dirs.append(os.path.dirname(sample_file))
-                    except Exception as e:
-                        print(f"  评价失败 {record_file}: {e}")
-            
-            print(f"生成 {len(sample_dirs)} 个样本文件")
-            
-            # 4. 调用 train_batch 将本轮所有 sample 合并训练
-            #    train_batch 内部会创建自己的 LossLogger（内层 epoch 级日志）
-            if sample_dirs:
-                print(f"训练模型 ({epochs} epochs，共 {len(sample_dirs)} 个样本合并训练)...")
-                # 根据 batch_size 选择训练方法
-                if batch_size is not None and batch_size > 0:
-                    avg_loss = self.trainer.train_mini_batch(
-                        sample_dirs,
-                        epochs=epochs,
-                        batch_size=batch_size,
-                        shuffle=shuffle,
-                        verbose=True,
-                        session_dir=session_dir,
-                        log_type="epoch_level",
-                        round_num=round_num,
-                        total_rounds=rounds,
-                        dense_log=True
-                    )
-                else:
-                    avg_loss = self.trainer.train_batch(
-                        sample_dirs,
-                        epochs=epochs,
-                        verbose=True,
-                        session_dir=session_dir,
-                        log_type="epoch_level",
-                        round_num=round_num,
-                        total_rounds=rounds
-                    )
-                print(f"本轮平均损失: {avg_loss:.4f}")
+        interrupted = False
 
-                # 记录每轮的 avg_loss（外层 round 级日志）
-                if loss_logger:
-                    loss_logger.log(round_num, avg_loss)
-            
-            # 5. 保存更新后的模型
-            model_path = self.trainer.model.save()
-            print(f"模型已保存: {model_path}")
-            print("-" * 50)
-        
+        try:
+            for round_num in range(1, rounds + 1):
+                print(f"\n===== 第 {round_num}/{rounds} 轮 =====")
+
+                # 1. 创建数据记录器
+                recorder = DataRecorder(
+                    ai_name=f"{self.trainer.model_name}_cycle_{round_num}",
+                    ai_data_dir=ai_data_dir
+                )
+
+                # 2. 执行 AI 内战（模型自我对弈）
+                print(f"执行 {games} 局自我对弈...")
+                results = AIGameManager.start_ai_vs_ai(
+                    engine1=engine,
+                    engine2=engine,
+                    num_games=games,
+                    recorder=recorder,
+                    project_root=project_root
+                )
+
+                # 统计结果
+                black_wins = sum(1 for r in results if r["winner"] == 1)
+                white_wins = sum(1 for r in results if r["winner"] == 2)
+                draws = sum(1 for r in results if r["winner"] == 3)
+                print(f"对局结果: 黑胜 {black_wins}, 白胜 {white_wins}, 平局 {draws}")
+
+                # 3. 调用 Evaluator 对每局生成 sample.json，收集所有 sample 目录
+                print("生成训练样本...")
+                evaluator = Evaluator(
+                    ai_data_dir=ai_data_dir,
+                    train_data_dir=train_data_dir,
+                    decay_rate=rate
+                )
+
+                round_dir = recorder.get_round_dir()
+                sample_dirs = []
+                for game_dir in os.listdir(round_dir):
+                    game_path = os.path.join(round_dir, game_dir)
+                    record_file = os.path.join(game_path, "record.json")
+                    if os.path.isdir(game_path) and os.path.exists(record_file):
+                        try:
+                            sample_file = evaluator.evaluate_record(record_file)
+                            # 收集 sample 所在目录
+                            sample_dirs.append(os.path.dirname(sample_file))
+                        except Exception as e:
+                            print(f"  评价失败 {record_file}: {e}")
+
+                print(f"生成 {len(sample_dirs)} 个样本文件")
+
+                # 4. 调用 train_batch 将本轮所有 sample 合并训练
+                #    train_batch 内部会创建自己的 LossLogger（内层 epoch 级日志）
+                if sample_dirs:
+                    print(f"训练模型 ({epochs} epochs，共 {len(sample_dirs)} 个样本合并训练)...")
+                    # 根据 batch_size 选择训练方法
+                    if batch_size is not None and batch_size > 0:
+                        avg_loss = self.trainer.train_mini_batch(
+                            sample_dirs,
+                            epochs=epochs,
+                            batch_size=batch_size,
+                            shuffle=shuffle,
+                            verbose=True,
+                            session_dir=session_dir,
+                            log_type="epoch_level",
+                            round_num=round_num,
+                            total_rounds=rounds,
+                            dense_log=True
+                        )
+                    else:
+                        avg_loss = self.trainer.train_batch(
+                            sample_dirs,
+                            epochs=epochs,
+                            verbose=True,
+                            session_dir=session_dir,
+                            log_type="epoch_level",
+                            round_num=round_num,
+                            total_rounds=rounds
+                        )
+                    print(f"本轮平均损失: {avg_loss:.4f}")
+
+                    # 记录每轮的 avg_loss（外层 round 级日志）
+                    if loss_logger:
+                        loss_logger.log(round_num, avg_loss)
+
+                # 5. 保存更新后的模型
+                model_path = self.trainer.model.save()
+                print(f"模型已保存: {model_path}")
+                print("-" * 50)
+        except KeyboardInterrupt:
+            interrupted = True
+            print("\n[中断] 检测到 Ctrl+C，正在保存当前模型和图表...")
+
+            # 保存模型
+            try:
+                model_path = self.trainer.model.save()
+                print(f"模型已保存: {model_path}")
+            except Exception as e:
+                print(f"模型保存失败: {e}")
+
+            # flush 并生成图表
+            if loss_logger:
+                try:
+                    loss_logger.flush()
+                    plot_path = loss_logger.plot()
+                    if plot_path:
+                        print(f"Loss 曲线图已生成: {plot_path}")
+                except Exception as e:
+                    print(f"图表生成失败: {e}")
+
         # 生成 loss 曲线图（外层轮次粒度）
-        if loss_logger:
+        if not interrupted and loss_logger:
             loss_logger.plot()
 
         # 生成合并对比图（所有内层 epoch 级数据合并到一张图）
@@ -190,5 +213,8 @@ class SelfPlayCycle:
             )
             if comparison_path:
                 print(f"合并对比图已生成: {comparison_path}")
-        
-        print(f"\n训练周期完成！共 {rounds} 轮，每轮 {games} 局")
+
+        if interrupted:
+            print("[中断] 已保存当前进度，可以安全退出")
+        else:
+            print(f"\n训练周期完成！共 {rounds} 轮，每轮 {games} 局")
