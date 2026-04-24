@@ -41,8 +41,11 @@ def get_trainer(model_name: str, fresh: bool = False, **kwargs):
     elif model_name == "cnn_v1":
         from ai.models.cnn_v1.trainer import CNNTrainer
         return CNNTrainer(fresh=fresh, **kwargs)
+    elif model_name == "cnn_v2":
+        from ai.models.cnn_v2.trainer import CNNTrainer
+        return CNNTrainer(fresh=fresh, **kwargs)
     else:
-        raise ValueError(f"不支持的模型: {model_name}。目前支持: fc_v1, cnn_v1")
+        raise ValueError(f"不支持的模型: {model_name}。目前支持: fc_v1, cnn_v1, cnn_v2")
 
 
 def main():
@@ -73,7 +76,7 @@ def main():
         '--model',
         type=str,
         default='fc_v1',
-        help='模型名称，如 fc_v1、cnn_v1，默认 fc_v1'
+        help='模型名称，如 fc_v1、cnn_v1、cnn_v2，默认 fc_v1'
     )
     
     parser.add_argument(

@@ -54,7 +54,7 @@ python ai/battle.py --ai1 <AI名称> --ai2 <AI名称> [--games <局数>]
 | `--ai2` | 第二方 AI 名称 | 必填 |
 | `--games` | 对战局数 | 10 |
 
-**可用 AI：** `random` / `fc_v1` / `cnn_v1`
+**可用 AI：** `random` / `fc_v1` / `cnn_v1` / `cnn_v2`
 
 ```bash
 # 示例
@@ -71,7 +71,7 @@ python ai/train_main.py --model <模型名称> --sample-dir <sample目录> [--ep
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `--model` | 模型名称（fc_v1/cnn_v1） | `fc_v1` |
+| `--model` | 模型名称（fc_v1/cnn_v1/cnn_v2） | `fc_v1` |
 | `--sample-dir` | 训练样本目录 | 必填 |
 | `--epochs` | 训练迭代数 | 1000 |
 
@@ -88,7 +88,7 @@ python ai/train_main.py --model <模型名称> --cycle [选项]
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `--model` | 模型名称（fc_v1/cnn_v1） | fc_v1 |
+| `--model` | 模型名称（fc_v1/cnn_v1/cnn_v2） | fc_v1 |
 | `--cycle` | 启用训练周期模式 | - |
 | `--rounds` | 训练轮数 | 10 |
 | `--games` | 每轮对局数 | 100 |
@@ -109,14 +109,20 @@ python ai/train_main.py --model <模型名称> --cycle [选项]
 ```bash
 # 示例
 python ai/train_main.py --model fc_v1 --cycle              # 默认参数（全量更新）
-python ai/train_main.py --model cnn_v1 --cycle             # CNN 训练
+python ai/train_main.py --model cnn_v1 --cycle             # CNN v1 训练
+python ai/train_main.py --model cnn_v2 --cycle             # CNN v2 轻量化训练
 python ai/train_main.py --model fc_v1 --cycle --rounds 50 --games 50  # 自定义
 python ai/train_main.py --model fc_v1 --cycle --fresh      # 从新模型开始
 python ai/train_main.py --model cnn_v1 --cycle --batch-size 32 --shuffle  # mini-batch 训练
+python ai/train_main.py --model cnn_v2 --cycle --batch-size 32 --shuffle  # CNN v2 mini-batch 训练
 
 # 使用学习率衰减（推荐后期训练使用）
 python ai/train_main.py --model cnn_v1 --cycle --batch-size 32 --lr-scheduler step --lr-step-size 300
 python ai/train_main.py --model cnn_v1 --cycle --batch-size 32 --lr-scheduler plateau --lr-patience 50
+python ai/train_main.py --model cnn_v2 --cycle --batch-size 32 --lr-scheduler plateau --lr-patience 50
+
+# 常用
+python ai/train_main.py --model cnn_v2 --cycle --batch-size 32 --shuffle --lr-scheduler plateau --lr-patience 50 --rounds 1 --games 200 --epochs 2000
 ```
 
 ### 样本检视
@@ -182,6 +188,13 @@ python tests/run_tests.py
 - **网络结构**：卷积层(3→32→64→128) → 全连接层(28800→150→225) → Softmax
 - **训练方式**：自我对弈 + 奖励反向传播 + 五连追溯奖励
 - **模型文件**：`ai/models/cnn_v1/cnn.pth`
+
+### CNN v2 模型（轻量化）
+
+- **网络结构**：卷积层(3→32→64→128) → 全连接层(28800→64→225) → Softmax
+- **参数量**：约 197 万（CNN v1 的 44%，训练速度提升约 30-40%）
+- **训练方式**：与 CNN v1 相同
+- **模型文件**：`ai/models/cnn_v2/cnn_v2.pth`
 
 ---
 
