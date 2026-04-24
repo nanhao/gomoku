@@ -8,6 +8,7 @@ import sys
 import os
 import unittest
 import shutil
+import tempfile
 from unittest.mock import patch, MagicMock
 
 # 添加项目根目录到路径（支持从任何目录运行）
@@ -32,9 +33,7 @@ class TestStartAiVsAiRandom(unittest.TestCase):
 
     def setUp(self):
         """测试前准备：创建临时目录"""
-        self.test_ai_data_dir = os.path.join(project_root, "test_battle_ai_data")
-        if os.path.exists(self.test_ai_data_dir):
-            shutil.rmtree(self.test_ai_data_dir)
+        self.test_ai_data_dir = tempfile.mkdtemp(prefix="test_battle_ai_data_")
 
     def tearDown(self):
         """测试后清理：删除临时目录"""
@@ -167,9 +166,7 @@ class TestStartAiVsAiRandomEdge(unittest.TestCase):
 
     def setUp(self):
         """测试前准备"""
-        self.test_ai_data_dir = os.path.join(project_root, "test_battle_ai_data_edge")
-        if os.path.exists(self.test_ai_data_dir):
-            shutil.rmtree(self.test_ai_data_dir)
+        self.test_ai_data_dir = tempfile.mkdtemp(prefix="test_battle_ai_data_edge_")
 
     def tearDown(self):
         """测试后清理"""
@@ -206,9 +203,7 @@ class TestBattleModule(unittest.TestCase):
 
     def setUp(self):
         """测试前准备"""
-        self.test_ai_data_dir = os.path.join(project_root, "test_battle_script_data")
-        if os.path.exists(self.test_ai_data_dir):
-            shutil.rmtree(self.test_ai_data_dir)
+        self.test_ai_data_dir = tempfile.mkdtemp(prefix="test_battle_script_data_")
 
     def tearDown(self):
         """测试后清理"""

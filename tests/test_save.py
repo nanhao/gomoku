@@ -5,6 +5,8 @@ import os
 import sys
 import tempfile
 import shutil
+import unittest.mock
+from datetime import datetime
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -263,15 +265,17 @@ class TestGomokuSave:
             
             # 保存第一次
             state1 = {"board": [[0]*15 for _ in range(15)], "current_player": 1, "winner": 0}
-            save.save_game(state1, "test_same_day")
+            with unittest.mock.patch('game.save.datetime') as mock_dt:
+                mock_dt.now.return_value = datetime(2025, 6, 1, 12, 0, 0)
+                mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+                save.save_game(state1, "test_same_day")
             
-            # 稍等确保时间戳不同
-            import time
-            time.sleep(1.1)
-            
-            # 保存第二次（同一存档名，同一天）
+            # 模拟时间流逝，保存第二次（同一存档名，同一天）
             state2 = {"board": [[0]*15 for _ in range(15)], "current_player": 2, "winner": 0}
-            save.save_game(state2, "test_same_day")
+            with unittest.mock.patch('game.save.datetime') as mock_dt:
+                mock_dt.now.return_value = datetime(2025, 6, 1, 12, 1, 30)
+                mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+                save.save_game(state2, "test_same_day")
             
             # 应该能加载（取最新的）
             loaded = save.load_game("test_same_day")

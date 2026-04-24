@@ -8,6 +8,7 @@ import os
 import unittest
 import json
 import shutil
+import tempfile
 
 # 添加项目根目录到路径
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -22,13 +23,10 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
     
     def setUp(self):
         """测试前准备"""
-        self.test_dir = "test_evaluator_shape_data"
+        self.test_dir = tempfile.mkdtemp(prefix="test_evaluator_shape_")
         self.ai_data_dir = os.path.join(self.test_dir, "ai_data")
         self.train_data_dir = os.path.join(self.test_dir, "train_data")
         
-        # 清理并创建测试目录
-        if os.path.exists(self.test_dir):
-            shutil.rmtree(self.test_dir)
         os.makedirs(self.ai_data_dir)
         os.makedirs(self.train_data_dir)
         

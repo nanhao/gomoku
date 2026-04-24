@@ -3,6 +3,7 @@
 import sys
 import os
 import shutil
+import tempfile
 import unittest
 
 # 添加项目根目录到路径
@@ -17,17 +18,24 @@ class TestGomokuController:
     
     def setup_method(self):
         """每个测试方法前执行"""
-        # 使用独立的测试存档目录
-        self.test_save_dir = os.path.join(os.path.dirname(__file__), 'game', 'save')
-        # 清理测试目录中的旧存档
-        if os.path.exists(self.test_save_dir):
-            for filename in os.listdir(self.test_save_dir):
-                if filename.endswith('.json'):
-                    os.remove(os.path.join(self.test_save_dir, filename))
-        
+        # 使用临时目录，避免测试间相互干扰
+        self._temp_root = tempfile.mkdtemp(prefix="test_controller_")
+        self.test_save_dir = os.path.join(self._temp_root, "saves")
         self.controller = GomokuController()
         # 替换为测试用的存档目录
         self.controller.save = GomokuSave(self.test_save_dir)
+    
+    def teardown_method(self):
+        """每个测试方法后执行：完整删除临时目录"""
+        # 关闭游戏对象释放文件句柄
+        if hasattr(self, 'controller') and self.controller is not None:
+            self.controller.game = None
+            self.controller.save = None
+        if hasattr(self, '_temp_root') and os.path.exists(self._temp_root):
+            try:
+                shutil.rmtree(self._temp_root)
+            except PermissionError:
+                pass  # Windows 可能文件被占用，忽略清理错误
     
     def test_new_game(self):
         """测试新建游戏"""

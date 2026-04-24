@@ -10,6 +10,8 @@
 
 import sys
 import os
+import tempfile
+import shutil
 
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 if project_root not in sys.path:
@@ -25,14 +27,19 @@ from ai.models.fc_v1 import FCv1Model
 
 
 def _make_controller():
-    """创建使用测试目录的 controller"""
-    test_save_dir = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "_test_saves"
-    )
-    os.makedirs(test_save_dir, exist_ok=True)
+    """创建使用临时目录的 controller"""
+    temp_dir = tempfile.mkdtemp(prefix="test_session_")
+    save_dir = os.path.join(temp_dir, "saves")
     c = GomokuController()
-    c.save = GomokuSave(test_save_dir)
+    c.save = GomokuSave(save_dir)
+    c._temp_dir = temp_dir  # 保存引用以便清理
     return c
+
+
+def _cleanup_controller(controller):
+    """清理 controller 的临时目录"""
+    if hasattr(controller, '_temp_dir') and os.path.exists(controller._temp_dir):
+        shutil.rmtree(controller._temp_dir, ignore_errors=True)
 
 
 class TestCreateEngine:
@@ -144,6 +151,9 @@ class TestGameSessionPvp:
         self.controller.new_game(f"pvp_primary_{time.time()}")
         self.session = GameSession("pvp", self.controller)
 
+    def teardown_method(self):
+        _cleanup_controller(self.controller)
+
     def test_pvp_make_move_success(self):
         """pvp 模式合法落子应返回 status=success, need_ai_move=False"""
         result = self.session.make_player_move(7, 7)
@@ -173,6 +183,9 @@ class TestGameSessionPve:
         self.controller = _make_controller()
         self.controller.new_game(f"pve_primary_{time.time()}")
         self.session = GameSession("pve", self.controller, ai_name="random", ai_player=2)
+
+    def teardown_method(self):
+        _cleanup_controller(self.controller)
 
     def test_pve_player_move_triggers_ai_flag(self):
         """pve 模式玩家（黑）落子后轮到 AI（白），need_ai_move 应为 True"""
@@ -217,6 +230,9 @@ class TestGameSessionGameOver:
         self.controller.new_game(f"gameover_primary_{id(self)}")
         self.session = GameSession("pvp", self.controller)
 
+    def teardown_method(self):
+        _cleanup_controller(self.controller)
+
     def test_game_over_sets_flag(self):
         """落子导致游戏结束时，game_over=True 且 winner 正确"""
         # 黑棋横向连五：(7,5)(7,6)(7,7)(7,8)(7,9)，白棋分散落子
@@ -240,6 +256,9 @@ class TestGameSessionStartGame:
 
     def setup_method(self):
         self.controller = _make_controller()
+
+    def teardown_method(self):
+        _cleanup_controller(self.controller)
 
     def test_pvp_start_game_creates_game(self):
         """PvP 模式 start_game 应创建游戏"""

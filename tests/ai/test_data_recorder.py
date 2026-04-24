@@ -8,6 +8,7 @@ import os
 import unittest
 import shutil
 import json
+import tempfile
 
 # 添加项目根目录到路径（支持从任何目录运行）
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -22,13 +23,10 @@ class TestDataRecorder(unittest.TestCase):
     
     def setUp(self):
         """测试前准备：创建临时测试目录"""
-        self.test_dir = "test_ai_data"
-        # 清理可能存在的测试目录
-        if os.path.exists(self.test_dir):
-            shutil.rmtree(self.test_dir)
+        self.test_dir = tempfile.mkdtemp(prefix="test_ai_data_")
     
     def tearDown(self):
-        """测试后清理：删除测试目录"""
+        """测试后清理：删除临时测试目录"""
         if os.path.exists(self.test_dir):
             shutil.rmtree(self.test_dir)
     
@@ -83,14 +81,14 @@ class TestDataRecorder(unittest.TestCase):
         # 实际数据在 save_game_result 时才写入文件
     
     def test_record_move_wrong_game_id(self):
-        """测试记录落子时游戏编号错误"""
+        """测试记录落子时游戏编号错误会被自动纠正"""
         recorder = DataRecorder("random", self.test_dir)
         recorder.new_game()  # 创建游戏 1
         
-        with self.assertRaises(ValueError) as context:
-            recorder.record_move(999, [0] * 226, [0] * 225, (7, 7))
-        
-        self.assertIn("游戏编号不匹配", str(context.exception))
+        # CR-003 修复：不再抛异常，改为自动纠正
+        recorder.record_move(999, [0] * 226, [0] * 225, (7, 7))
+        # 验证数据已被记录（在 save_game_result 时写入文件）
+        self.assertEqual(len(recorder.current_game_data["history"]), 1)
     
     def test_save_game_result(self):
         """测试保存游戏结果"""
@@ -127,14 +125,17 @@ class TestDataRecorder(unittest.TestCase):
         self.assertEqual(first_move["position"], [7, 7])
     
     def test_save_game_result_wrong_game_id(self):
-        """测试保存结果时游戏编号错误"""
+        """测试保存结果时游戏编号错误会被自动纠正"""
         recorder = DataRecorder("random", self.test_dir)
         recorder.new_game()
         
-        with self.assertRaises(ValueError) as context:
-            recorder.save_game_result(999, 1, [0] * 226)
-        
-        self.assertIn("游戏编号不匹配", str(context.exception))
+        # CR-003 修复：不再抛异常，改为自动纠正并保存
+        recorder.save_game_result(999, 1, [0] * 226)
+        # 验证文件已创建
+        round_dir = recorder.get_round_dir()
+        game_dir = os.path.join(round_dir, str(recorder.current_game_id))
+        record_file = os.path.join(game_dir, "record.json")
+        self.assertTrue(os.path.exists(record_file))
     
     def test_full_game_record(self):
         """测试完整游戏记录流程"""
