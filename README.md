@@ -80,6 +80,47 @@ python ai/train_main.py --model <模型名称> --sample-dir <sample目录> [--ep
 python ai/train_main.py --model fc_v1 --sample-dir train_data/random_vs_random_1/1
 ```
 
+#### 自我对弈生成数据（不训练）
+
+```bash
+python ai/train_main.py --model <模型名称> --self-play --games <对局数> [--rate <衰减率>]
+```
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--self-play` | 仅生成训练数据（自我对弈+评价） | - |
+| `--games` | 对局数 | 100 |
+| `--rate` | 奖励衰减率 | 0.9 |
+
+```bash
+# 示例
+python ai/train_main.py --model cnn_v1 --self-play --games 100
+```
+
+> **提示**：运行结束后会输出训练数据目录路径，可用 `--train-from-dir` 继续训练。
+
+#### 从已有数据训练
+
+```bash
+python ai/train_main.py --model <模型名称> --train-from-dir <数据目录> [选项]
+```
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--train-from-dir` | 训练数据目录（自动发现其下所有 sample.json） | 必填 |
+| `--epochs` | 训练迭代数 | 1000 |
+| `--batch-size` | 每批次样本数（启用 mini-batch） | 无（全量更新） |
+| `--shuffle` | 每轮打乱数据顺序（mini-batch 有效） | False |
+| `--lr-scheduler` | 学习率调度：`step` / `plateau` | 无（固定学习率） |
+
+```bash
+# 示例
+python ai/train_main.py --model cnn_v1 --train-from-dir ai/train_data/cnn_v1_self_play_1 --epochs 1000
+python ai/train_main.py --model cnn_v1 --train-from-dir ai/train_data/cnn_v1_self_play_1 --epochs 1000 --batch-size 32 --shuffle
+```
+
+> **注意**：`--cycle`、`--self-play`、`--sample-dir`、`--train-from-dir` 四个模式互斥，只能选其一。
+
 #### 训练周期（自我对弈训练）
 
 ```bash
@@ -142,7 +183,7 @@ python ai/models/fc_v1/inspect_main.py --sample <sample.json路径> [--model-pat
 python tests/run_tests.py
 ```
 
-> 覆盖全部 499 个测试（基础测试 212 + AI 测试 287）
+> 覆盖全部 823 个测试
 
 ---
 
