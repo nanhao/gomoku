@@ -172,11 +172,19 @@ class BaseTrainer(ABC):
         self.model.network.train()
         return loss_logger
 
-    def _finalize_training(self, loss_logger, total_loss, count):
+    def _finalize_training(self, loss_logger, total_loss, count, save_model=False):
         """生成 loss 曲线图并返回平均损失"""
         if loss_logger:
             loss_logger.flush()  # 确保最后一批密集日志落盘
-            loss_logger.plot()
+            plot_path = loss_logger.plot()
+            if plot_path:
+                print(f"Loss 曲线图已生成: {plot_path}")
+        if save_model:
+            try:
+                model_path = self.model.save()
+                print(f"模型已保存: {model_path}")
+            except Exception as e:
+                print(f"模型保存失败: {e}")
         return total_loss / count if count > 0 else 0.0
 
     def train_single(self, sample_dir: str, epochs: int = 10, verbose: bool = False, **kwargs) -> float:
@@ -210,33 +218,43 @@ class BaseTrainer(ABC):
         setup_kwargs.setdefault('epochs', epochs)
         loss_logger = self._setup_training(**setup_kwargs)
         total_loss = 0.0
+        completed_epochs = 0
+        interrupted = False
 
-        for epoch in range(epochs):
-            self.optimizer.zero_grad()
+        try:
+            for epoch in range(epochs):
+                self.optimizer.zero_grad()
 
-            # 前向传播
-            outputs = self.model.network(inputs_tensor)
+                # 前向传播
+                outputs = self.model.network(inputs_tensor)
 
-            # 计算损失（使用 mask）
-            loss = self._masked_loss(outputs, targets_tensor, masks_expanded)
+                # 计算损失（使用 mask）
+                loss = self._masked_loss(outputs, targets_tensor, masks_expanded)
 
-            # 反向传播
-            loss.backward()
-            self.optimizer.step()
+                # 反向传播
+                loss.backward()
+                self.optimizer.step()
 
-            total_loss += loss.item()
+                total_loss += loss.item()
+                completed_epochs += 1
 
-            # 记录 loss 日志（每 LOSS_LOG_INTERVAL 个 epoch）
-            if (epoch + 1) % LOSS_LOG_INTERVAL == 0:
-                loss_logger.log(epoch + 1, loss.item())
-                if verbose:
-                    current_lr = self.optimizer.param_groups[0]['lr']
-                    print(f"Epoch {epoch + 1}/{epochs}, loss: {loss.item():.4f}, lr: {current_lr:.6f}")
+                # 记录 loss 日志（每 LOSS_LOG_INTERVAL 个 epoch）
+                if (epoch + 1) % LOSS_LOG_INTERVAL == 0:
+                    loss_logger.log(epoch + 1, loss.item())
+                    if verbose:
+                        current_lr = self.optimizer.param_groups[0]['lr']
+                        print(f"Epoch {epoch + 1}/{epochs}, loss: {loss.item():.4f}, lr: {current_lr:.6f}")
 
-            # 学习率衰减
-            self._step_lr_scheduler(loss.item())
+                # 学习率衰减
+                self._step_lr_scheduler(loss.item())
+        except KeyboardInterrupt:
+            interrupted = True
+            print("\n[中断] 检测到 Ctrl+C，正在保存模型和图表...")
 
-        return self._finalize_training(loss_logger, total_loss, epochs)
+        avg_loss = self._finalize_training(loss_logger, total_loss, completed_epochs, save_model=interrupted)
+        if interrupted:
+            print("[中断] 已保存当前进度，可以安全退出")
+        return avg_loss
 
     def train_batch(self, sample_dirs: List[str], epochs: int = 1000, verbose: bool = True, **kwargs) -> float:
         """批量训练：将多个 sample 文件数据合并，每个 epoch 只做一次参数更新。
@@ -272,33 +290,43 @@ class BaseTrainer(ABC):
         setup_kwargs.setdefault('epochs', epochs)
         loss_logger = self._setup_training(**setup_kwargs)
         total_loss = 0.0
+        completed_epochs = 0
+        interrupted = False
 
-        for epoch in range(epochs):
-            self.optimizer.zero_grad()
+        try:
+            for epoch in range(epochs):
+                self.optimizer.zero_grad()
 
-            # 前向传播（基于全部合并数据）
-            outputs = self.model.network(inputs_tensor)
+                # 前向传播（基于全部合并数据）
+                outputs = self.model.network(inputs_tensor)
 
-            # 计算损失（使用 mask）
-            loss = self._masked_loss(outputs, targets_tensor, masks_tensor)
+                # 计算损失（使用 mask）
+                loss = self._masked_loss(outputs, targets_tensor, masks_tensor)
 
-            # 反向传播，只做一次参数更新
-            loss.backward()
-            self.optimizer.step()
+                # 反向传播，只做一次参数更新
+                loss.backward()
+                self.optimizer.step()
 
-            total_loss += loss.item()
+                total_loss += loss.item()
+                completed_epochs += 1
 
-            # 记录 loss 日志（每 LOSS_LOG_INTERVAL 个 epoch）
-            if (epoch + 1) % LOSS_LOG_INTERVAL == 0:
-                loss_logger.log(epoch + 1, loss.item())
-                if verbose:
-                    current_lr = self.optimizer.param_groups[0]['lr']
-                    print(f"Epoch {epoch + 1}/{epochs}, loss: {loss.item():.4f}, lr: {current_lr:.6f}")
+                # 记录 loss 日志（每 LOSS_LOG_INTERVAL 个 epoch）
+                if (epoch + 1) % LOSS_LOG_INTERVAL == 0:
+                    loss_logger.log(epoch + 1, loss.item())
+                    if verbose:
+                        current_lr = self.optimizer.param_groups[0]['lr']
+                        print(f"Epoch {epoch + 1}/{epochs}, loss: {loss.item():.4f}, lr: {current_lr:.6f}")
 
-            # 学习率衰减
-            self._step_lr_scheduler(loss.item())
+                # 学习率衰减
+                self._step_lr_scheduler(loss.item())
+        except KeyboardInterrupt:
+            interrupted = True
+            print("\n[中断] 检测到 Ctrl+C，正在保存模型和图表...")
 
-        return self._finalize_training(loss_logger, total_loss, epochs)
+        avg_loss = self._finalize_training(loss_logger, total_loss, completed_epochs, save_model=interrupted)
+        if interrupted:
+            print("[中断] 已保存当前进度，可以安全退出")
+        return avg_loss
 
     def train_mini_batch(
         self,
@@ -349,79 +377,87 @@ class BaseTrainer(ABC):
         epoch_loss_sum = 0.0
         epoch_batches = 0
         global_step = 0
+        interrupted = False
 
         # 判断是否启用密集日志（mini-batch 模式下默认启用）
         dense_log = getattr(loss_logger, 'dense_log', False)
 
-        for epoch in range(epochs):
-            # 生成批次索引
-            if shuffle:
-                indices = torch.randperm(n_samples, device=self.device)
-            else:
-                indices = torch.arange(n_samples, device=self.device)
+        try:
+            for epoch in range(epochs):
+                # 生成批次索引
+                if shuffle:
+                    indices = torch.randperm(n_samples, device=self.device)
+                else:
+                    indices = torch.arange(n_samples, device=self.device)
 
-            # 按批次训练
-            for start_idx in range(0, n_samples, batch_size):
-                # 获取当前批次的索引
-                batch_indices = indices[start_idx:start_idx + batch_size]
+                # 按批次训练
+                for start_idx in range(0, n_samples, batch_size):
+                    # 获取当前批次的索引
+                    batch_indices = indices[start_idx:start_idx + batch_size]
 
-                # 获取批次数据
-                batch_inputs = inputs_tensor[batch_indices]
-                batch_targets = targets_tensor[batch_indices]
-                batch_masks = masks_tensor[batch_indices]
+                    # 获取批次数据
+                    batch_inputs = inputs_tensor[batch_indices]
+                    batch_targets = targets_tensor[batch_indices]
+                    batch_masks = masks_tensor[batch_indices]
 
-                # 前向传播
-                self.optimizer.zero_grad()
-                outputs = self.model.network(batch_inputs)
+                    # 前向传播
+                    self.optimizer.zero_grad()
+                    outputs = self.model.network(batch_inputs)
 
-                # 计算损失（使用 mask）
-                loss = self._masked_loss(outputs, batch_targets, batch_masks)
+                    # 计算损失（使用 mask）
+                    loss = self._masked_loss(outputs, batch_targets, batch_masks)
 
-                # 反向传播
-                loss.backward()
+                    # 反向传播
+                    loss.backward()
 
-                # 计算梯度 L2 范数（用于密集日志）
-                grad_norm = 0.0
+                    # 计算梯度 L2 范数（用于密集日志）
+                    grad_norm = 0.0
+                    if dense_log and loss_logger is not None:
+                        grad_norm = sum(
+                            p.grad.norm().item()
+                            for p in self.model.network.parameters()
+                            if p.grad is not None
+                        )
+
+                    self.optimizer.step()
+
+                    total_loss += loss.item()
+                    total_batches += 1
+                    epoch_loss_sum += loss.item()
+                    epoch_batches += 1
+
+                    # 密集日志：每个 batch 记录一次
+                    if dense_log and loss_logger is not None:
+                        loss_logger.log_dense(global_step, loss.item(), grad_norm)
+                        global_step += 1
+
+                # 稀疏日志：每 LOSS_LOG_INTERVAL 个 epoch 记录该 epoch 的平均 loss
+                if (epoch + 1) % LOSS_LOG_INTERVAL == 0:
+                    epoch_avg_loss = epoch_loss_sum / epoch_batches if epoch_batches > 0 else 0.0
+                    if loss_logger and not dense_log:
+                        loss_logger.log(epoch + 1, epoch_avg_loss)
+                    if verbose:
+                        current_lr = self.optimizer.param_groups[0]['lr']
+                        print(f"Epoch {epoch + 1}/{epochs}, avg_loss: {epoch_avg_loss:.4f}, lr: {current_lr:.6f}")
+
+                # 密集日志：每个 epoch 结束后批量写入
                 if dense_log and loss_logger is not None:
-                    grad_norm = sum(
-                        p.grad.norm().item()
-                        for p in self.model.network.parameters()
-                        if p.grad is not None
-                    )
+                    loss_logger.flush()
 
-                self.optimizer.step()
-
-                total_loss += loss.item()
-                total_batches += 1
-                epoch_loss_sum += loss.item()
-                epoch_batches += 1
-
-                # 密集日志：每个 batch 记录一次
-                if dense_log and loss_logger is not None:
-                    loss_logger.log_dense(global_step, loss.item(), grad_norm)
-                    global_step += 1
-
-            # 稀疏日志：每 LOSS_LOG_INTERVAL 个 epoch 记录该 epoch 的平均 loss
-            if (epoch + 1) % LOSS_LOG_INTERVAL == 0:
+                # 学习率衰减
                 epoch_avg_loss = epoch_loss_sum / epoch_batches if epoch_batches > 0 else 0.0
-                if loss_logger and not dense_log:
-                    loss_logger.log(epoch + 1, epoch_avg_loss)
-                if verbose:
-                    current_lr = self.optimizer.param_groups[0]['lr']
-                    print(f"Epoch {epoch + 1}/{epochs}, avg_loss: {epoch_avg_loss:.4f}, lr: {current_lr:.6f}")
+                self._step_lr_scheduler(epoch_avg_loss)
 
-            # 密集日志：每个 epoch 结束后批量写入
-            if dense_log and loss_logger is not None:
-                loss_logger.flush()
+                epoch_loss_sum = 0.0
+                epoch_batches = 0
+        except KeyboardInterrupt:
+            interrupted = True
+            print("\n[中断] 检测到 Ctrl+C，正在保存模型和图表...")
 
-            # 学习率衰减
-            epoch_avg_loss = epoch_loss_sum / epoch_batches if epoch_batches > 0 else 0.0
-            self._step_lr_scheduler(epoch_avg_loss)
-
-            epoch_loss_sum = 0.0
-            epoch_batches = 0
-
-        return self._finalize_training(loss_logger, total_loss, total_batches)
+        avg_loss = self._finalize_training(loss_logger, total_loss, total_batches, save_model=interrupted)
+        if interrupted:
+            print("[中断] 已保存当前进度，可以安全退出")
+        return avg_loss
 
     def _step_lr_scheduler(self, loss=None):
         """执行学习率衰减步进
