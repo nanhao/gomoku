@@ -67,15 +67,15 @@ class TestReplayViewer:
         """测试后清理"""
         try:
             self.root.destroy()
-        except Exception as e:
-            raise unittest.SkipTest(f"GUI环境不可用: {e}")
+        except tk.TclError:
+            pass  # 窗口可能已被销毁，忽略
 
         # 删除临时文件
         import shutil
         try:
             shutil.rmtree(self.temp_dir)
-        except Exception as e:
-            raise unittest.SkipTest(f"GUI环境不可用: {e}")
+        except tk.TclError:
+            pass  # 窗口可能已被销毁，忽略
 
     def test_init_with_record(self):
         """测试使用 record 文件初始化"""
@@ -263,8 +263,8 @@ class TestReplayWindow:
         import shutil
         try:
             shutil.rmtree(self.temp_dir)
-        except Exception as e:
-            raise unittest.SkipTest(f"GUI环境不可用: {e}")
+        except tk.TclError:
+            pass  # 窗口可能已被销毁，忽略
 
     def test_init(self):
         """测试初始化"""

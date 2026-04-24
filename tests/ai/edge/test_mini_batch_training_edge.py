@@ -139,20 +139,15 @@ class TestMiniBatchTrainingEdge(unittest.TestCase):
         dir1 = self._create_sample_dir("s1")
         trainer = FCv1Trainer(fresh=True)
         
-        # epochs=0 应该返回 0 或不报错
-        # 根据实现，可能返回 0 或抛出异常
-        try:
-            result = trainer.train_mini_batch(
-                [dir1],
-                epochs=0,
-                batch_size=2,
-                verbose=False
-            )
-            # 如果返回了，应该是有效值
-            self.assertIsInstance(result, (int, float))
-        except ZeroDivisionError:
-            # 如果样本数为0，可能除零
-            pass
+        # epochs=0 应该返回 0（没有训练迭代）
+        result = trainer.train_mini_batch(
+            [dir1],
+            epochs=0,
+            batch_size=2,
+            verbose=False
+        )
+        # epochs=0 时 total_batches=0，应返回 0.0
+        self.assertEqual(result, 0.0)
     
     def test_shuffle_false_consistent_order(self):
         """[edge] shuffle=False 时数据顺序固定

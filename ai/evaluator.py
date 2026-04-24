@@ -17,6 +17,7 @@ import math
 from typing import List, Dict, Tuple
 from copy import deepcopy
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures.process import BrokenProcessPool
 
 from ai.constants import AI_DATA_DIR, TRAIN_DATA_DIR
 from ai.shape_detector import detect_shapes as _detect_shapes, detect_single_direction as _detect_single_direction
@@ -357,10 +358,41 @@ class Evaluator:
             }
 
             # 收集结果，个别失败不影响其他任务
+            broken_pool = False
             for future in as_completed(future_to_file):
                 record_file = future_to_file[future]
                 try:
                     sample_file = future.result()
+                    sample_files.append(sample_file)
+                except BrokenProcessPool as e:
+                    # Worker 进程被杀死（如 OOM），回退到串行模式
+                    errors.append((record_file, e))
+                    print(f"进程池崩溃（可能是内存不足），回退到串行模式: {e}")
+                    broken_pool = True
+                    break
+                except Exception as e:
+                    errors.append((record_file, e))
+                    print(f"评价失败 {record_file}: {e}")
+
+        # 如果进程池崩溃，回退到串行模式重试剩余文件
+        if broken_pool:
+            remaining_files = [
+                f for f in record_files
+                if f not in {sf.rsplit(os.sep, 1)[0] + os.sep + "record.json" for sf in sample_files}
+            ]
+            # 简化：用未成功的 record_files 减去已成功的
+            successful_record_files = set()
+            for sf in sample_files:
+                # sample_file 路径推导出 record_file
+                rel = os.path.relpath(sf, self.train_data_dir)
+                rf = os.path.join(self.ai_data_dir, rel.replace("sample.json", "record.json"))
+                successful_record_files.add(rf)
+            remaining_files = [f for f in record_files if f not in successful_record_files]
+
+            print(f"串行模式处理剩余 {len(remaining_files)} 个文件...")
+            for record_file in remaining_files:
+                try:
+                    sample_file = self.evaluate_record(record_file)
                     sample_files.append(sample_file)
                 except Exception as e:
                     errors.append((record_file, e))

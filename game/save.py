@@ -2,6 +2,7 @@
 
 import json
 import os
+import copy
 from datetime import datetime
 
 
@@ -18,8 +19,8 @@ class GomokuSave:
         
         不修改传入的 game_state 字典，创建副本后写入文件。
         """
-        # 创建副本避免修改调用者的字典
-        state_copy = dict(game_state)
+        # 创建深拷贝避免外部修改影响存档
+        state_copy = copy.deepcopy(game_state)
         # 确保存档名称存在
         if "name" not in state_copy:
             state_copy["name"] = save_name

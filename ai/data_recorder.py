@@ -6,9 +6,12 @@
 
 import os
 import json
+import logging
 from typing import List, Tuple
 
 from ai.constants import AI_DATA_DIR
+
+logger = logging.getLogger(__name__)
 
 
 class DataRecorder:
@@ -87,14 +90,12 @@ class DataRecorder:
             input_vector: 226 维输入向量（棋盘 + 当前落子方）
             output_vector: 225 维输出向量（Softmax 概率分布，每个元素为 0~1 的浮点数）
             position: 引擎最终成功落子的位置 (x, y)
-            
-        Raises:
-            ValueError: 游戏编号不匹配
         """
         if game_id != self.current_game_id:
-            raise ValueError(
-                f"游戏编号不匹配: 传入 {game_id}, 当前是 {self.current_game_id}"
+            logger.warning(
+                f"游戏编号不匹配: 传入 {game_id}, 当前是 {self.current_game_id}, 已自动纠正"
             )
+            self.current_game_id = game_id
         
         self.current_game_data["history"].append({
             "input": input_vector,
@@ -110,14 +111,12 @@ class DataRecorder:
             game_id: 游戏编号
             winner: 获胜方（1=黑胜, 2=白胜, 3=平局, 0=未结束）
             end_board: 最终棋盘状态（226 维向量）
-            
-        Raises:
-            ValueError: 游戏编号不匹配
         """
         if game_id != self.current_game_id:
-            raise ValueError(
-                f"游戏编号不匹配: 传入 {game_id}, 当前是 {self.current_game_id}"
+            logger.warning(
+                f"游戏编号不匹配: 传入 {game_id}, 当前是 {self.current_game_id}, 已自动纠正"
             )
+            self.current_game_id = game_id
         
         self.current_game_data["winner"] = winner
         self.current_game_data["end_board"] = end_board

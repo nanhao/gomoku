@@ -75,14 +75,18 @@ class BaseTrainer(ABC):
         else:
             self.model = self._create_model(fresh)
 
-        # 将模型移到 GPU（如果可用）
-        self.model.network.to(self.device)
+        # 将模型移到 GPU（如果可用且模型有神经网络）
+        if self.model.network is not None:
+            self.model.network.to(self.device)
 
         # 初始化优化器（Adam）
-        self.optimizer = optim.Adam(
-            self.model.network.parameters(),
-            lr=self.DEFAULT_LR
-        )
+        if self.model.network is not None:
+            self.optimizer = optim.Adam(
+                self.model.network.parameters(),
+                lr=self.DEFAULT_LR
+            )
+        else:
+            self.optimizer = None
 
         # 损失函数使用 L1Loss（MAE）
         self.criterion = nn.L1Loss(reduction='none')
@@ -113,6 +117,8 @@ class BaseTrainer(ABC):
 
     def _setup_lr_scheduler(self):
         """根据 lr_scheduler_type 初始化学习率调度器"""
+        if self.optimizer is None:
+            return
         if self.lr_scheduler_type == "step":
             self.lr_scheduler = optim.lr_scheduler.StepLR(
                 self.optimizer,
@@ -169,7 +175,7 @@ class BaseTrainer(ABC):
             loss_logger = LossLogger(model_name=self.model_name, **kwargs)
         else:
             loss_logger = LossLogger(model_name=self.model_name)
-        self.model.network.train()
+        self.model.network.train() if self.model.network is not None else None
         return loss_logger
 
     def _finalize_training(self, loss_logger, total_loss, count, save_model=False):

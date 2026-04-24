@@ -14,8 +14,8 @@ import torch
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from ai.models.cnn_v1.trainer import CNNTrainer
-from ai.models.cnn_v1.model import CNNModel
+from ai.models.cnn_v1.trainer import CNNV1Trainer
+from ai.models.cnn_v1.model import CNNV1Model
 from tests.ai.helpers import create_sample_dir, create_output
 
 
@@ -63,21 +63,21 @@ class TestCNNTrainer(unittest.TestCase):
     
     def test_trainer_initialization_without_model(self):
         """测试不传入模型时初始化训练器"""
-        trainer = CNNTrainer()
+        trainer = CNNV1Trainer()
         self.assertIsNotNone(trainer)
         self.assertIsNotNone(trainer.model)
         self.assertEqual(trainer.model.name, "cnn_v1")
     
     def test_trainer_initialization_with_model(self):
         """测试传入模型时初始化训练器"""
-        model = CNNModel()
-        trainer = CNNTrainer(model)
+        model = CNNV1Model()
+        trainer = CNNV1Trainer(model)
         self.assertIsNotNone(trainer)
         self.assertEqual(trainer.model, model)
     
     def test_trainer_train_single(self):
         """测试单轮次训练"""
-        trainer = CNNTrainer()
+        trainer = CNNV1Trainer()
         
         # 训练
         loss = trainer.train_single(self.sample_dir)
@@ -88,7 +88,7 @@ class TestCNNTrainer(unittest.TestCase):
     
     def test_trainer_train_single_returns_loss(self):
         """测试单轮次训练返回损失值"""
-        trainer = CNNTrainer()
+        trainer = CNNV1Trainer()
         
         loss = trainer.train_single(self.sample_dir)
         
@@ -98,7 +98,7 @@ class TestCNNTrainer(unittest.TestCase):
     
     def test_trainer_load_sample_data(self):
         """测试加载 sample 数据"""
-        trainer = CNNTrainer()
+        trainer = CNNV1Trainer()
         sample_path = os.path.join(self.sample_dir, "sample.json")
         
         data = trainer._load_sample_data(sample_path)
@@ -111,7 +111,7 @@ class TestCNNTrainer(unittest.TestCase):
     
     def test_trainer_prepare_tensors(self):
         """测试准备张量"""
-        trainer = CNNTrainer()
+        trainer = CNNV1Trainer()
         sample_path = os.path.join(self.sample_dir, "sample.json")
         sample_data = trainer._load_sample_data(sample_path)
         
@@ -129,7 +129,7 @@ class TestCNNTrainer(unittest.TestCase):
     
     def test_trainer_compute_loss(self):
         """测试计算损失"""
-        trainer = CNNTrainer()
+        trainer = CNNV1Trainer()
         
         estimated = [0.1] * 225
         sample = [0.0] * 225
@@ -144,7 +144,7 @@ class TestCNNTrainer(unittest.TestCase):
     
     def test_trainer_train_batch(self):
         """测试批量训练"""
-        trainer = CNNTrainer()
+        trainer = CNNV1Trainer()
         
         # 创建第二个 sample 目录
         sample_dir2 = os.path.join(self.temp_dir, "sample_data2")
@@ -169,19 +169,19 @@ class TestCNNTrainer(unittest.TestCase):
     
     def test_trainer_model_name(self):
         """测试 model_name 属性"""
-        trainer = CNNTrainer()
+        trainer = CNNV1Trainer()
         self.assertEqual(trainer.model_name, "cnn_v1")
     
     def test_trainer_inherits_base_trainer(self):
         """测试 CNNTrainer 继承自 BaseTrainer"""
         from ai.base_trainer import BaseTrainer
-        self.assertTrue(issubclass(CNNTrainer, BaseTrainer))
+        self.assertTrue(issubclass(CNNV1Trainer, BaseTrainer))
     
     def test_trainer_fresh_parameter(self):
         """测试 fresh 参数创建新模型"""
-        trainer = CNNTrainer(fresh=True)
+        trainer = CNNV1Trainer(fresh=True)
         self.assertIsNotNone(trainer.model)
-        self.assertIsInstance(trainer.model, CNNModel)
+        self.assertIsInstance(trainer.model, CNNV1Model)
 
 
 class TestCNNTrainerEdgeCases(unittest.TestCase):
@@ -197,7 +197,7 @@ class TestCNNTrainerEdgeCases(unittest.TestCase):
     
     def test_train_single_with_nonexistent_sample(self):
         """测试：sample 文件不存在时抛出 FileNotFoundError"""
-        trainer = CNNTrainer()
+        trainer = CNNV1Trainer()
         nonexistent_dir = os.path.join(self.temp_dir, "nonexistent")
         
         with self.assertRaises(FileNotFoundError):
@@ -205,7 +205,7 @@ class TestCNNTrainerEdgeCases(unittest.TestCase):
     
     def test_train_batch_with_empty_list(self):
         """测试：空 sample_dirs 列表抛出 ValueError"""
-        trainer = CNNTrainer()
+        trainer = CNNV1Trainer()
         
         with self.assertRaises(ValueError) as context:
             trainer.train_batch([])
@@ -214,7 +214,7 @@ class TestCNNTrainerEdgeCases(unittest.TestCase):
     
     def test_load_sample_data_with_invalid_json(self):
         """测试：无效的 JSON 格式抛出 JSONDecodeError"""
-        trainer = CNNTrainer()
+        trainer = CNNV1Trainer()
         invalid_json_path = os.path.join(self.temp_dir, "invalid.json")
         
         with open(invalid_json_path, 'w', encoding='utf-8') as f:

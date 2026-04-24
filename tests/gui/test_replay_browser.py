@@ -53,8 +53,8 @@ class TestRoundSelector:
         """清理临时目录"""
         try:
             shutil.rmtree(self.tmp_dir)
-        except Exception as e:
-            raise unittest.SkipTest(f"GUI环境不可用: {e}")
+        except Exception:
+            pass  # 清理失败不影响测试结果
 
     def _create_selector(self, on_select=None):
         """创建 RoundSelector 实例（无父窗口，使用 tk.Tk()）"""
@@ -126,8 +126,8 @@ class TestGameSelector:
         """清理临时目录"""
         try:
             shutil.rmtree(self.tmp_dir)
-        except Exception as e:
-            raise unittest.SkipTest(f"GUI环境不可用: {e}")
+        except Exception:
+            pass  # 清理失败不影响测试结果
 
     def _create_selector(self, round_dir=None, on_select=None):
         """创建 GameSelector 实例"""

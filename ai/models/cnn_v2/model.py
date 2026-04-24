@@ -26,7 +26,7 @@ import torch.nn as nn
 from ai.base_model import BaseModel
 
 
-class CNNNetwork(nn.Module):
+class CNNV2Network(nn.Module):
     """CNN v2 神经网络结构
 
     轻量化卷积神经网络用于五子棋棋盘特征提取和落子位置预测。
@@ -43,7 +43,7 @@ class CNNNetwork(nn.Module):
 
     def __init__(self):
         """初始化网络结构"""
-        super(CNNNetwork, self).__init__()
+        super(CNNV2Network, self).__init__()
 
         # 卷积层部分（统一 64 通道，进一步轻量化）
         # 输入: 3通道 (黑棋、白棋、当前方), 15x15
@@ -109,7 +109,7 @@ class CNNNetwork(nn.Module):
         return x
 
 
-class CNNModel(BaseModel):
+class CNNV2Model(BaseModel):
     """CNN v2 模型
 
     卷积神经网络模型，用于预测五子棋落子位置的概率。
@@ -131,10 +131,10 @@ class CNNModel(BaseModel):
             model_path: 模型文件路径，如果存在则加载
             fresh: 是否强制创建新模型（不加载已保存的模型）
         """
-        super(CNNModel, self).__init__()
+        super(CNNV2Model, self).__init__()
 
         # 创建神经网络
-        self.network = CNNNetwork()
+        self.network = CNNV2Network()
 
         # GPU 移动由 BaseTrainer 统一管理，模型创建时保持在 CPU
 

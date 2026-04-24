@@ -178,8 +178,13 @@ class AIGameManager:
                 board_vector = AIEngine.board_to_vector(board, player)
                 probs = engine.model.predict(board_vector)
                 
-                # AI 落子（传入预计算的 probs，避免重复调用 model.predict）
-                x, y = engine.get_move(board, player, probs=probs)
+                try:
+                    # AI 落子（传入预计算的 probs，避免重复调用 model.predict）
+                    x, y = engine.get_move(board, player, probs=probs)
+                except ValueError as e:
+                    # 棋盘已满，无法落子，结束当前对局
+                    print(f"AI对局 {game_num} 棋盘已满: {e}")
+                    break
                 
                 # 记录数据
                 recorder.record_move(current_game_id, board_vector, probs, (x, y))
@@ -274,8 +279,13 @@ class AIGameManager:
                 board_vector = AIEngine.board_to_vector(board, player)
                 probs = engine.model.predict(board_vector)
                 
-                # AI 落子（传入预计算的 probs，避免重复调用 model.predict）
-                x, y = engine.get_move(board, player, probs=probs)
+                try:
+                    # AI 落子（传入预计算的 probs，避免重复调用 model.predict）
+                    x, y = engine.get_move(board, player, probs=probs)
+                except ValueError as e:
+                    # 棋盘已满，无法落子，结束当前对局
+                    print(f"AI对局 {game_num} 棋盘已满: {e}")
+                    break
                 
                 # 记录数据
                 recorder.record_move(current_game_id, board_vector, probs, (x, y))

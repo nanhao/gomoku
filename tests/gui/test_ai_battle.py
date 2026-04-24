@@ -31,8 +31,8 @@ class TestAIBattleConfigDialog:
         """销毁窗口"""
         try:
             self.root.destroy()
-        except Exception as e:
-            raise unittest.SkipTest(f"GUI环境不可用: {e}")
+        except tk.TclError:
+            pass  # 窗口可能已被销毁，忽略
 
     def test_init_result_is_none(self):
         """初始化后 result 应为 None"""
@@ -121,12 +121,12 @@ class TestAIBattleConfigDialog:
             try:
                 dialog._start_battle()
             except Exception as e:
-                raise unittest.SkipTest(f"GUI环境不可用: {e}")
+                self.fail(f"对战流程异常: {e}")
         assert dialog.result is None or dialog.result is not None  # 不崩溃即可
         try:
             dialog.dialog.destroy()
-        except Exception as e:
-            raise unittest.SkipTest(f"GUI环境不可用: {e}")
+        except tk.TclError:
+            pass  # 窗口可能已被销毁，忽略
         self._destroy()
 
     def test_start_battle_out_of_range(self):
@@ -137,12 +137,12 @@ class TestAIBattleConfigDialog:
             try:
                 dialog._start_battle()
             except Exception as e:
-                raise unittest.SkipTest(f"GUI环境不可用: {e}")
+                self.fail(f"对战流程异常: {e}")
         assert dialog.result is None
         try:
             dialog.dialog.destroy()
-        except Exception as e:
-            raise unittest.SkipTest(f"GUI环境不可用: {e}")
+        except tk.TclError:
+            pass  # 窗口可能已被销毁，忽略
         self._destroy()
 
 
@@ -159,8 +159,8 @@ class TestAIBattleProgressWindow:
         """销毁窗口"""
         try:
             window.root.destroy()
-        except Exception as e:
-            raise unittest.SkipTest(f"GUI环境不可用: {e}")
+        except tk.TclError:
+            pass  # 窗口可能已被销毁，忽略
 
     def test_init_num_games_stored(self):
         """num_games 应被正确存储"""

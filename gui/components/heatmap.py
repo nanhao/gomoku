@@ -170,26 +170,32 @@ class HeatmapCanvas:
             self.tooltip_window = None
     
     def create_tooltip(self, x, y, text):
-        """创建 tooltip 窗口"""
-        self._hide_tooltip()
-        
-        self.tooltip_window = tk.Toplevel(self.parent)
-        self.tooltip_window.wm_overrideredirect(True)
-        self.tooltip_window.wm_geometry(f"+{x + 15}+{y + 15}")
-        self.tooltip_window.configure(bg="#FFF8DC")
-        
-        label = tk.Label(
-            self.tooltip_window,
-            text=text,
-            font=("微软雅黑", 9),
-            bg="#FFF8DC",
-            fg="#5D4E37",
-            relief=tk.SOLID,
-            bd=1,
-            padx=8,
-            pady=5
-        )
-        label.pack()
+        """创建 tooltip 窗口，复用已有窗口避免内存泄漏"""
+        if self.tooltip_window and self.tooltip_window.winfo_exists():
+            # 复用已有窗口，只更新位置和内容
+            self.tooltip_window.wm_geometry(f"+{x + 15}+{y + 15}")
+            # 更新标签文本
+            for child in self.tooltip_window.winfo_children():
+                child.configure(text=text)
+        else:
+            # 创建新的 tooltip 窗口
+            self.tooltip_window = tk.Toplevel(self.parent)
+            self.tooltip_window.wm_overrideredirect(True)
+            self.tooltip_window.wm_geometry(f"+{x + 15}+{y + 15}")
+            self.tooltip_window.configure(bg="#FFF8DC")
+            
+            label = tk.Label(
+                self.tooltip_window,
+                text=text,
+                font=("微软雅黑", 9),
+                bg="#FFF8DC",
+                fg="#5D4E37",
+                relief=tk.SOLID,
+                bd=1,
+                padx=8,
+                pady=5
+            )
+            label.pack()
 
 
 class HeatmapLegend:

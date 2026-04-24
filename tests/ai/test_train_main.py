@@ -25,12 +25,12 @@ class TestGetTrainer(unittest.TestCase):
         self.assertIsInstance(trainer, FCv1Trainer)
     
     def test_get_trainer_returns_cnn_trainer(self):
-        """测试：cnn_v1 返回 CNNTrainer"""
-        from ai.models.cnn_v1.trainer import CNNTrainer
+        """测试：cnn_v1 返回 CNNV1Trainer"""
+        from ai.models.cnn_v1.trainer import CNNV1Trainer
         
         trainer = get_trainer("cnn_v1")
         
-        self.assertIsInstance(trainer, CNNTrainer)
+        self.assertIsInstance(trainer, CNNV1Trainer)
     
     def test_get_trainer_raises_for_invalid_model(self):
         """测试：无效模型名抛出 ValueError"""

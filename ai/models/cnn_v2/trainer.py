@@ -6,10 +6,10 @@
 from typing import Optional, List
 import torch
 from ai.base_trainer import BaseTrainer
-from .model import CNNModel
+from .model import CNNV2Model
 
 
-class CNNTrainer(BaseTrainer):
+class CNNV2Trainer(BaseTrainer):
     """CNN v2 训练器
 
     负责训练 CNN v2 模型，支持单轮次训练和训练周期模式。
@@ -21,16 +21,16 @@ class CNNTrainer(BaseTrainer):
     - 使用 fresh=True 可强制创建新模型
     """
 
-    def _create_model(self, fresh: bool) -> CNNModel:
+    def _create_model(self, fresh: bool) -> CNNV2Model:
         """创建 CNN v2 模型实例
 
         Args:
             fresh: 是否创建新模型（不加载已保存的模型）
 
         Returns:
-            CNNModel 实例
+            CNNV2Model 实例
         """
-        return CNNModel(fresh=fresh)
+        return CNNV2Model(fresh=fresh)
 
     @property
     def model_name(self) -> str:
@@ -58,7 +58,7 @@ class CNNTrainer(BaseTrainer):
         batch_tensors = []
 
         for board_vector in inputs:
-            # 使用 CNNModel 的转换方法
+            # 使用 CNNV2Model 的转换方法
             tensor = self.model._vector_to_tensor(board_vector)
             batch_tensors.append(tensor)
 

@@ -81,8 +81,8 @@ class TestGomokuGUIOnBoardClick:
     def teardown_method(self):
         try:
             self.root.destroy()
-        except Exception as e:
-            raise unittest.SkipTest(f"GUI环境不可用: {e}")
+        except tk.TclError:
+            pass  # 窗口可能已被销毁，忽略
 
     def test_on_board_click_no_game_does_not_crash(self):
         """无游戏时点击不应崩溃"""
@@ -143,8 +143,8 @@ class TestGomokuGUIPveAiPlayer2:
     def teardown_method(self):
         try:
             self.root.destroy()
-        except Exception as e:
-            raise unittest.SkipTest(f"GUI环境不可用: {e}")
+        except tk.TclError:
+            pass  # 窗口可能已被销毁，忽略
 
     def test_ai_player_is_2_when_human_plays_black(self):
         """玩家选黑时，AI 应执白（ai_player=2）"""
@@ -201,8 +201,8 @@ class TestGomokuGUIPveAiPlayer1:
     def teardown_method(self):
         try:
             self.root.destroy()
-        except Exception as e:
-            raise unittest.SkipTest(f"GUI环境不可用: {e}")
+        except tk.TclError:
+            pass  # 窗口可能已被销毁，忽略
 
     def test_ai_player_is_1_when_human_plays_white(self):
         """玩家选白时，AI 应执黑（ai_player=1）"""
@@ -236,8 +236,8 @@ class TestGomokuGUIPveAiFirstMove:
     def teardown_method(self):
         try:
             self.root.destroy()
-        except Exception as e:
-            raise unittest.SkipTest(f"GUI环境不可用: {e}")
+        except tk.TclError:
+            pass  # 窗口可能已被销毁，忽略
 
     def test_start_game_with_ai_first_creates_game_and_moves(self):
         """AI先走时，_start_game_with_ai_first 应创建游戏并执行 AI 落子"""
