@@ -4,6 +4,7 @@ import sys
 import os
 import tkinter as tk
 import unittest
+from unittest.mock import patch, MagicMock
 
 # 确保项目根目录在路径中
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -13,15 +14,15 @@ if project_root not in sys.path:
 from gui.components.game_board import GameBoard
 
 
-class TestGameBoard:
+class TestGameBoard(unittest.TestCase):
     """测试棋盘组件"""
 
-    def setup_method(self):
+    def setUp(self):
         """测试前准备"""
         self.root = tk.Tk()
         self.root.withdraw()  # 隐藏窗口
 
-    def teardown_method(self):
+    def tearDown(self):
         """测试后清理"""
         try:
             self.root.destroy()
@@ -55,50 +56,90 @@ class TestGameBoard:
         assert board.canvas is not None
 
     def test_draw_pieces_empty(self):
-        """测试绘制空棋盘"""
+        """测试绘制空棋盘 - 验证 canvas 上无棋子图形对象"""
         board = GameBoard(self.root)
         board_state = [[0] * 15 for _ in range(15)]
 
+        # 先记录 draw_board 后的图形对象数量（只有棋盘线和星位）
+        board.draw_board()
+        count_before = len(board.canvas.find_all())
+
+        # 再绘制空棋盘上的棋子（没有棋子）
         board.draw_pieces(board_state)
-        assert True
+        count_after = len(board.canvas.find_all())
+
+        # 空棋盘不应新增任何棋子图形对象
+        self.assertEqual(count_after, count_before)
 
     def test_draw_pieces_with_black(self):
-        """测试绘制黑棋"""
+        """测试绘制黑棋 - 验证 canvas 上新增了图形对象"""
         board = GameBoard(self.root)
         board_state = [[0] * 15 for _ in range(15)]
         board_state[7][7] = 1  # 黑棋在中心
 
+        # 先记录 draw_board 后的图形对象数量
+        board.draw_board()
+        count_before = len(board.canvas.find_all())
+
+        # 再绘制带黑棋的棋盘
         board.draw_pieces(board_state)
-        assert True
+        count_after = len(board.canvas.find_all())
+
+        # 应新增图形对象（每个棋子绘制 2 个 oval：阴影 + 主体）
+        self.assertGreater(count_after, count_before)
 
     def test_draw_pieces_with_white(self):
-        """测试绘制白棋"""
+        """测试绘制白棋 - 验证 canvas 上新增了图形对象"""
         board = GameBoard(self.root)
         board_state = [[0] * 15 for _ in range(15)]
         board_state[7][7] = 2  # 白棋在中心
 
+        # 先记录 draw_board 后的图形对象数量
+        board.draw_board()
+        count_before = len(board.canvas.find_all())
+
+        # 再绘制带白棋的棋盘
         board.draw_pieces(board_state)
-        assert True
+        count_after = len(board.canvas.find_all())
+
+        # 应新增图形对象（每个棋子绘制 2 个 oval：阴影 + 主体）
+        self.assertGreater(count_after, count_before)
 
     def test_draw_pieces_with_last_move(self):
-        """测试绘制最后落子标记"""
+        """测试绘制最后落子标记 - 验证 canvas 上有图形对象"""
         board = GameBoard(self.root)
         board_state = [[0] * 15 for _ in range(15)]
         board_state[7][7] = 1
 
+        # 先记录 draw_board 后的图形对象数量
+        board.draw_board()
+        count_before = len(board.canvas.find_all())
+
+        # 再绘制带黑棋和最后落子标记的棋盘
         board.draw_pieces(board_state, last_move=(7, 7))
-        assert True
+        count_after = len(board.canvas.find_all())
+
+        # 应新增图形对象（1 个棋子 2 个 oval + 1 个最后落子标记 oval）
+        self.assertGreater(count_after, count_before)
 
     def test_draw_pieces_multiple(self):
-        """测试绘制多个棋子"""
+        """测试绘制多个棋子 - 验证 canvas 上有图形对象"""
         board = GameBoard(self.root)
         board_state = [[0] * 15 for _ in range(15)]
         board_state[7][7] = 1  # 黑
         board_state[7][8] = 2  # 白
         board_state[8][7] = 1  # 黑
 
+        # 先记录 draw_board 后的图形对象数量
+        board.draw_board()
+        count_before = len(board.canvas.find_all())
+
+        # 再绘制带 3 个棋子的棋盘
         board.draw_pieces(board_state, last_move=(8, 7))
-        assert True
+        count_after = len(board.canvas.find_all())
+
+        # 应新增图形对象（3 个棋子各 2 个 oval + 1 个最后落子标记 oval）
+        self.assertGreater(count_after, count_before)
 
     def test_constants(self):
         """测试常量定义"""

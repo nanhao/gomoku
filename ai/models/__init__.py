@@ -10,6 +10,7 @@
 from .random import RandomModel
 from .fc_v1 import FCv1Model, FCv1Trainer
 from .cnn_v1 import CNNV1Model, CNNV1Trainer
+from .cnn_v2 import CNNV2Model, CNNV2Trainer
 
 __all__ = [
     "RandomModel",
@@ -17,4 +18,6 @@ __all__ = [
     "FCv1Trainer",
     "CNNV1Model",
     "CNNV1Trainer",
+    "CNNV2Model",
+    "CNNV2Trainer",
 ]

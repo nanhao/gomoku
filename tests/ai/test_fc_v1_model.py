@@ -6,6 +6,7 @@
 import os
 import sys
 import unittest
+import unittest.mock
 import tempfile
 import shutil
 
@@ -86,15 +87,16 @@ class TestFCv1Model(unittest.TestCase):
         """测试前准备"""
         self.temp_dir = tempfile.mkdtemp()
         self.model_path = os.path.join(self.temp_dir, "test_model.pth")
-        # 保存原始 DEFAULT_MODEL_PATH
-        self.original_default_path = FCv1Model.DEFAULT_MODEL_PATH
-        # 设置临时默认路径，防止修改真实模型文件
-        FCv1Model.DEFAULT_MODEL_PATH = os.path.join(self.temp_dir, "fc_v1.pth")
-    
+        # 使用 patch.object 隔离默认模型路径，防止修改真实模型文件
+        self._patcher = unittest.mock.patch.object(
+            FCv1Model, 'DEFAULT_MODEL_PATH',
+            os.path.join(self.temp_dir, "fc_v1.pth")
+        )
+        self._patcher.start()
+
     def tearDown(self):
         """测试后清理"""
-        # 恢复原始 DEFAULT_MODEL_PATH
-        FCv1Model.DEFAULT_MODEL_PATH = self.original_default_path
+        self._patcher.stop()
         shutil.rmtree(self.temp_dir, ignore_errors=True)
     
     def test_model_name(self):
@@ -275,15 +277,16 @@ class TestFCv1ModelDefaultLoad(unittest.TestCase):
     def setUp(self):
         """测试前准备"""
         self.temp_dir = tempfile.mkdtemp()
-        # 保存原始 DEFAULT_MODEL_PATH
-        self.original_default_path = FCv1Model.DEFAULT_MODEL_PATH
-        # 设置临时默认路径
-        FCv1Model.DEFAULT_MODEL_PATH = os.path.join(self.temp_dir, "fc_v1.pth")
+        # 使用 patch.object 隔离默认模型路径
+        self._patcher = unittest.mock.patch.object(
+            FCv1Model, 'DEFAULT_MODEL_PATH',
+            os.path.join(self.temp_dir, "fc_v1.pth")
+        )
+        self._patcher.start()
     
     def tearDown(self):
         """测试后清理"""
-        # 恢复原始 DEFAULT_MODEL_PATH
-        FCv1Model.DEFAULT_MODEL_PATH = self.original_default_path
+        self._patcher.stop()
         shutil.rmtree(self.temp_dir, ignore_errors=True)
     
     def test_default_load_when_model_exists(self):

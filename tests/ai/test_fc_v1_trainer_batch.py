@@ -8,6 +8,7 @@
 import os
 import sys
 import unittest
+import unittest.mock
 import tempfile
 import shutil
 import json
@@ -30,13 +31,16 @@ class TestFCv1TrainerBatch(unittest.TestCase):
     def setUp(self):
         """测试前准备"""
         self.temp_dir = tempfile.mkdtemp()
-        # 隔离默认模型路径，避免加载真实模型
-        self.original_default_path = FCv1Model.DEFAULT_MODEL_PATH
-        FCv1Model.DEFAULT_MODEL_PATH = os.path.join(self.temp_dir, "fc_v1.pth")
-    
+        # 使用 patch.object 隔离默认模型路径，避免加载真实模型
+        self._patcher = unittest.mock.patch.object(
+            FCv1Model, 'DEFAULT_MODEL_PATH',
+            os.path.join(self.temp_dir, "fc_v1.pth")
+        )
+        self._patcher.start()
+
     def tearDown(self):
         """测试后清理"""
-        FCv1Model.DEFAULT_MODEL_PATH = self.original_default_path
+        self._patcher.stop()
         shutil.rmtree(self.temp_dir, ignore_errors=True)
     
     def _create_sample_dir(self, name: str, n_items: int = 2) -> str:

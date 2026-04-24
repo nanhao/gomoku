@@ -4,6 +4,7 @@ import sys
 import os
 import tkinter as tk
 import unittest
+from unittest.mock import patch, MagicMock
 
 # 确保项目根目录在路径中
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -13,15 +14,15 @@ if project_root not in sys.path:
 from gui.components.mode_selector import GameModeSelector
 
 
-class TestGameModeSelector:
+class TestGameModeSelector(unittest.TestCase):
     """测试游戏模式选择器"""
 
-    def setup_method(self):
+    def setUp(self):
         """测试前准备"""
         self.root = tk.Tk()
         self.root.withdraw()  # 隐藏窗口，避免测试时弹出
 
-    def teardown_method(self):
+    def tearDown(self):
         """测试后清理"""
         try:
             self.root.destroy()
@@ -42,45 +43,61 @@ class TestGameModeSelector:
         assert selector.result is not None
         assert selector.result["mode"] == "pvp"
 
-    def test_select_pve_black(self):
-        """测试选择人机对战 - 执黑棋"""
+    @patch('gui.components.mode_selector.tk.Toplevel')
+    def test_select_pve_black(self, mock_toplevel):
+        """测试选择人机对战 - 执黑棋，mock Toplevel 不弹窗，验证对话框创建成功"""
+        # 创建一个 mock Toplevel 实例，模拟窗口但不真实弹窗
+        mock_dialog = MagicMock()
+        mock_toplevel.return_value = mock_dialog
+
         selector = GameModeSelector(self.root)
-        selector.result = {"mode": "pve", "player_color": "black", "ai": "random"}
+        # 调用 _select_pve 触发 _show_color_selection，Toplevel 被 mock
+        selector._select_pve()
 
-        assert selector.result["mode"] == "pve"
-        assert selector.result["player_color"] == "black"
-        assert selector.result["ai"] == "random"
+        # 验证 Toplevel 被调用（对话框被创建）
+        mock_toplevel.assert_called_once()
+        # 验证 result 仍为 None（用户尚未点击颜色按钮）
+        self.assertIsNone(selector.result)
 
-    def test_select_pve_white(self):
-        """测试选择人机对战 - 执白棋"""
+    @patch('gui.components.mode_selector.tk.Toplevel')
+    def test_select_pve_white(self, mock_toplevel):
+        """测试选择人机对战 - 执白棋，mock Toplevel 不弹窗，验证对话框创建成功"""
+        mock_dialog = MagicMock()
+        mock_toplevel.return_value = mock_dialog
+
         selector = GameModeSelector(self.root)
-        selector.result = {"mode": "pve", "player_color": "white", "ai": "fc_v1"}
+        selector._select_pve()
 
-        assert selector.result["mode"] == "pve"
-        assert selector.result["player_color"] == "white"
-        assert selector.result["ai"] == "fc_v1"
+        # 验证 Toplevel 被调用（对话框被创建）
+        mock_toplevel.assert_called_once()
+        # 验证 result 仍为 None（用户尚未点击颜色按钮）
+        self.assertIsNone(selector.result)
 
-    def test_select_pve_with_different_ai(self):
-        """测试选择人机对战 - 不同 AI 模型"""
+    @patch('gui.components.mode_selector.tk.Toplevel')
+    def test_select_pve_with_different_ai(self, mock_toplevel):
+        """测试选择人机对战 - 不同 AI 模型，mock Toplevel 不弹窗"""
+        mock_dialog = MagicMock()
+        mock_toplevel.return_value = mock_dialog
+
         selector = GameModeSelector(self.root)
-        selector.result = {"mode": "pve", "player_color": "black", "ai": "fc_v1"}
+        selector._select_pve()
 
-        assert selector.result["ai"] == "fc_v1"
+        # 验证 Toplevel 被调用（对话框被创建）
+        mock_toplevel.assert_called_once()
 
-    def test_select_ai_vs_ai(self):
-        """测试选择 AI 内战模式"""
+    @patch('gui.components.mode_selector.tk.Toplevel')
+    def test_select_ai_vs_ai(self, mock_toplevel):
+        """测试选择 AI 内战模式，mock Toplevel 不弹窗，验证对话框创建成功"""
+        mock_dialog = MagicMock()
+        mock_toplevel.return_value = mock_dialog
+
         selector = GameModeSelector(self.root)
-        selector.result = {
-            "mode": "ai_vs_ai",
-            "num_games": 5,
-            "ai1": "random",
-            "ai2": "random"
-        }
+        selector._select_ai_vs_ai()
 
-        assert selector.result["mode"] == "ai_vs_ai"
-        assert selector.result["num_games"] == 5
-        assert selector.result["ai1"] == "random"
-        assert selector.result["ai2"] == "random"
+        # 验证 Toplevel 被调用（AI 内战配置对话框被创建）
+        mock_toplevel.assert_called_once()
+        # 验证 result 仍为 None（用户尚未点击开始按钮）
+        self.assertIsNone(selector.result)
 
     def test_select_replay(self):
         """测试选择回放模式"""

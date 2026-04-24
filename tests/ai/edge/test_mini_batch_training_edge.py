@@ -8,6 +8,7 @@ import sys
 import json
 import tempfile
 import unittest
+import unittest.mock
 import shutil
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
@@ -20,18 +21,22 @@ import torch
 
 class TestMiniBatchTrainingEdge(unittest.TestCase):
     """Mini-Batch 训练边缘测试"""
-    
+
     def setUp(self):
         """测试前准备"""
         self.temp_dir = tempfile.mkdtemp()
-        self.original_default_path = FCv1Model.DEFAULT_MODEL_PATH
-        FCv1Model.DEFAULT_MODEL_PATH = os.path.join(self.temp_dir, "fc_v1.pth")
-    
+        # 使用 patch.object 隔离默认模型路径
+        self._patcher = unittest.mock.patch.object(
+            FCv1Model, 'DEFAULT_MODEL_PATH',
+            os.path.join(self.temp_dir, "fc_v1.pth")
+        )
+        self._patcher.start()
+
     def tearDown(self):
         """测试后清理"""
-        FCv1Model.DEFAULT_MODEL_PATH = self.original_default_path
+        self._patcher.stop()
         shutil.rmtree(self.temp_dir, ignore_errors=True)
-    
+
     def _create_sample_dir(self, name: str, n_items: int = 2) -> str:
         """创建一个包含 sample.json 的目录"""
         sample_dir = os.path.join(self.temp_dir, name)
@@ -189,18 +194,22 @@ class TestMiniBatchTrainingEdge(unittest.TestCase):
 
 class TestMiniBatchVsBatchComparison(unittest.TestCase):
     """比较 mini-batch 和 batch 训练的效果"""
-    
+
     def setUp(self):
         """测试前准备"""
         self.temp_dir = tempfile.mkdtemp()
-        self.original_default_path = FCv1Model.DEFAULT_MODEL_PATH
-        FCv1Model.DEFAULT_MODEL_PATH = os.path.join(self.temp_dir, "fc_v1.pth")
-    
+        # 使用 patch.object 隔离默认模型路径
+        self._patcher = unittest.mock.patch.object(
+            FCv1Model, 'DEFAULT_MODEL_PATH',
+            os.path.join(self.temp_dir, "fc_v1.pth")
+        )
+        self._patcher.start()
+
     def tearDown(self):
         """测试后清理"""
-        FCv1Model.DEFAULT_MODEL_PATH = self.original_default_path
+        self._patcher.stop()
         shutil.rmtree(self.temp_dir, ignore_errors=True)
-    
+
     def _create_sample_dir(self, name: str, n_items: int = 5) -> str:
         """创建 sample 目录"""
         sample_dir = os.path.join(self.temp_dir, name)
