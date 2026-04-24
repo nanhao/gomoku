@@ -66,7 +66,7 @@ class AIEngine:
         """
         self.model = model
     
-    def get_move(self, board: List[List[int]], current_player: int) -> Tuple[int, int]:
+    def get_move(self, board: List[List[int]], current_player: int, probs: List[float] = None) -> Tuple[int, int]:
         """
         获取 AI 落子位置
         
@@ -81,6 +81,7 @@ class AIEngine:
         Args:
             board: 15x15 棋盘，0=空, 1=黑, 2=白
             current_player: 当前落子方，1=黑, 2=白
+            probs: 预计算的概率分布（225维），若提供则跳过 model.predict 调用
             
         Returns:
             (x, y) 落子位置，0 <= x < 15, 0 <= y < 15
@@ -92,7 +93,9 @@ class AIEngine:
         board_vector = self.board_to_vector(board, current_player)
         
         # 2. 获取模型预测（225 维概率分布）
-        probs = self.model.predict(board_vector)
+        # 性能优化：支持传入预计算的 probs，避免重复调用 model.predict
+        if probs is None:
+            probs = self.model.predict(board_vector)
         
         # 3. 构建位置-概率列表，排除已有棋子的位置
         valid_positions = []

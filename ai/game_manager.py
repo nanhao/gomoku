@@ -173,15 +173,16 @@ class AIGameManager:
                 # 选择当前 AI
                 engine = engine1 if player == 1 else engine2
                 
-                # 获取 AI 输入输出（用于记录）
+                # 获取 AI 输入输出（用于记录和落子）
+                # 性能优化：只调用一次 model.predict，结果同时用于记录和落子
                 board_vector = AIEngine.board_to_vector(board, player)
-                rewards = engine.model.predict(board_vector)
+                probs = engine.model.predict(board_vector)
                 
-                # AI 落子
-                x, y = engine.get_move(board, player)
+                # AI 落子（传入预计算的 probs，避免重复调用 model.predict）
+                x, y = engine.get_move(board, player, probs=probs)
                 
                 # 记录数据
-                recorder.record_move(current_game_id, board_vector, rewards, (x, y))
+                recorder.record_move(current_game_id, board_vector, probs, (x, y))
                 
                 # 执行落子
                 controller.make_move(x, y)
@@ -268,15 +269,16 @@ class AIGameManager:
                 # 根据当前落子方选择对应引擎
                 engine = engine_black if player == 1 else engine_white
                 
-                # 获取 AI 输入输出（用于记录）
+                # 获取 AI 输入输出（用于记录和落子）
+                # 性能优化：只调用一次 model.predict，结果同时用于记录和落子
                 board_vector = AIEngine.board_to_vector(board, player)
-                rewards = engine.model.predict(board_vector)
+                probs = engine.model.predict(board_vector)
                 
-                # AI 落子
-                x, y = engine.get_move(board, player)
+                # AI 落子（传入预计算的 probs，避免重复调用 model.predict）
+                x, y = engine.get_move(board, player, probs=probs)
                 
                 # 记录数据
-                recorder.record_move(current_game_id, board_vector, rewards, (x, y))
+                recorder.record_move(current_game_id, board_vector, probs, (x, y))
                 
                 # 执行落子
                 controller.make_move(x, y)

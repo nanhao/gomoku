@@ -104,9 +104,9 @@ class Evaluator:
         # 确保目录存在
         os.makedirs(os.path.dirname(sample_file), exist_ok=True)
         
-        # 保存 sample.json
+        # 性能优化：去掉 indent=2，紧凑格式减少文件大小约50%
         with open(sample_file, 'w', encoding='utf-8') as f:
-            json.dump(sample_dict, f, ensure_ascii=False, indent=2)
+            json.dump(sample_dict, f, ensure_ascii=False)
         
         return sample_file
     

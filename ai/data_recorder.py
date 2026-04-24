@@ -126,10 +126,10 @@ class DataRecorder:
         game_dir = os.path.join(self.round_dir, str(game_id))
         os.makedirs(game_dir, exist_ok=True)
         
-        # 保存到文件
+        # 性能优化：去掉 indent=2，紧凑格式减少文件大小约50%
         file_path = os.path.join(game_dir, "record.json")
         with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(self.current_game_data, f, ensure_ascii=False, indent=2)
+            json.dump(self.current_game_data, f, ensure_ascii=False)
     
     def get_round_dir(self) -> str:
         """获取当前轮次目录路径"""

@@ -45,18 +45,23 @@ def detect_shapes(board: List[int], position: Tuple[int, int], player: int) -> L
     x, y = position
     raw_shapes = {}  # shape_type -> list of directions
 
-    # 模拟落子
-    simulated_board = list(board)  # 复制棋盘
-    simulated_board[x * 15 + y] = player
+    # 性能优化：原地模拟落子，避免 list(board) 拷贝
+    # 调用方保证该位置为空（board[idx] == 0），检测后恢复原值
+    idx = x * 15 + y
+    original_value = board[idx]
+    board[idx] = player
 
     # 检测四个方向
     for dx, dy in DIRECTIONS:
-        shape_type = detect_single_direction(simulated_board, x, y, player, dx, dy)
+        shape_type = detect_single_direction(board, x, y, player, dx, dy)
         if shape_type:
             dir_name = DIRECTION_NAMES[(dx, dy)]
             if shape_type not in raw_shapes:
                 raw_shapes[shape_type] = []
             raw_shapes[shape_type].append(dir_name)
+
+    # 恢复原值
+    board[idx] = original_value
 
     # 合并棋型：处理多冲四、多活三等
     result = []

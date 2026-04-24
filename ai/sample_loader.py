@@ -68,14 +68,10 @@ class SampleLoader:
         Returns:
             (inputs_tensor, targets_tensor, masks_tensor): 三个张量，已移到 GPU
         """
-        inputs = []
-        targets = []
-        masks = []
-
-        for item in sample_data:
-            inputs.append(item["input"])
-            targets.append(item["output"])
-            masks.append(item["mask"])
+        # 性能优化：使用列表推导替代逐条 append，减少 Python 解释器开销
+        inputs = [item["input"] for item in sample_data]
+        targets = [item["output"] for item in sample_data]
+        masks = [item["mask"] for item in sample_data]
 
         # 转换输入为模型所需的格式
         if self.input_converter is not None:
