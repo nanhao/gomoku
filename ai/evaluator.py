@@ -6,6 +6,9 @@
 
 使用双向棋型检测法计算每个位置的 reward 值，
 并通过 Softmax 转换为概率分布。
+
+支持多进程并行评价（ProcessPoolExecutor），
+在 Windows spawn 模式下使用顶层函数 _evaluate_record_worker。
 """
 
 import os
@@ -13,12 +16,38 @@ import json
 import math
 from typing import List, Dict, Tuple
 from copy import deepcopy
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from ai.constants import AI_DATA_DIR, TRAIN_DATA_DIR
 from ai.shape_detector import detect_shapes as _detect_shapes, detect_single_direction as _detect_single_direction
 from ai.line_tracer import LineTracer
 from ai.reward_calculator import RewardCalculator, RewardConfig
 from ai.probability_utils import masked_softmax
+
+
+def _evaluate_record_worker(record_file: str, ai_data_dir: str,
+                          train_data_dir: str, decay_rate: float) -> str:
+    """顶层辅助函数，供 ProcessPoolExecutor 调用
+
+    Windows 使用 spawn 模式创建子进程，子进程会重新导入模块。
+    实例方法无法被 pickle，因此需要一个顶层函数作为 worker。
+    每个子进程创建独立的 Evaluator 实例，避免进程间共享状态。
+
+    Args:
+        record_file: record.json 文件路径
+        ai_data_dir: AI 数据目录路径
+        train_data_dir: 训练数据目录路径
+        decay_rate: 奖励衰减率
+
+    Returns:
+        生成的 sample.json 文件路径
+    """
+    evaluator = Evaluator(
+        ai_data_dir=ai_data_dir,
+        train_data_dir=train_data_dir,
+        decay_rate=decay_rate
+    )
+    return evaluator.evaluate_record(record_file)
 
 
 class Evaluator:
@@ -46,14 +75,16 @@ class Evaluator:
         (1, -1): "副对角线",
     }
     
-    def __init__(self, ai_data_dir: str = None, train_data_dir: str = None, decay_rate: float = None):
+    def __init__(self, ai_data_dir: str = None, train_data_dir: str = None,
+                 decay_rate: float = None, max_workers: int = None):
         """
         初始化评价器
-        
+
         Args:
             ai_data_dir: AI 数据目录路径，默认为 AI_DATA_DIR
             train_data_dir: 训练数据目录路径，默认为 TRAIN_DATA_DIR
             decay_rate: 奖励衰减率 r（已弃用，保留参数兼容性）
+            max_workers: 并行进程数，1 表示串行，默认 min(os.cpu_count(), 4)
         """
         if ai_data_dir is None:
             ai_data_dir = AI_DATA_DIR
@@ -62,6 +93,13 @@ class Evaluator:
         self.ai_data_dir = ai_data_dir
         self.train_data_dir = train_data_dir
         self.decay_rate = decay_rate if decay_rate is not None else self.DECAY_RATE
+
+        # 并行进程数：默认 min(cpu_count, 4)，1 表示串行
+        if max_workers is not None:
+            self.max_workers = max_workers
+        else:
+            self.max_workers = min(os.cpu_count() or 4, 4)
+
         self._line_tracer = LineTracer(
             max_reward=self.MAX_REWARD,
             min_reward=self.MIN_REWARD,
@@ -239,25 +277,96 @@ class Evaluator:
         
         return sample_file
     
-    def evaluate_round(self, round_dir: str):
+    def evaluate_round(self, round_dir: str, max_workers: int = None) -> dict:
         """
-        评价整个轮次的所有对局
-    
+        评价整个轮次的所有对局，支持多进程并行
+
+        当 max_workers=1 时退化为串行执行，与原始行为完全一致。
+        当 max_workers>1 时使用 ProcessPoolExecutor 并行评价。
+
         Args:
             round_dir: 轮次目录路径（如 ai_data/random_1）
+            max_workers: 本次调用的进程数，覆盖实例的 max_workers
+
+        Returns:
+            dict: {"sample_files": [成功生成的 sample 路径],
+                   "errors": [(record_file, exception), ...]}
         """
+        if max_workers is None:
+            max_workers = self.max_workers
+
+        # 收集所有有效的 record 文件路径
+        record_files = []
         if not os.path.exists(round_dir):
-            return
-    
+            return {"sample_files": [], "errors": []}
+
         for game_dir in sorted(os.listdir(round_dir)):
             game_path = os.path.join(round_dir, game_dir)
             record_file = os.path.join(game_path, "record.json")
-                
             if os.path.isdir(game_path) and os.path.exists(record_file):
+                record_files.append(record_file)
+
+        # 委托给 _evaluate_files 执行
+        return self._evaluate_files(record_files, max_workers)
+
+    def _evaluate_files(self, record_files: List[str],
+                         max_workers: int = None) -> dict:
+        """评价多个记录文件，支持串行和并行模式
+
+        串行模式（max_workers=1）：逐个调用 evaluate_record，简单可靠。
+        并行模式（max_workers>1）：使用 ProcessPoolExecutor 并行评价，
+            每个子进程通过 _evaluate_record_worker 创建独立 Evaluator。
+
+        Args:
+            record_files: record.json 文件路径列表
+            max_workers: 进程数，默认使用实例的 max_workers
+
+        Returns:
+            dict: {"sample_files": [成功生成的 sample 路径],
+                   "errors": [(record_file, exception), ...]}
+        """
+        if max_workers is None:
+            max_workers = self.max_workers
+
+        sample_files = []
+        errors = []
+
+        # 串行模式：max_workers=1 或只有一个文件时直接串行
+        if max_workers <= 1 or len(record_files) <= 1:
+            for record_file in record_files:
                 try:
-                    self.evaluate_record(record_file)
+                    sample_file = self.evaluate_record(record_file)
+                    sample_files.append(sample_file)
                 except Exception as e:
+                    errors.append((record_file, e))
                     print(f"评价失败 {record_file}: {e}")
+            return {"sample_files": sample_files, "errors": errors}
+
+        # 并行模式：使用 ProcessPoolExecutor
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            # 提交所有任务，每个任务调用顶层 worker 函数
+            future_to_file = {
+                executor.submit(
+                    _evaluate_record_worker,
+                    record_file,
+                    self.ai_data_dir,
+                    self.train_data_dir,
+                    self.decay_rate
+                ): record_file
+                for record_file in record_files
+            }
+
+            # 收集结果，个别失败不影响其他任务
+            for future in as_completed(future_to_file):
+                record_file = future_to_file[future]
+                try:
+                    sample_file = future.result()
+                    sample_files.append(sample_file)
+                except Exception as e:
+                    errors.append((record_file, e))
+                    print(f"评价失败 {record_file}: {e}")
+
+        return {"sample_files": sample_files, "errors": errors}
     
     # ==================== 五连追溯奖励相关方法（委托给 LineTracer）====================
 

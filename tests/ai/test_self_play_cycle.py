@@ -36,7 +36,11 @@ class TestSelfPlayCycleBatchSwitch(unittest.TestCase):
         mock_recorder_cls.return_value = recorder
 
         evaluator = MagicMock()
-        evaluator.evaluate_record.return_value = "/tmp/train_data/sample.json"
+        # evaluate_round 返回格式：{"sample_files": [...], "errors": [...]}
+        evaluator.evaluate_round.return_value = {
+            "sample_files": ["/tmp/train_data/1/sample.json", "/tmp/train_data/2/sample.json"],
+            "errors": []
+        }
         mock_evaluator_cls.return_value = evaluator
 
     @patch('ai.self_play_cycle.AIGameManager.start_ai_vs_ai')

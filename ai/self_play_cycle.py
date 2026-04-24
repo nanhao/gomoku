@@ -22,13 +22,15 @@ class SelfPlayCycle:
     每个轮次结束后，将本轮所有 sample 数据合并，调用 train_batch 训练模型。
     """
     
-    def __init__(self, trainer):
+    def __init__(self, trainer, max_workers: int = None):
         """初始化
-        
+
         Args:
             trainer: BaseTrainer 实例，提供 model、model_name、loss_logger、train_batch 等方法
+            max_workers: 评价阶段并行进程数，None 表示使用默认值
         """
         self.trainer = trainer
+        self.max_workers = max_workers
     
     def run(
         self,
@@ -124,21 +126,18 @@ class SelfPlayCycle:
                 evaluator = Evaluator(
                     ai_data_dir=ai_data_dir,
                     train_data_dir=train_data_dir,
-                    decay_rate=rate
+                    decay_rate=rate,
+                    max_workers=self.max_workers
                 )
 
                 round_dir = recorder.get_round_dir()
-                sample_dirs = []
-                for game_dir in os.listdir(round_dir):
-                    game_path = os.path.join(round_dir, game_dir)
-                    record_file = os.path.join(game_path, "record.json")
-                    if os.path.isdir(game_path) and os.path.exists(record_file):
-                        try:
-                            sample_file = evaluator.evaluate_record(record_file)
-                            # 收集 sample 所在目录
-                            sample_dirs.append(os.path.dirname(sample_file))
-                        except Exception as e:
-                            print(f"  评价失败 {record_file}: {e}")
+                # 使用 evaluate_round 并行评价，收集 sample 目录
+                result = evaluator.evaluate_round(round_dir)
+                sample_dirs = [os.path.dirname(f) for f in result["sample_files"]]
+
+                # 打印错误信息
+                for record_file, err in result["errors"]:
+                    print(f"  评价失败 {record_file}: {err}")
 
                 print(f"生成 {len(sample_dirs)} 个样本文件")
 
