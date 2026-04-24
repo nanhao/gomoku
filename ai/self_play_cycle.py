@@ -7,7 +7,7 @@ import os
 import uuid
 from datetime import datetime
 
-from ai.constants import AI_DATA_DIR, TRAIN_DATA_DIR
+from ai.constants import AI_DATA_DIR, TRAIN_DATA_DIR, LOSS_LOG_DIR
 from ai.loss_logger import LossLogger
 from ai.engine import AIEngine
 from ai.game_manager import AIGameManager
@@ -86,7 +86,7 @@ class SelfPlayCycle:
             )
 
         print(f"开始训练周期: {rounds} 轮，每轮 {games} 局，奖励衰减率 rate={rate}")
-        print(f"Loss 日志目录: {os.path.join(AI_DATA_DIR, 'loss_logs', session_dir)}")
+        print(f"Loss 日志目录: {os.path.join(LOSS_LOG_DIR, session_dir)}")
         print(f"数据保存目录: {ai_data_dir}")
         print(f"训练数据目录: {train_data_dir}")
         print("-" * 50)

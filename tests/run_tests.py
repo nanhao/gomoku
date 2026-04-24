@@ -2,8 +2,25 @@
 
 import sys
 import os
+import tempfile
+import shutil
+import atexit
 import traceback
 import unittest
+
+# 设置测试专用的 loss 日志目录，避免污染真实数据
+# 必须在导入任何 ai 模块之前设置，因为 ai/constants.py 在导入时就读取此环境变量
+_test_loss_log_dir = tempfile.mkdtemp()
+os.environ['GOMOKU_LOSS_LOG_DIR'] = _test_loss_log_dir
+
+
+def _cleanup_test_loss_logs():
+    """测试结束后清理临时日志目录"""
+    if os.path.exists(_test_loss_log_dir):
+        shutil.rmtree(_test_loss_log_dir, ignore_errors=True)
+
+
+atexit.register(_cleanup_test_loss_logs)
 
 # 获取项目根目录（tests 的父目录）
 current_dir = os.path.abspath(os.path.dirname(__file__))
