@@ -322,6 +322,57 @@ class TestTrainFromDirModes(unittest.TestCase):
                     self.assertEqual(call_kwargs['batch_size'], 1)
                     self.assertEqual(call_kwargs['epochs'], 1)
 
+    def test_train_from_dir_mini_batch_enables_dense_log(self):
+        """--train-from-dir + --batch-size 应自动启用密集日志（dense_log=True）"""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sample_dir = os.path.join(tmp_dir, "1")
+            os.makedirs(sample_dir)
+            with open(os.path.join(sample_dir, "sample.json"), 'w', encoding='utf-8') as f:
+                json.dump([
+                    {"input": [1.0] * 226, "output": [0.0] * 225, "mask": [1] * 225},
+                ], f)
+
+            with patch('sys.argv', [
+                'train_main.py', '--model', 'fc_v1', '--train-from-dir', tmp_dir,
+                '--epochs', '1', '--batch-size', '32'
+            ]):
+                with patch('ai.train_main.get_trainer') as mock_get:
+                    mock_trainer = MagicMock()
+                    mock_trainer.train_mini_batch = MagicMock(return_value=0.1)
+                    mock_get.return_value = mock_trainer
+
+                    main()
+
+                    call_kwargs = mock_trainer.train_mini_batch.call_args[1]
+                    self.assertTrue(call_kwargs.get('dense_log', False),
+                                    "--train-from-dir + --batch-size 应传 dense_log=True")
+
+    def test_train_from_dir_no_batch_no_dense_log(self):
+        """--train-from-dir 不指定 --batch-size 时不传 dense_log（全量更新模式）"""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sample_dir = os.path.join(tmp_dir, "1")
+            os.makedirs(sample_dir)
+            with open(os.path.join(sample_dir, "sample.json"), 'w', encoding='utf-8') as f:
+                json.dump([
+                    {"input": [1.0] * 226, "output": [0.0] * 225, "mask": [1] * 225},
+                ], f)
+
+            with patch('sys.argv', [
+                'train_main.py', '--model', 'fc_v1', '--train-from-dir', tmp_dir,
+                '--epochs', '1'
+            ]):
+                with patch('ai.train_main.get_trainer') as mock_get:
+                    mock_trainer = MagicMock()
+                    mock_trainer.train_batch = MagicMock(return_value=0.3)
+                    mock_get.return_value = mock_trainer
+
+                    main()
+
+                    mock_trainer.train_batch.assert_called_once()
+                    call_kwargs = mock_trainer.train_batch.call_args[1]
+                    self.assertNotIn('dense_log', call_kwargs,
+                                     "全量更新模式不应传 dense_log")
+
 
 if __name__ == '__main__':
     unittest.main()

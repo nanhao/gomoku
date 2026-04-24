@@ -430,7 +430,8 @@ def main():
                     sample_dirs,
                     epochs=args.epochs,
                     batch_size=args.batch_size,
-                    shuffle=args.shuffle
+                    shuffle=args.shuffle,
+                    dense_log=True
                 )
             else:
                 avg_loss = trainer.train_batch(
