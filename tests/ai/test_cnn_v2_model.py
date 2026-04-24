@@ -73,15 +73,15 @@ class TestCNNv2Network(unittest.TestCase):
             self.assertEqual(output.shape, (batch_size, 225))
 
     def test_network_param_count(self):
-        """CNN v2 参数量应约为 197 万（压缩后）"""
+        """CNN v2 参数量应约为 101 万（3层64通道）"""
         network = CNNNetwork()
         total = sum(p.numel() for p in network.parameters())
 
-        # 允许 5% 的误差范围
-        self.assertGreaterEqual(total, 1_900_000,
-                               f"参数量 {total} 应 >= 190 万")
-        self.assertLessEqual(total, 2_050_000,
-                            f"参数量 {total} 应 <= 205 万")
+        # 3层64通道轻量化设计：参数量从 197 万降至约 101 万
+        self.assertGreaterEqual(total, 1_000_000,
+                               f"参数量 {total} 应 >= 100 万")
+        self.assertLessEqual(total, 1_050_000,
+                            f"参数量 {total} 应 <= 105 万")
 
 
 class TestCNNv2Model(unittest.TestCase):

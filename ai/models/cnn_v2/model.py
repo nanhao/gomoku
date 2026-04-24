@@ -3,9 +3,10 @@
 CNN v1 的轻量化改进版本。
 
 改进点：
-- FC1 层从 28800→150 压缩为 28800→64
-- 总参数量从约 445 万降至约 197 万（-56%）
-- 卷积层特征提取能力保持不变
+- 卷积层统一为 64 通道：3→64→64→64
+- FC1 层从 28800→64 进一步压缩为 14400→64
+- 总参数量从约 445 万降至约 101 万（-77%）
+- 计算量从 23M 降至 18M MACs（-22%）
 
 网络结构：
 输入层(15x15x3) -> 卷积层 -> 全连接层 -> 输出层(225) -> Softmax
@@ -29,39 +30,39 @@ class CNNNetwork(nn.Module):
     """CNN v2 神经网络结构
 
     轻量化卷积神经网络用于五子棋棋盘特征提取和落子位置预测。
-    相对 CNN v1，FC1 层从 28800→150 压缩为 28800→64。
+    相对 CNN v1，卷积层统一为 64 通道，FC1 输入从 28800 降至 14400。
 
     输入：15x15x3 的棋盘状态
     输出：225 维的 Softmax 概率分布
 
     网络结构：
-    - 3 层卷积：3→32→64→128
-    - 2 层全连接：28800→64→225
-    - 参数量：约 197 万（CNN v1 的 44%）
+    - 3 层卷积：3→64→64→64（统一通道数，减少参数量）
+    - 2 层全连接：14400→64→225
+    - 参数量：约 101 万（CNN v1 的 23%）
     """
 
     def __init__(self):
         """初始化网络结构"""
         super(CNNNetwork, self).__init__()
 
-        # 卷积层部分（与 CNN v1 保持一致）
+        # 卷积层部分（统一 64 通道，进一步轻量化）
         # 输入: 3通道 (黑棋、白棋、当前方), 15x15
-        self.conv1 = nn.Conv2d(3, 32, kernel_size=3, padding=1)
-        self.bn1 = nn.BatchNorm2d(32)
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=3, padding=1)
+        self.bn1 = nn.BatchNorm2d(64)
         self.relu1 = nn.ReLU()
 
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(64, 64, kernel_size=3, padding=1)
         self.bn2 = nn.BatchNorm2d(64)
         self.relu2 = nn.ReLU()
 
-        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
-        self.bn3 = nn.BatchNorm2d(128)
+        self.conv3 = nn.Conv2d(64, 64, kernel_size=3, padding=1)
+        self.bn3 = nn.BatchNorm2d(64)
         self.relu3 = nn.ReLU()
 
         # 全连接层部分（轻量化改进）
-        # 128通道 * 15 * 15 = 28800
-        # CNN v2 改进：FC1 从 150 维压缩到 64 维
-        self.fc1 = nn.Linear(128 * 15 * 15, 64)
+        # 64通道 * 15 * 15 = 14400
+        # CNN v2 改进：统一卷积通道后 FC1 输入从 28800 降至 14400
+        self.fc1 = nn.Linear(64 * 15 * 15, 64)
         self.relu_fc1 = nn.ReLU()
 
         # 输出层: 225个位置
@@ -112,7 +113,7 @@ class CNNModel(BaseModel):
     """CNN v2 模型
 
     卷积神经网络模型，用于预测五子棋落子位置的概率。
-    CNN v1 的轻量化版本，参数量减少 56%。
+    CNN v1 的轻量化版本，参数量减少 77%。
 
     默认行为：
     - 如果 cnn_v2.pth 存在，自动加载该模型参数
