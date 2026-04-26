@@ -260,6 +260,7 @@ class BaseTrainer(ABC):
         avg_loss = self._finalize_training(loss_logger, total_loss, completed_epochs, save_model=interrupted)
         if interrupted:
             print("[中断] 已保存当前进度，可以安全退出")
+            raise KeyboardInterrupt
         return avg_loss
 
     def train_batch(self, sample_dirs: List[str], epochs: int = 1000, verbose: bool = True, **kwargs) -> float:
@@ -332,6 +333,7 @@ class BaseTrainer(ABC):
         avg_loss = self._finalize_training(loss_logger, total_loss, completed_epochs, save_model=interrupted)
         if interrupted:
             print("[中断] 已保存当前进度，可以安全退出")
+            raise KeyboardInterrupt
         return avg_loss
 
     def train_mini_batch(
@@ -463,6 +465,7 @@ class BaseTrainer(ABC):
         avg_loss = self._finalize_training(loss_logger, total_loss, total_batches, save_model=interrupted)
         if interrupted:
             print("[中断] 已保存当前进度，可以安全退出")
+            raise KeyboardInterrupt
         return avg_loss
 
     def _step_lr_scheduler(self, loss=None):

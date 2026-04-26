@@ -3,7 +3,7 @@
 验证训练被 KeyboardInterrupt 中断时：
 - 保存当前模型
 - 生成 loss 曲线图
-- 不抛出异常到上层
+- 重新抛出 KeyboardInterrupt 以便上层调用者感知中断并终止流程
 """
 
 import os
@@ -102,13 +102,13 @@ class TestGracefulShutdown(unittest.TestCase):
 
         plot_called, flush_called = self._setup_mock_logger(trainer)
 
-        # 执行训练，不应抛出 KeyboardInterrupt
-        avg_loss = trainer.train_single(self.test_dir, epochs=10)
+        # 执行训练，应抛出 KeyboardInterrupt
+        with self.assertRaises(KeyboardInterrupt):
+            trainer.train_single(self.test_dir, epochs=10)
 
         self.assertTrue(save_called, "中断时应保存模型")
         self.assertTrue(plot_called, "中断时应生成图表")
         self.assertTrue(flush_called, "中断时应 flush 日志")
-        self.assertIsInstance(avg_loss, float)
 
     def test_train_batch_saves_on_interrupt(self):
         """train_batch 被中断时应保存模型并生成图表"""
@@ -129,12 +129,12 @@ class TestGracefulShutdown(unittest.TestCase):
 
         plot_called, flush_called = self._setup_mock_logger(trainer)
 
-        avg_loss = trainer.train_batch([self.test_dir], epochs=10)
+        with self.assertRaises(KeyboardInterrupt):
+            trainer.train_batch([self.test_dir], epochs=10)
 
         self.assertTrue(save_called, "中断时应保存模型")
         self.assertTrue(plot_called, "中断时应生成图表")
         self.assertTrue(flush_called, "中断时应 flush 日志")
-        self.assertIsInstance(avg_loss, float)
 
     def test_train_mini_batch_saves_on_interrupt(self):
         """train_mini_batch 被中断时应保存模型并生成图表"""
@@ -155,14 +155,14 @@ class TestGracefulShutdown(unittest.TestCase):
 
         plot_called, flush_called = self._setup_mock_logger(trainer)
 
-        avg_loss = trainer.train_mini_batch(
-            [self.test_dir], epochs=10, batch_size=2
-        )
+        with self.assertRaises(KeyboardInterrupt):
+            trainer.train_mini_batch(
+                [self.test_dir], epochs=10, batch_size=2
+            )
 
         self.assertTrue(save_called, "中断时应保存模型")
         self.assertTrue(plot_called, "中断时应生成图表")
         self.assertTrue(flush_called, "中断时应 flush 日志")
-        self.assertIsInstance(avg_loss, float)
 
     def test_train_single_no_save_on_normal_completion(self):
         """train_single 正常完成时不应由 _finalize_training 保存模型"""
@@ -204,12 +204,10 @@ class TestGracefulShutdown(unittest.TestCase):
 
         plot_called, _ = self._setup_mock_logger(trainer)
 
-        avg_loss = trainer.train_single(self.test_dir, epochs=10)
+        with self.assertRaises(KeyboardInterrupt):
+            trainer.train_single(self.test_dir, epochs=10)
 
         self.assertTrue(save_called, "第 0 个 epoch 中断时也应保存模型")
-        self.assertIsInstance(avg_loss, float)
-        # 没有完成任何 epoch，avg_loss 应为 0.0
-        self.assertEqual(avg_loss, 0.0)
 
 
 if __name__ == "__main__":
