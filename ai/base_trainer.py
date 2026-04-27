@@ -239,6 +239,14 @@ class BaseTrainer(ABC):
 
                 # 反向传播
                 loss.backward()
+
+                # 计算梯度 L2 范数
+                grad_norm = sum(
+                    p.grad.norm().item()
+                    for p in self.model.network.parameters()
+                    if p.grad is not None
+                )
+
                 self.optimizer.step()
 
                 total_loss += loss.item()
@@ -246,10 +254,10 @@ class BaseTrainer(ABC):
 
                 # 记录 loss 日志（每 LOSS_LOG_INTERVAL 个 epoch）
                 if (epoch + 1) % LOSS_LOG_INTERVAL == 0:
-                    loss_logger.log(epoch + 1, loss.item())
+                    loss_logger.log(epoch + 1, loss.item(), grad_norm)
                     if verbose:
                         current_lr = self.optimizer.param_groups[0]['lr']
-                        print(f"Epoch {epoch + 1}/{epochs}, loss: {loss.item():.4f}, lr: {current_lr:.6f}")
+                        print(f"Epoch {epoch + 1}/{epochs}, loss: {loss.item():.4f}, grad_norm: {grad_norm:.4f}, lr: {current_lr:.6f}")
 
                 # 学习率衰减
                 self._step_lr_scheduler(loss.item())
@@ -312,6 +320,14 @@ class BaseTrainer(ABC):
 
                 # 反向传播，只做一次参数更新
                 loss.backward()
+
+                # 计算梯度 L2 范数
+                grad_norm = sum(
+                    p.grad.norm().item()
+                    for p in self.model.network.parameters()
+                    if p.grad is not None
+                )
+
                 self.optimizer.step()
 
                 total_loss += loss.item()
@@ -319,10 +335,10 @@ class BaseTrainer(ABC):
 
                 # 记录 loss 日志（每 LOSS_LOG_INTERVAL 个 epoch）
                 if (epoch + 1) % LOSS_LOG_INTERVAL == 0:
-                    loss_logger.log(epoch + 1, loss.item())
+                    loss_logger.log(epoch + 1, loss.item(), grad_norm)
                     if verbose:
                         current_lr = self.optimizer.param_groups[0]['lr']
-                        print(f"Epoch {epoch + 1}/{epochs}, loss: {loss.item():.4f}, lr: {current_lr:.6f}")
+                        print(f"Epoch {epoch + 1}/{epochs}, loss: {loss.item():.4f}, grad_norm: {grad_norm:.4f}, lr: {current_lr:.6f}")
 
                 # 学习率衰减
                 self._step_lr_scheduler(loss.item())

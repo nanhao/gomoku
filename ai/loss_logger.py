@@ -121,14 +121,17 @@ class LossLogger:
         # 回退到旧格式标题
         return f"Loss Curve - {self.model_name}"
 
-    def log(self, epoch: int, loss: float) -> None:
+    def log(self, epoch: int, loss: float, grad_norm: float = None) -> None:
         """记录一条 loss 日志
 
         Args:
             epoch: 当前 epoch 编号（从1开始）或轮次编号
             loss: 当前 loss 值
+            grad_norm: 梯度 L2 范数，提供时一并记录
         """
         entry = {"epoch": epoch, "loss": loss}
+        if grad_norm is not None:
+            entry["grad_norm"] = grad_norm
         with open(self._log_path, 'a', encoding='utf-8') as f:
             f.write(json.dumps(entry) + "\n")
 
@@ -190,19 +193,23 @@ class LossLogger:
 
         try:
             if has_grad_norm:
-                # 密集模式：双 Y 轴图（Loss + Grad Norm）
+                # 双 Y 轴图（Loss + Grad Norm）
                 entries = self._downsample(entries, max_points=5000)
-                steps = [entry["step"] for entry in entries]
                 losses = [entry["loss"] for entry in entries]
                 grad_norms = [entry["grad_norm"] for entry in entries]
+
+                # 判断是否有 step 字段（密集模式）还是 epoch 字段（稀疏模式）
+                has_step = "step" in entries[0]
+                x_values = [entry["step" if has_step else "epoch"] for entry in entries]
+                x_label = "Step" if has_step else "Epoch"
 
                 fig, ax1 = plt.subplots(figsize=(12, 7))
                 ax2 = ax1.twinx()
 
-                ax1.plot(steps, losses, 'b-', label='Loss', linewidth=1)
-                ax2.plot(steps, grad_norms, 'r-', label='Grad Norm', linewidth=1, alpha=0.7)
+                ax1.plot(x_values, losses, 'b-', label='Loss', linewidth=1)
+                ax2.plot(x_values, grad_norms, 'r-', label='Grad Norm', linewidth=1, alpha=0.7)
 
-                ax1.set_xlabel("Step")
+                ax1.set_xlabel(x_label)
                 ax1.set_ylabel("Loss", color='b')
                 ax2.set_ylabel("Gradient Norm", color='r')
                 ax1.tick_params(axis='y', labelcolor='b')
