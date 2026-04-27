@@ -26,8 +26,8 @@ class TestFCv1TrainerCycle(unittest.TestCase):
     def setUp(self):
         """测试前准备"""
         self.temp_dir = tempfile.mkdtemp()
-        self.ai_data_dir = os.path.join(self.temp_dir, "ai_data")
-        self.train_data_dir = os.path.join(self.temp_dir, "train_data")
+        self.ai_data_dir = os.path.join(self.temp_dir, "ai", "ai_data")
+        self.train_data_dir = os.path.join(self.temp_dir, "ai", "train_data")
         os.makedirs(self.ai_data_dir, exist_ok=True)
         os.makedirs(self.train_data_dir, exist_ok=True)
         
@@ -63,10 +63,18 @@ class TestFCv1TrainerCycle(unittest.TestCase):
         # 验证 ai_data 目录被创建并包含数据
         self.assertTrue(os.path.exists(self.ai_data_dir),
                         "train_cycle 应创建 ai_data 目录")
-        
+        ai_subdirs = [d for d in os.listdir(self.ai_data_dir)
+                      if os.path.isdir(os.path.join(self.ai_data_dir, d))]
+        self.assertGreater(len(ai_subdirs), 0,
+                           "train_cycle 应在临时 ai_data 目录下写入对局数据")
+
         # 验证 train_data 目录被创建
         self.assertTrue(os.path.exists(self.train_data_dir),
                         "train_cycle 应创建 train_data 目录")
+        train_subdirs = [d for d in os.listdir(self.train_data_dir)
+                         if os.path.isdir(os.path.join(self.train_data_dir, d))]
+        self.assertGreater(len(train_subdirs), 0,
+                           "train_cycle 应在临时 train_data 目录下写入训练样本")
     
     def test_train_cycle_creates_model_file(self):
         """测试训练周期后模型文件被保存
