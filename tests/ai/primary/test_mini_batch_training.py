@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
 from ai.models.fc_v1.model import FCv1Model
 from ai.models.fc_v1.trainer import FCv1Trainer
+from ai.loss_logger import LossLogger
 from tests.ai.helpers import create_sample_dir, create_output
 import torch
 
@@ -193,12 +194,61 @@ class TestMiniBatchTraining(unittest.TestCase):
         self.assertIn("Epoch 400/400", output)
         self.assertIn("loss", output.lower())
     
+    def test_train_mini_batch_dense_log_records_all_batches(self):
+        """[primary] dense_log=True 时批量同步不影响日志完整性
+
+        验证方案 C：每个 epoch 结束后批量同步 GPU 张量到 CPU，
+        所有 batch 的 loss 和 grad_norm 仍被正确记录。
+        """
+        dir1 = self._create_sample_dir("s1", n_items=6)
+        trainer = FCv1Trainer(fresh=True)
+
+        logger = LossLogger(model_name="fc_v1", dense_log=True, log_dir=self.temp_dir)
+        trainer.loss_logger = logger
+
+        trainer.train_mini_batch(
+            [dir1],
+            epochs=2,
+            batch_size=2,
+            verbose=False
+        )
+
+        entries = logger._read_entries()
+        # 6 items / batch_size 2 = 3 batches/epoch * 2 epochs = 6 entries
+        self.assertEqual(len(entries), 6)
+        # step 连续
+        self.assertEqual([e["step"] for e in entries], [0, 1, 2, 3, 4, 5])
+        # 每条记录都有 loss 和 grad_norm
+        for entry in entries:
+            self.assertIn("loss", entry)
+            self.assertIn("grad_norm", entry)
+            self.assertIsInstance(entry["loss"], float)
+            self.assertIsInstance(entry["grad_norm"], float)
+
+    def test_train_mini_batch_dense_log_returns_float(self):
+        """[primary] dense_log=True 时返回值类型正确"""
+        dir1 = self._create_sample_dir("s1", n_items=4)
+        trainer = FCv1Trainer(fresh=True)
+
+        logger = LossLogger(model_name="fc_v1", dense_log=True, log_dir=self.temp_dir)
+        trainer.loss_logger = logger
+
+        result = trainer.train_mini_batch(
+            [dir1],
+            epochs=3,
+            batch_size=2,
+            verbose=False
+        )
+
+        self.assertIsInstance(result, float)
+        self.assertGreaterEqual(result, 0.0)
+
     def test_train_mini_batch_batch_size_default(self):
         """[primary] batch_size 默认值为 32"""
         import inspect
         sig = inspect.signature(FCv1Trainer.train_mini_batch)
         self.assertEqual(sig.parameters['batch_size'].default, 32)
-    
+
     def test_train_mini_batch_shuffle_default(self):
         """[primary] shuffle 默认值为 True"""
         import inspect

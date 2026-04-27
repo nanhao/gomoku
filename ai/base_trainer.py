@@ -414,6 +414,14 @@ class BaseTrainer(ABC):
                 else:
                     indices = torch.arange(n_samples, device=self.device)
 
+                # epoch 级别的 GPU 累加器和张量缓冲区
+                epoch_loss_sum_tensor = torch.tensor(0.0, device=self.device)
+                epoch_batches_count = 0
+
+                # 密集日志：GPU 张量缓冲区（用于批量同步）
+                batch_losses = []
+                batch_grad_norms = []
+
                 # 按批次训练
                 for start_idx in range(0, n_samples, batch_size):
                     # 获取当前批次的索引
@@ -434,49 +442,57 @@ class BaseTrainer(ABC):
                     # 反向传播
                     loss.backward()
 
-                    # 计算梯度 L2 范数（用于密集日志）
-                    grad_norm = 0.0
+                    # 收集梯度范数和 loss（GPU 张量，不 .item()）
                     if dense_log and loss_logger is not None:
-                        grad_norm = sum(
-                            p.grad.norm().item()
+                        grad_norm_tensor = sum(
+                            p.grad.norm()
                             for p in self.model.network.parameters()
                             if p.grad is not None
                         )
+                        batch_losses.append(loss.detach().clone())
+                        batch_grad_norms.append(grad_norm_tensor)
 
                     self.optimizer.step()
 
-                    total_loss += loss.item()
+                    # 用张量累加（不 .item()）
+                    epoch_loss_sum_tensor += loss
+                    epoch_batches_count += 1
                     total_batches += 1
-                    epoch_loss_sum += loss.item()
-                    epoch_batches += 1
 
-                    # 密集日志：每个 batch 记录一次
-                    if dense_log and loss_logger is not None:
-                        loss_logger.log_dense(global_step, loss.item(), grad_norm)
+                # epoch 结束后，统一同步到 CPU
+                epoch_loss_sum = epoch_loss_sum_tensor.item()
+                total_loss += epoch_loss_sum
+
+                # 批量写入密集日志（每个 epoch 只同步一次）
+                if dense_log and loss_logger is not None and batch_losses:
+                    for loss_t, grad_t in zip(batch_losses, batch_grad_norms):
+                        loss_logger.log_dense(global_step, loss_t.item(), grad_t.item())
                         global_step += 1
+                    loss_logger.flush()
+                    batch_losses.clear()
+                    batch_grad_norms.clear()
 
                 # 稀疏日志：每 LOSS_LOG_INTERVAL 个 epoch 记录该 epoch 的平均 loss
                 if (epoch + 1) % LOSS_LOG_INTERVAL == 0:
-                    epoch_avg_loss = epoch_loss_sum / epoch_batches if epoch_batches > 0 else 0.0
+                    epoch_avg_loss = epoch_loss_sum / epoch_batches_count if epoch_batches_count > 0 else 0.0
                     if loss_logger and not dense_log:
                         loss_logger.log(epoch + 1, epoch_avg_loss)
                     if verbose:
                         current_lr = self.optimizer.param_groups[0]['lr']
                         print(f"Epoch {epoch + 1}/{epochs}, avg_loss: {epoch_avg_loss:.4f}, lr: {current_lr:.6f}")
 
-                # 密集日志：每个 epoch 结束后批量写入
-                if dense_log and loss_logger is not None:
-                    loss_logger.flush()
-
                 # 学习率衰减
-                epoch_avg_loss = epoch_loss_sum / epoch_batches if epoch_batches > 0 else 0.0
+                epoch_avg_loss = epoch_loss_sum / epoch_batches_count if epoch_batches_count > 0 else 0.0
                 self._step_lr_scheduler(epoch_avg_loss)
-
-                epoch_loss_sum = 0.0
-                epoch_batches = 0
         except KeyboardInterrupt:
             interrupted = True
             print("\n[中断] 检测到 Ctrl+C，正在保存模型和图表...")
+            # 保存当前 epoch 未 flush 的密集日志
+            if dense_log and loss_logger is not None and batch_losses:
+                for loss_t, grad_t in zip(batch_losses, batch_grad_norms):
+                    loss_logger.log_dense(global_step, loss_t.item(), grad_t.item())
+                    global_step += 1
+                loss_logger.flush()
 
         avg_loss = self._finalize_training(loss_logger, total_loss, total_batches, save_model=interrupted)
         if interrupted:
