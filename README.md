@@ -121,6 +121,7 @@ python ai/train_main.py --model <模型名称> --train-from-dir <数据目录或
 # 示例：从目录训练
 python ai/train_main.py --model cnn_v1 --train-from-dir ai/train_data/cnn_v1_self_play_1 --epochs 1000
 
+python ai/train_main.py --model cnn_v2 --train-from-dir .\ai\merge_samples --epochs 1000 --batch-size 256 --shuffle
 # 示例：从合并文件训练
 python ai/train_main.py --model cnn_v1 --train-from-dir ai/train_data/merge_cnn_v1.json --epochs 1000
 
@@ -284,3 +285,4 @@ python tests/run_tests.py
 ## 许可证
 
 MIT License
+ 
