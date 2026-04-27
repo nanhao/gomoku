@@ -208,6 +208,31 @@ python ai/models/fc_v1/inspect_main.py --sample <sample.json路径> [--model-pat
 | `--sample` | sample.json 文件路径 | 必填 |
 | `--model-path` | 模型文件路径 | 默认加载 `ai/models/fc_v1/fc_v1.pth` |
 
+### LR Range Test
+
+学习率范围测试工具，用于确定最优学习率区间。学习率从 `min_lr` 线性递增至 `max_lr`，记录每个 step 的 loss，绘制 lr-loss 曲线。
+
+```bash
+python temp/lr_range_test.py --model <模型名称> --data <数据路径> [选项]
+```
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--model` | 模型名称（cnn_v2） | 必填 |
+| `--data` | 训练数据路径（`.json` 文件或目录） | 必填 |
+| `--epochs` | 总 step 数 | 100 |
+| `--min-lr` | 起始学习率 | 1e-7 |
+| `--max-lr` | 终止学习率 | 1e-1 |
+| `--output` | 输出图片路径 | `temp/lr_range_test.png` |
+
+```bash
+# 示例：对 CNN v2 执行 LR Range Test
+python temp/lr_range_test.py --model cnn_v2 --data ai/merge_samples/merge_cnn_v1_100.json --epochs 100
+
+# 示例：自定义 lr 范围和输出路径
+python temp/lr_range_test.py --model cnn_v2 --data ai/merge_samples/merge_cnn_v1_100.json --min-lr 1e-6 --max-lr 1e-2 --output temp/my_lr_test.png
+```
+
 ### 运行测试
 
 ```bash
