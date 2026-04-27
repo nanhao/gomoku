@@ -54,15 +54,16 @@ class TestEndToEndCnnV2(unittest.TestCase):
             lrs, losses = run_lr_range_test(
                 model_name="cnn_v2",
                 data_path=merge_path,
-                epochs=5,
+                rounds=3,
+                epochs=2,
                 min_lr=1e-6,
                 max_lr=1e-2,
                 device=torch.device('cpu')
             )
 
             # 验证返回结果
-            self.assertEqual(len(lrs), 5)
-            self.assertEqual(len(losses), 5)
+            self.assertEqual(len(lrs), 3)
+            self.assertEqual(len(losses), 3)
 
             # 验证 lr 递增
             for i in range(1, len(lrs)):
@@ -81,7 +82,6 @@ class TestEndToEndCnnV2(unittest.TestCase):
     def test_end_to_end_with_directory_data(self):
         """使用目录数据运行完整流程"""
         with tempfile.TemporaryDirectory() as tmp_dir:
-            # 创建包含 sample.json 的子目录
             data_dir = os.path.join(tmp_dir, "train_data")
             create_sample_dir(data_dir, "game_1", n_items=3)
             output_path = os.path.join(tmp_dir, "lr_curve.png")
@@ -89,14 +89,15 @@ class TestEndToEndCnnV2(unittest.TestCase):
             lrs, losses = run_lr_range_test(
                 model_name="cnn_v2",
                 data_path=data_dir,
-                epochs=3,
+                rounds=2,
+                epochs=2,
                 min_lr=1e-6,
                 max_lr=1e-3,
                 device=torch.device('cpu')
             )
 
-            self.assertEqual(len(lrs), 3)
-            self.assertEqual(len(losses), 3)
+            self.assertEqual(len(lrs), 2)
+            self.assertEqual(len(losses), 2)
 
 
 class TestInvalidInputs(unittest.TestCase):
@@ -110,6 +111,7 @@ class TestInvalidInputs(unittest.TestCase):
                 run_lr_range_test(
                     model_name="invalid_model",
                     data_path=merge_path,
+                    rounds=1,
                     epochs=1,
                     device=torch.device('cpu')
                 )
@@ -120,6 +122,7 @@ class TestInvalidInputs(unittest.TestCase):
             run_lr_range_test(
                 model_name="cnn_v2",
                 data_path="/nonexistent/data.json",
+                rounds=1,
                 epochs=1,
                 device=torch.device('cpu')
             )

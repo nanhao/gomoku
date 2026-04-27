@@ -4,10 +4,11 @@
 
 实现一个独立脚本，用于对指定模型和数据执行 **LR Range Test**：
 
-- 学习率从一个极小值线性递增至一个较大值
-- 全量数据作为一个 batch，每个 step 训练一次并更新参数
-- 记录每个 step 的学习率与全量平均 loss
-- 最终绘制 lr-loss 曲线图
+- 学习率从一个极小值线性递增至一个较大值，每个 **round** 对应一个固定 lr
+- 每个 round 包含 **epochs** 个训练 step，全量数据作为一个 batch
+- 每个 round 开始前，**重置模型到初始状态**，确保 loss 只反映 lr 的影响
+- 每个 round 的 loss 为该 round 内所有 epoch 的**全量平均 loss**
+- 最终绘制 lr-loss 曲线图（每个 round 一个数据点）
 - 不保存模型
 
 ## 2. 接口设计
@@ -20,22 +21,24 @@
 |------|------|------|--------|------|
 | `--model` | str | 是 | - | 模型名称，当前支持 `cnn_v2` |
 | `--data` | str | 是 | - | 训练数据路径（`.json` 文件或目录） |
-| `--epochs` | int | 否 | 100 | 总 step 数 |
+| `--rounds` | int | 否 | 50 | lr 递增次数（round 数） |
+| `--epochs` | int | 否 | 100 | 每个 round 内的训练 step 数 |
 | `--min-lr` | float | 否 | 1e-7 | 起始学习率 |
 | `--max-lr` | float | 否 | 1e-1 | 终止学习率 |
 | `--output` | str | 否 | `temp/lr_range_test.png` | 输出图片路径 |
 
 示例：
 ```bash
-python temp/lr_range_test.py --model cnn_v2 --data ai/merge_samples/merge_cnn_v1_100.json --epochs 100
+python temp/lr_range_test.py --model cnn_v2 --data ai/merge_samples/merge_cnn_v1_100.json --rounds 50 --epochs 100
 ```
 
-### 2.2 核心类/函数接口
+### 2.2 核心函数接口
 
 ```python
 def run_lr_range_test(
     model_name: str,
     data_path: str,
+    rounds: int = 50,
     epochs: int = 100,
     min_lr: float = 1e-7,
     max_lr: float = 1e-1,
@@ -46,13 +49,14 @@ def run_lr_range_test(
     Args:
         model_name: 模型名称
         data_path: 数据文件或目录路径
-        epochs: 总 step 数
+        rounds: lr 递增次数
+        epochs: 每个 round 内的训练 step 数
         min_lr: 起始学习率
         max_lr: 终止学习率
         device: 训练设备，None 则自动检测
 
     Returns:
-        (lrs, losses): 学习率列表和对应 loss 列表
+        (lrs, losses): 学习率列表和对应 round 平均 loss 列表，长度均为 rounds
     """
 
 def plot_lr_loss_curve(
@@ -77,6 +81,9 @@ def load_model(model_name: str, device: torch.device) -> BaseModel:
 
     Returns:
         模型实例
+
+    Raises:
+        ValueError: 不支持的模型名称
     """
 
 def load_data(data_path: str, sample_loader: SampleLoader) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -88,6 +95,9 @@ def load_data(data_path: str, sample_loader: SampleLoader) -> Tuple[torch.Tensor
 
     Returns:
         (inputs, targets, masks) 张量三元组
+
+    Raises:
+        FileNotFoundError: 数据路径不存在
     """
 ```
 
@@ -102,41 +112,51 @@ def main():
     device = get_device()
 
     # 3. 创建模型（fresh=True，随机初始化）
-    model = load_model(args.model_name, device)
+    model = load_model(args.model, device)
 
     # 4. 加载数据
     sample_loader = SampleLoader(device=device, input_converter=get_input_converter(model))
     inputs, targets, masks = load_data(args.data, sample_loader)
 
-    # 5. 创建优化器（初始 lr = min_lr）
-    optimizer = Adam(model.network.parameters(), lr=args.min_lr)
-    criterion = L1Loss(reduction='none')
+    # 5. 保存初始模型状态（每个 round 开始前恢复）
+    initial_state = copy.deepcopy(model.network.state_dict())
 
     # 6. 执行 range test
+    criterion = L1Loss(reduction='none')
     lrs = []
     losses = []
-    for step in range(args.epochs):
-        # 6.1 计算当前 step 的 lr（线性递增）
-        lr = args.min_lr + (args.max_lr - args.min_lr) * step / max(1, args.epochs - 1)
-        optimizer.param_groups[0]['lr'] = lr
 
-        # 6.2 前向传播
-        model.network.train()
-        optimizer.zero_grad()
-        outputs = model.network(inputs)
+    for round_idx in range(args.rounds):
+        # 6.1 计算当前 round 的 lr（线性递增）
+        lr = args.min_lr + (args.max_lr - args.min_lr) * round_idx / max(1, args.rounds - 1)
 
-        # 6.3 计算 masked loss（与 BaseTrainer 一致）
-        loss = criterion(outputs, targets)
-        loss = (loss * masks).sum() / masks.sum()
+        # 6.2 重置模型到初始状态
+        model.network.load_state_dict(initial_state)
 
-        # 6.4 反向传播与参数更新
-        loss.backward()
-        optimizer.step()
+        # 6.3 创建优化器（当前 round 的固定 lr）
+        optimizer = Adam(model.network.parameters(), lr=lr)
 
-        # 6.5 记录
+        # 6.4 训练 epochs 个 step
+        round_loss_sum = 0.0
+        for epoch in range(args.epochs):
+            model.network.train()
+            optimizer.zero_grad()
+            outputs = model.network(inputs)
+
+            # 计算 masked loss（与 BaseTrainer 一致）
+            loss = criterion(outputs, targets)
+            loss = (loss * masks).sum() / masks.sum()
+
+            loss.backward()
+            optimizer.step()
+
+            round_loss_sum += loss.item()
+
+        # 6.5 记录该 round 的平均 loss
+        avg_loss = round_loss_sum / args.epochs
         lrs.append(lr)
-        losses.append(loss.item())
-        print(f"Step {step+1}/{args.epochs}, LR: {lr:.2e}, Loss: {loss.item():.6f}")
+        losses.append(avg_loss)
+        print(f"Round {round_idx+1}/{args.rounds}, LR: {lr:.2e}, Avg Loss: {avg_loss:.6f}")
 
     # 7. 绘制并保存曲线
     plot_lr_loss_curve(lrs, losses, args.output)
@@ -151,12 +171,13 @@ def main():
 
 | 用例 | 描述 |
 |------|------|
-| `test_linear_lr_increase` | 验证 `run_lr_range_test` 返回的 lr 列表是否严格线性递增 |
-| `test_losses_length_matches_epochs` | 验证返回的 losses 长度等于 epochs |
+| `test_linear_lr_increase` | 验证 `run_lr_range_test` 返回的 lr 列表严格线性递增 |
+| `test_losses_length_matches_rounds` | 验证返回的 losses 长度等于 rounds |
 | `test_plot_lr_loss_curve_creates_file` | 验证 `plot_lr_loss_curve` 能在临时目录生成 png 文件 |
 | `test_load_model_cnn_v2` | 验证 `load_model("cnn_v2")` 返回 CNNV2Model 实例且 network 不为 None |
 | `test_load_data_from_merge_file` | 验证 `load_data` 能从 merge json 文件加载并返回三个张量 |
 | `test_load_data_from_directory` | 验证 `load_data` 能从目录扫描并加载数据 |
+| `test_model_reset_each_round` | 验证每个 round 开始时模型参数被重置到初始状态 |
 
 ### 4.2 集成测试
 
@@ -164,12 +185,12 @@ def main():
 
 | 用例 | 描述 |
 |------|------|
-| `test_end_to_end_cnn_v2` | 端到端测试：使用真实 CNNV2Model + 模拟数据（内存中构造）运行完整流程，验证返回的 lrs/losses 非空且长度正确，输出文件被创建 |
+| `test_end_to_end_cnn_v2` | 端到端测试：CNNV2Model + 模拟数据，验证 lrs/losses 非空且长度正确 |
 | `test_invalid_model_name` | 验证传入不支持模型名称时抛出 ValueError |
 | `test_nonexistent_data_path` | 验证传入不存在的数据路径时抛出 FileNotFoundError |
 
 ### 4.3 边界条件
 
-- `epochs=1`：只执行一个 step，lr = min_lr
-- `min_lr == max_lr`：所有 step 使用相同 lr
-- 空数据：应抛出异常（由 SampleLoader 或数据加载逻辑保证）
+- `rounds=1`：只执行一个 round，lr = min_lr
+- `epochs=1`：每个 round 只训练一个 step
+- `min_lr == max_lr`：所有 round 使用相同 lr

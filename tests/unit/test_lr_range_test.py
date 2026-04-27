@@ -3,6 +3,7 @@
 测试 lr_range_test 模块的各个函数接口。
 """
 
+import copy
 import json
 import os
 import sys
@@ -117,7 +118,6 @@ class TestPlotLrLossCurve(unittest.TestCase):
             plot_lr_loss_curve(lrs, losses, output_path)
 
             self.assertTrue(os.path.exists(output_path))
-            # 验证文件大小 > 0
             self.assertGreater(os.path.getsize(output_path), 0)
 
 
@@ -129,12 +129,13 @@ class TestRunLrRangeTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             merge_path = _create_merge_file(tmp_dir, n_items=2)
             min_lr, max_lr = 1e-7, 1e-1
-            epochs = 5
+            rounds = 5
 
             lrs, losses = run_lr_range_test(
                 model_name="cnn_v2",
                 data_path=merge_path,
-                epochs=epochs,
+                rounds=rounds,
+                epochs=2,
                 min_lr=min_lr,
                 max_lr=max_lr,
                 device=torch.device('cpu')
@@ -148,24 +149,25 @@ class TestRunLrRangeTest(unittest.TestCase):
             self.assertAlmostEqual(lrs[0], min_lr)
             self.assertAlmostEqual(lrs[-1], max_lr)
 
-    def test_losses_length_matches_epochs(self):
-        """验证返回的 losses 长度等于 epochs"""
+    def test_losses_length_matches_rounds(self):
+        """验证返回的 losses 长度等于 rounds"""
         with tempfile.TemporaryDirectory() as tmp_dir:
             merge_path = _create_merge_file(tmp_dir, n_items=2)
-            epochs = 3
+            rounds = 3
 
             lrs, losses = run_lr_range_test(
                 model_name="cnn_v2",
                 data_path=merge_path,
-                epochs=epochs,
+                rounds=rounds,
+                epochs=2,
                 device=torch.device('cpu')
             )
 
-            self.assertEqual(len(losses), epochs)
-            self.assertEqual(len(lrs), epochs)
+            self.assertEqual(len(losses), rounds)
+            self.assertEqual(len(lrs), rounds)
 
-    def test_epochs_1_lr_equals_min(self):
-        """验证 epochs=1 时 lr = min_lr"""
+    def test_rounds_1_lr_equals_min(self):
+        """验证 rounds=1 时 lr = min_lr"""
         with tempfile.TemporaryDirectory() as tmp_dir:
             merge_path = _create_merge_file(tmp_dir, n_items=2)
             min_lr = 1e-5
@@ -173,6 +175,7 @@ class TestRunLrRangeTest(unittest.TestCase):
             lrs, losses = run_lr_range_test(
                 model_name="cnn_v2",
                 data_path=merge_path,
+                rounds=1,
                 epochs=1,
                 min_lr=min_lr,
                 max_lr=1e-1,
@@ -183,7 +186,7 @@ class TestRunLrRangeTest(unittest.TestCase):
             self.assertAlmostEqual(lrs[0], min_lr)
 
     def test_min_lr_equals_max_lr(self):
-        """验证 min_lr == max_lr 时所有 step 使用相同 lr"""
+        """验证 min_lr == max_lr 时所有 round 使用相同 lr"""
         with tempfile.TemporaryDirectory() as tmp_dir:
             merge_path = _create_merge_file(tmp_dir, n_items=2)
             fixed_lr = 1e-3
@@ -191,7 +194,8 @@ class TestRunLrRangeTest(unittest.TestCase):
             lrs, losses = run_lr_range_test(
                 model_name="cnn_v2",
                 data_path=merge_path,
-                epochs=3,
+                rounds=3,
+                epochs=1,
                 min_lr=fixed_lr,
                 max_lr=fixed_lr,
                 device=torch.device('cpu')
@@ -208,7 +212,8 @@ class TestRunLrRangeTest(unittest.TestCase):
             lrs, losses = run_lr_range_test(
                 model_name="cnn_v2",
                 data_path=merge_path,
-                epochs=5,
+                rounds=3,
+                epochs=2,
                 min_lr=1e-7,
                 max_lr=1e-3,
                 device=torch.device('cpu')
@@ -216,6 +221,49 @@ class TestRunLrRangeTest(unittest.TestCase):
 
             for loss in losses:
                 self.assertTrue(torch.isfinite(torch.tensor(loss)).item())
+
+    def test_model_reset_each_round(self):
+        """验证每个 round 开始时模型参数被重置到初始状态
+
+        通过对比两个相同 lr 的 round，验证模型参数确实被重置。
+        如果模型被正确重置，相同 lr 的两个 round 应产生相同的 loss。
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            merge_path = _create_merge_file(tmp_dir, n_items=2)
+            fixed_lr = 1e-3
+
+            # 使用相同 lr，2 个 round
+            lrs, losses = run_lr_range_test(
+                model_name="cnn_v2",
+                data_path=merge_path,
+                rounds=2,
+                epochs=3,
+                min_lr=fixed_lr,
+                max_lr=fixed_lr,
+                device=torch.device('cpu')
+            )
+
+            # 两个 round 使用相同 lr 且模型重置，loss 应该相同
+            self.assertAlmostEqual(losses[0], losses[1], places=5)
+
+    def test_epochs_1_single_step_per_round(self):
+        """验证 epochs=1 时每个 round 只训练一个 step"""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            merge_path = _create_merge_file(tmp_dir, n_items=2)
+
+            lrs, losses = run_lr_range_test(
+                model_name="cnn_v2",
+                data_path=merge_path,
+                rounds=2,
+                epochs=1,
+                min_lr=1e-4,
+                max_lr=1e-3,
+                device=torch.device('cpu')
+            )
+
+            self.assertEqual(len(losses), 2)
+            for loss in losses:
+                self.assertIsInstance(loss, float)
 
 
 if __name__ == '__main__':

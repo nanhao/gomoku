@@ -1,14 +1,16 @@
 """LR Range Test 脚本
 
 对指定模型和数据执行 LR Range Test：
-- 学习率从 min_lr 线性递增至 max_lr
-- 全量数据作为一个 batch，每个 step 训练一次
-- 记录每个 step 的学习率与全量平均 loss
-- 绘制 lr-loss 曲线图
+- 学习率从 min_lr 线性递增至 max_lr，每个 round 对应一个固定 lr
+- 每个 round 包含 epochs 个训练 step，全量数据作为一个 batch
+- 每个 round 开始前，重置模型到初始状态，确保 loss 只反映 lr 的影响
+- 每个 round 的 loss 为该 round 内所有 epoch 的全量平均 loss
+- 绘制 lr-loss 曲线图（每个 round 一个数据点）
 - 不保存模型
 """
 
 import argparse
+import copy
 import os
 import sys
 from typing import List, Tuple
@@ -22,12 +24,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from ai.base_model import BaseModel
 from ai.sample_loader import SampleLoader
-
-
-# 模型注册表：名称 -> 模型类
-MODEL_REGISTRY = {
-    "cnn_v2": None,  # 延迟导入，在 load_model 中设置
-}
 
 
 def _get_model_registry():
@@ -115,6 +111,7 @@ def load_data(data_path: str, sample_loader: SampleLoader) -> Tuple[torch.Tensor
 def run_lr_range_test(
     model_name: str,
     data_path: str,
+    rounds: int = 50,
     epochs: int = 100,
     min_lr: float = 1e-7,
     max_lr: float = 1e-1,
@@ -122,16 +119,20 @@ def run_lr_range_test(
 ) -> Tuple[List[float], List[float]]:
     """执行 LR Range Test
 
+    每个 round 使用一个固定 lr，训练 epochs 个 step。
+    每个 round 开始前重置模型到初始状态，确保 loss 只反映 lr 的影响。
+
     Args:
         model_name: 模型名称
         data_path: 数据文件或目录路径
-        epochs: 总 step 数
+        rounds: lr 递增次数
+        epochs: 每个 round 内的训练 step 数
         min_lr: 起始学习率
         max_lr: 终止学习率
         device: 训练设备，None 则自动检测
 
     Returns:
-        (lrs, losses): 学习率列表和对应 loss 列表
+        (lrs, losses): 学习率列表和对应 round 平均 loss 列表，长度均为 rounds
     """
     # 获取设备
     if device is None:
@@ -148,35 +149,44 @@ def run_lr_range_test(
     )
     inputs, targets, masks = load_data(data_path, sample_loader)
 
-    # 创建优化器和损失函数
-    optimizer = optim.Adam(model.network.parameters(), lr=min_lr)
-    criterion = nn.L1Loss(reduction='none')
+    # 保存初始模型状态（每个 round 开始前恢复）
+    initial_state = copy.deepcopy(model.network.state_dict())
 
     # 执行 range test
+    criterion = nn.L1Loss(reduction='none')
     lrs = []
     losses = []
 
-    for step in range(epochs):
-        # 线性递增 lr
-        lr = min_lr + (max_lr - min_lr) * step / max(1, epochs - 1)
-        optimizer.param_groups[0]['lr'] = lr
+    for round_idx in range(rounds):
+        # 计算当前 round 的 lr（线性递增）
+        lr = min_lr + (max_lr - min_lr) * round_idx / max(1, rounds - 1)
 
-        # 前向传播
-        model.network.train()
-        optimizer.zero_grad()
-        outputs = model.network(inputs)
+        # 重置模型到初始状态
+        model.network.load_state_dict(initial_state)
 
-        # 计算 masked loss（与 BaseTrainer._masked_loss 一致）
-        loss = criterion(outputs, targets)
-        loss = (loss * masks).sum() / masks.sum()
+        # 创建优化器（当前 round 的固定 lr）
+        optimizer = optim.Adam(model.network.parameters(), lr=lr)
 
-        # 反向传播与参数更新
-        loss.backward()
-        optimizer.step()
+        # 训练 epochs 个 step
+        round_loss_sum = 0.0
+        for epoch in range(epochs):
+            model.network.train()
+            optimizer.zero_grad()
+            outputs = model.network(inputs)
 
-        # 记录
+            # 计算 masked loss（与 BaseTrainer._masked_loss 一致）
+            loss = criterion(outputs, targets)
+            loss = (loss * masks).sum() / masks.sum()
+
+            loss.backward()
+            optimizer.step()
+
+            round_loss_sum += loss.item()
+
+        # 记录该 round 的平均 loss
+        avg_loss = round_loss_sum / epochs
         lrs.append(lr)
-        losses.append(loss.item())
+        losses.append(avg_loss)
 
     return lrs, losses
 
@@ -221,8 +231,10 @@ def parse_args():
                         help='模型名称 (cnn_v2)')
     parser.add_argument('--data', type=str, required=True,
                         help='训练数据路径 (.json 文件或目录)')
+    parser.add_argument('--rounds', type=int, default=50,
+                        help='lr 递增次数 (默认: 50)')
     parser.add_argument('--epochs', type=int, default=100,
-                        help='总 step 数 (默认: 100)')
+                        help='每个 round 内的训练 step 数 (默认: 100)')
     parser.add_argument('--min-lr', type=float, default=1e-7,
                         help='起始学习率 (默认: 1e-7)')
     parser.add_argument('--max-lr', type=float, default=1e-1,
@@ -237,19 +249,20 @@ def main():
     args = parse_args()
 
     print(f"LR Range Test: model={args.model}, data={args.data}")
-    print(f"  epochs={args.epochs}, min_lr={args.min_lr:.2e}, max_lr={args.max_lr:.2e}")
+    print(f"  rounds={args.rounds}, epochs={args.epochs}, min_lr={args.min_lr:.2e}, max_lr={args.max_lr:.2e}")
 
     lrs, losses = run_lr_range_test(
         model_name=args.model,
         data_path=args.data,
+        rounds=args.rounds,
         epochs=args.epochs,
         min_lr=args.min_lr,
         max_lr=args.max_lr
     )
 
-    # 打印每个 step 的结果
+    # 打印每个 round 的结果
     for i, (lr, loss) in enumerate(zip(lrs, losses)):
-        print(f"Step {i+1}/{args.epochs}, LR: {lr:.2e}, Loss: {loss:.6f}")
+        print(f"Round {i+1}/{args.rounds}, LR: {lr:.2e}, Avg Loss: {loss:.6f}")
 
     # 绘制并保存曲线
     plot_lr_loss_curve(lrs, losses, args.output)
