@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from ai.models.fc_v1.trainer import FCv1Trainer
 from ai.models.fc_v1.model import FCv1Model
+from unittest.mock import MagicMock
 
 
 class TestFCv1TrainerCycle(unittest.TestCase):
@@ -46,6 +47,9 @@ class TestFCv1TrainerCycle(unittest.TestCase):
         不使用 try/except 吞异常，确保训练周期失败时测试快速暴露。
         """
         trainer = FCv1Trainer()
+        # 注入 mock logger 避免污染真实 loss_logs 目录
+        trainer.loss_logger = MagicMock()
+        trainer.loss_logger.dense_log = False
         
         # 使用很小的参数进行快速测试
         # 1 轮，2 局，1 epoch
@@ -71,6 +75,9 @@ class TestFCv1TrainerCycle(unittest.TestCase):
         确保训练周期失败时测试快速暴露。
         """
         trainer = FCv1Trainer()
+        # 注入 mock logger 避免污染真实 loss_logs 目录
+        trainer.loss_logger = MagicMock()
+        trainer.loss_logger.dense_log = False
         
         # 临时模型路径
         model_path = os.path.join(self.temp_dir, "test_model.pth")
@@ -99,6 +106,9 @@ class TestFCv1TrainerCycle(unittest.TestCase):
         # 创建初始模型
         initial_model = FCv1Model()
         trainer = FCv1Trainer(initial_model)
+        # 注入 mock logger 避免污染真实 loss_logs 目录
+        trainer.loss_logger = MagicMock()
+        trainer.loss_logger.dense_log = False
         
         # 执行训练周期
         trainer.train_cycle(

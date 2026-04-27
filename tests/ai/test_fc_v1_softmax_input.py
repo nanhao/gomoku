@@ -18,6 +18,7 @@ import json
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from ai.models.fc_v1.trainer import FCv1Trainer
+from unittest.mock import MagicMock
 
 
 class TestSoftmaxProbabilityInput(unittest.TestCase):
@@ -173,9 +174,15 @@ class TestSoftmaxProbabilityInput(unittest.TestCase):
                 json.dump(sample_data, f)
 
             trainer = FCv1Trainer(fresh=True)
+            # 注入 mock logger 避免污染真实 loss_logs 目录
+            trainer.loss_logger = MagicMock()
+            trainer.loss_logger.dense_log = False
             loss_epoch1 = trainer.train_single(tmpdir, epochs=1)
             
             trainer2 = FCv1Trainer(fresh=True)
+            # 注入 mock logger 避免污染真实 loss_logs 目录
+            trainer2.loss_logger = MagicMock()
+            trainer2.loss_logger.dense_log = False
             loss_epoch50 = trainer2.train_single(tmpdir, epochs=50)
 
         # 50 epoch 的平均 loss 应小于 1 epoch

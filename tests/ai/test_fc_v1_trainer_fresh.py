@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from ai.models.fc_v1.trainer import FCv1Trainer
 from ai.models.fc_v1.model import FCv1Model
+from unittest.mock import MagicMock
 
 
 class TestFCv1TrainerFreshParameter(unittest.TestCase):
@@ -106,6 +107,9 @@ class TestFCv1TrainerFreshParameter(unittest.TestCase):
         
         # 使用 fresh=True 创建训练器并训练
         trainer = FCv1Trainer(fresh=True)
+        # 注入 mock logger 避免污染真实 loss_logs 目录
+        trainer.loss_logger = MagicMock()
+        trainer.loss_logger.dense_log = False
         loss = trainer.train_single(sample_dir, epochs=1)
         
         # 验证训练成功

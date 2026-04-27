@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 from ai.models.fc_v1.model import FCv1Model
 from ai.models.fc_v1.trainer import FCv1Trainer
 from tests.ai.helpers import create_sample_dir, create_output
+from unittest.mock import MagicMock
 import torch
 
 
@@ -36,6 +37,13 @@ class TestMiniBatchTrainingEdge(unittest.TestCase):
         """测试后清理"""
         self._patcher.stop()
         shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def _create_trainer(self) -> FCv1Trainer:
+        """创建训练器并注入 mock logger 避免污染真实 loss_logs 目录"""
+        trainer = FCv1Trainer(fresh=True)
+        trainer.loss_logger = MagicMock()
+        trainer.loss_logger.dense_log = False
+        return trainer
 
     def _create_sample_dir(self, name: str, n_items: int = 2) -> str:
         """创建一个包含 sample.json 的目录"""
@@ -82,7 +90,7 @@ class TestMiniBatchTrainingEdge(unittest.TestCase):
     def test_batch_size_larger_than_data(self):
         """[edge] batch_size 大于样本数时退化为单批次"""
         dir1 = self._create_sample_dir("s1", n_items=3)
-        trainer = FCv1Trainer(fresh=True)
+        trainer = self._create_trainer()
         
         # batch_size=100 远大于样本数 3
         result = trainer.train_mini_batch(
@@ -98,7 +106,7 @@ class TestMiniBatchTrainingEdge(unittest.TestCase):
     def test_batch_size_equals_one(self):
         """[edge] batch_size=1 时每个样本单独更新"""
         dir1 = self._create_sample_dir("s1", n_items=5)
-        trainer = FCv1Trainer(fresh=True)
+        trainer = self._create_trainer()
         
         result = trainer.train_mini_batch(
             [dir1],
@@ -113,7 +121,7 @@ class TestMiniBatchTrainingEdge(unittest.TestCase):
     def test_single_sample(self):
         """[edge] 只有 1 个样本时的训练"""
         dir1 = self._create_sample_dir("s1", n_items=1)
-        trainer = FCv1Trainer(fresh=True)
+        trainer = self._create_trainer()
         
         result = trainer.train_mini_batch(
             [dir1],
@@ -128,7 +136,7 @@ class TestMiniBatchTrainingEdge(unittest.TestCase):
     def test_large_batch_size(self):
         """[edge] 非常大的 batch_size"""
         dir1 = self._create_sample_dir("s1", n_items=5)
-        trainer = FCv1Trainer(fresh=True)
+        trainer = self._create_trainer()
         
         result = trainer.train_mini_batch(
             [dir1],
@@ -142,7 +150,7 @@ class TestMiniBatchTrainingEdge(unittest.TestCase):
     def test_zero_epochs(self):
         """[edge] epochs=0 时的行为"""
         dir1 = self._create_sample_dir("s1")
-        trainer = FCv1Trainer(fresh=True)
+        trainer = self._create_trainer()
         
         # epochs=0 应该返回 0（没有训练迭代）
         result = trainer.train_mini_batch(
@@ -162,7 +170,7 @@ class TestMiniBatchTrainingEdge(unittest.TestCase):
         dir1 = self._create_sample_dir("s1", n_items=10)
         
         # 验证 shuffle=False 时训练能正常完成
-        trainer = FCv1Trainer(fresh=True)
+        trainer = self._create_trainer()
         loss = trainer.train_mini_batch(
             [dir1],
             epochs=5,
@@ -179,7 +187,7 @@ class TestMiniBatchTrainingEdge(unittest.TestCase):
         dir2 = self._create_sample_dir("s2", n_items=3)
         dir3 = self._create_sample_dir("s3", n_items=4)
         
-        trainer = FCv1Trainer(fresh=True)
+        trainer = self._create_trainer()
         
         result = trainer.train_mini_batch(
             [dir1, dir2, dir3],
@@ -209,6 +217,13 @@ class TestMiniBatchVsBatchComparison(unittest.TestCase):
         """测试后清理"""
         self._patcher.stop()
         shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def _create_trainer(self) -> FCv1Trainer:
+        """创建训练器并注入 mock logger 避免污染真实 loss_logs 目录"""
+        trainer = FCv1Trainer(fresh=True)
+        trainer.loss_logger = MagicMock()
+        trainer.loss_logger.dense_log = False
+        return trainer
 
     def _create_sample_dir(self, name: str, n_items: int = 5) -> str:
         """创建 sample 目录"""
@@ -244,14 +259,14 @@ class TestMiniBatchVsBatchComparison(unittest.TestCase):
         dir1 = self._create_sample_dir("s1", n_items=10)
         
         # 记录 train_batch 的参数更新次数
-        trainer_batch = FCv1Trainer(fresh=True)
+        trainer_batch = self._create_trainer()
         params_batch_before = list(trainer_batch.model.network.parameters())[0].data.clone()
         trainer_batch.train_batch([dir1], epochs=1, verbose=False)
         params_batch_after = list(trainer_batch.model.network.parameters())[0].data
         batch_diff = torch.abs(params_batch_after - params_batch_before).sum().item()
         
         # 记录 train_mini_batch 的参数变化
-        trainer_mini = FCv1Trainer(fresh=True)
+        trainer_mini = self._create_trainer()
         params_mini_before = list(trainer_mini.model.network.parameters())[0].data.clone()
         trainer_mini.train_mini_batch([dir1], epochs=1, batch_size=2, verbose=False)
         params_mini_after = list(trainer_mini.model.network.parameters())[0].data
