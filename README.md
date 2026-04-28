@@ -249,9 +249,9 @@ python ai/lr_range_test.py --model cnn_v2 --data ai/merge_samples/merge_cnn_v1_1
 
 ```bash
 # 方式1：直接调用 pytest（推荐）
-python -m pytest tests/ -v
+python -m pytest tests/ -v -s
 
-# 方式2：通过兼容性入口运行
+# 方式2：通过兼容性入口运行（已自动带 -s）
 python tests/run_tests.py
 ```
 

@@ -5,6 +5,9 @@
 
 也可直接调用 pytest：
   python -m pytest tests/ -v
+
+注意：默认禁用输出捕获 (-s/--capture=no)，因为 pytest 的捕获机制
+在 Windows 上与 Tcl/Tk 存在已知兼容性问题，会导致 GUI 测试间歇性失败。
 """
 
 import sys
@@ -46,8 +49,9 @@ if '.' in sys.path:
 def main():
     """调用 pytest 运行全部测试"""
     import pytest
-    # 默认参数 + 允许用户追加额外参数
-    args = ['tests/', '-v'] + sys.argv[1:]
+    # 默认禁用捕获，避免 Windows 上 Tcl/Tk 初始化失败
+    # 用户仍可通过追加 --capture=fd 等参数覆盖此默认值
+    args = ['tests/', '-v', '-s'] + sys.argv[1:]
     return pytest.main(args)
 
 
