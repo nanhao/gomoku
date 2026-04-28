@@ -93,15 +93,15 @@ class TestCNNv3Network(unittest.TestCase):
                                    f"网络中不应包含 Dropout 层，但发现 {type(module).__name__}")
 
     def test_network_param_count(self):
-        """CNN v3 参数量应约为 164 万（3层32通道，无BN，FC直出）"""
+        """CNN v3 参数量应约为 49.5 万（3层32通道，无BN，64维瓶颈FC）"""
         network = CNNV3Network()
         total = sum(p.numel() for p in network.parameters())
 
-        # 3层32通道 + FC(7200→225): 参数量约 164 万
-        self.assertGreaterEqual(total, 1_630_000,
-                               f"参数量 {total} 应 >= 163 万")
-        self.assertLessEqual(total, 1_650_000,
-                            f"参数量 {total} 应 <= 165 万")
+        # 3层32通道 + FC1(7200→64) + FC_output(64→225): 参数量约 49.5 万
+        self.assertGreaterEqual(total, 490_000,
+                               f"参数量 {total} 应 >= 49 万")
+        self.assertLessEqual(total, 500_000,
+                            f"参数量 {total} 应 <= 50 万")
 
     def test_network_conv_channels(self):
         """验证卷积层通道数为 32"""
@@ -120,12 +120,16 @@ class TestCNNv3Network(unittest.TestCase):
         self.assertEqual(network.conv3.out_channels, 32)
 
     def test_network_fc_direct_output(self):
-        """验证 FC 层直接从卷积输出映射到 225 维（无中间隐藏层）"""
+        """验证 FC 层为 64 维瓶颈结构：7200→64→225"""
         network = CNNV3Network()
 
-        # FC 层输入应为 32*15*15=7200，输出为 225
-        self.assertEqual(network.fc.in_features, 32 * 15 * 15)
-        self.assertEqual(network.fc.out_features, 225)
+        # FC1 层输入应为 32*15*15=7200，输出为 64（瓶颈）
+        self.assertEqual(network.fc1.in_features, 32 * 15 * 15)
+        self.assertEqual(network.fc1.out_features, 64)
+
+        # FC_output 层输入为 64，输出为 225
+        self.assertEqual(network.fc_output.in_features, 64)
+        self.assertEqual(network.fc_output.out_features, 225)
 
 
 class TestCNNv3Model(unittest.TestCase):

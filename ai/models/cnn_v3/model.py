@@ -2,11 +2,11 @@
 
 CNN v3 追求结构最简化：
 - 三层卷积统一 32 通道，无 BatchNorm，无 Dropout
-- FC 层直接从卷积输出映射到 225 维，无中间隐藏层
-- Conv → ReLU 直接堆叠，FC → Softmax 直接输出
+- FC 层先压缩到 64 维瓶颈，再映射到 225 维输出
+- Conv → ReLU 直接堆叠，FC → Softmax 输出
 
 网络结构：
-输入层(15x15x3) -> 卷积层(3层32通道) -> FC(7200->225) -> Softmax
+输入层(15x15x3) -> 卷积层(3层32通道) -> FC1(7200->64) -> FC_output(64->225) -> Softmax
 
 输入编码：
 - 通道1：黑棋位置（1表示黑棋，0表示其他）
@@ -31,7 +31,7 @@ from ai.base_model import NeuralNetworkModel, board_vector_to_cnn_tensor
 class CNNV3Network(nn.Module):
     """CNN v3 极简神经网络结构
 
-    三层 32 通道卷积（无 BN、无 Dropout），FC 直接输出 225 维。
+    三层 32 通道卷积（无 BN、无 Dropout），FC 瓶颈压缩后输出 225 维。
     结构最简化，探索极简网络在五子棋任务上的学习能力。
 
     输入：15x15x3 的棋盘状态
@@ -39,9 +39,9 @@ class CNNV3Network(nn.Module):
 
     网络结构：
     - 3 层卷积：3→32→32→32（统一 32 通道，无 BN）
-    - 1 层全连接：7200→225（直接映射，无隐藏层）
+    - 2 层全连接：7200→64→225（64 维瓶颈压缩）
     - Softmax 输出
-    - 参数量：约 164 万
+    - 参数量：约 49.5 万
     """
 
     def __init__(self):
@@ -59,9 +59,13 @@ class CNNV3Network(nn.Module):
         self.conv3 = nn.Conv2d(32, 32, kernel_size=3, padding=1)
         self.relu3 = nn.ReLU()
 
-        # 全连接层：直接从卷积输出映射到 225 维
+        # 全连接层部分（64 维瓶颈压缩，与 CNN v2 结构一致）
         # 32通道 * 15 * 15 = 7200
-        self.fc = nn.Linear(32 * 15 * 15, 225)
+        self.fc1 = nn.Linear(32 * 15 * 15, 64)
+        self.relu_fc1 = nn.ReLU()
+
+        # 输出层: 225个位置
+        self.fc_output = nn.Linear(64, 225)
 
         # Softmax 激活函数
         self.softmax = nn.Softmax(dim=1)
@@ -83,8 +87,15 @@ class CNNV3Network(nn.Module):
         # 展平: (batch, 32, 15, 15) -> (batch, 7200)
         x = x.view(x.size(0), -1)
 
-        # FC 直接输出 + Softmax
-        x = self.softmax(self.fc(x))
+        # 全连接层：瓶颈压缩 → 输出
+        x = self.fc1(x)
+        x = self.relu_fc1(x)
+
+        # 输出层
+        x = self.fc_output(x)
+
+        # Softmax 激活，输出概率分布
+        x = self.softmax(x)
 
         return x
 
@@ -93,7 +104,7 @@ class CNNV3Model(NeuralNetworkModel):
     """CNN v3 极简模型
 
     极简卷积神经网络模型，用于预测五子棋落子位置的概率。
-    三层 32 通道卷积 + FC 直出，无 BN、无 Dropout。
+    三层 32 通道卷积 + 64 维瓶颈 FC，无 BN、无 Dropout。
     继承 NeuralNetworkModel，通用逻辑由基类提供。
 
     默认行为：
