@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 import torch
 from ai.models.cnn_v1.model import CNNV1Model, CNNV1Network
+from ai.base_model import board_vector_to_cnn_tensor
 
 
 class TestCNNNetwork(unittest.TestCase):
@@ -244,8 +245,6 @@ class TestCNNV1Model(unittest.TestCase):
 
     def test_vector_to_tensor_conversion(self):
         """测试向量到张量的转换"""
-        model = CNNV1Model()
-
         # 创建测试向量
         board_vector = [0] * 225 + [1]
         # 在 (0, 0) 放置黑棋
@@ -253,7 +252,8 @@ class TestCNNV1Model(unittest.TestCase):
         # 在 (1, 1) 放置白棋
         board_vector[1 * 15 + 1] = 2
 
-        tensor = model._vector_to_tensor(board_vector)
+        # 使用共用的工具函数进行转换
+        tensor = board_vector_to_cnn_tensor(board_vector, torch.device("cpu"))
 
         # 检查张量形状
         self.assertEqual(tensor.shape, (1, 3, 15, 15))

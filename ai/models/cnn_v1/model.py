@@ -9,13 +9,18 @@
 - 通道3：当前落子方（全1表示黑方，全0表示白方）
 
 输出：Softmax 概率分布，值域 (0, 1)，总和为 1
+
+CNNV1Model 继承自 NeuralNetworkModel，只需实现：
+- _create_network: 返回 CNNV1Network 实例
+- _prepare_input: 调用 board_vector_to_cnn_tensor 转换输入
+其余通用逻辑（__init__、predict、save、load）由基类提供。
 """
 
 import os
 from typing import List
 import torch
 import torch.nn as nn
-from ai.base_model import BaseModel
+from ai.base_model import NeuralNetworkModel, board_vector_to_cnn_tensor
 
 
 class CNNV1Network(nn.Module):
@@ -98,10 +103,11 @@ class CNNV1Network(nn.Module):
         return x
 
 
-class CNNV1Model(BaseModel):
+class CNNV1Model(NeuralNetworkModel):
     """CNN 模型
     
     卷积神经网络模型，用于预测五子棋落子位置的概率。
+    继承 NeuralNetworkModel，通用逻辑由基类提供。
     
     默认行为：
     - 如果 cnn.pth 存在，自动加载该模型参数
@@ -112,131 +118,30 @@ class CNNV1Model(BaseModel):
     # 默认模型保存路径
     DEFAULT_MODEL_PATH = os.path.join(os.path.dirname(__file__), "cnn.pth")
     
-    def __init__(self, model_path: str = None, fresh: bool = False):
-        """初始化模型
-        
-        Args:
-            model_path: 模型文件路径，如果存在则加载
-            fresh: 是否强制创建新模型（不加载已保存的模型）
-        """
-        super(CNNV1Model, self).__init__()
-        
-        # 创建神经网络
-        self.network = CNNV1Network()
-        
-        # GPU 移动由 BaseTrainer 统一管理，模型创建时保持在 CPU
-        
-        # fresh=True 时，不加载任何模型，使用随机初始化的参数
-        if fresh:
-            return  # 使用随机初始化的参数
-        
-        # 如果指定了 model_path 且文件存在，加载该模型
-        if model_path and os.path.exists(model_path):
-            self.load(model_path)
-        # 否则尝试加载默认路径的模型
-        elif os.path.exists(self.DEFAULT_MODEL_PATH):
-            self.load(self.DEFAULT_MODEL_PATH)
-    
     @property
     def name(self) -> str:
         """模型名称"""
         return "cnn_v1"
     
-    def _vector_to_tensor(self, board_vector: List[int], device: torch.device = None) -> torch.Tensor:
+    def _create_network(self) -> nn.Module:
+        """创建 CNN v1 神经网络实例
+        
+        Returns:
+            CNNV1Network 实例
+        """
+        return CNNV1Network()
+    
+    def _prepare_input(self, board_vector: List[int], device: torch.device) -> torch.Tensor:
         """将 226 维向量转换为 CNN 输入张量 (1, 3, 15, 15)
         
+        使用 board_vector_to_cnn_tensor 工具函数完成转换，
+        该函数是 CNNV1Model 和 CNNV2Model 共用的输入转换逻辑。
+        
         Args:
-            board_vector: 226 维向量，前 225 位是棋盘，最后 1 位是当前落子方
-            device: 目标设备，如果为 None 则使用 CPU
+            board_vector: 226 维向量
+            device: 目标设备
             
         Returns:
             形状为 (1, 3, 15, 15) 的张量
         """
-        if device is None:
-            device = torch.device("cpu")
-            
-        # 提取棋盘和当前落子方
-        board = board_vector[:225]
-        current_player = board_vector[225] if len(board_vector) > 225 else 1
-        
-        # 创建 3 个通道
-        # 通道1: 黑棋位置
-        black_channel = [1.0 if x == 1 else 0.0 for x in board]
-        # 通道2: 白棋位置
-        white_channel = [1.0 if x == 2 else 0.0 for x in board]
-        # 通道3: 当前落子方（全1表示黑方，全0表示白方）
-        player_channel = [1.0 if current_player == 1 else 0.0] * 225
-        
-        # 重塑为 15x15
-        black_matrix = [black_channel[i*15:(i+1)*15] for i in range(15)]
-        white_matrix = [white_channel[i*15:(i+1)*15] for i in range(15)]
-        player_matrix = [player_channel[i*15:(i+1)*15] for i in range(15)]
-        
-        # 转换为张量并堆叠
-        black_tensor = torch.tensor(black_matrix, dtype=torch.float32, device=device)
-        white_tensor = torch.tensor(white_matrix, dtype=torch.float32, device=device)
-        player_tensor = torch.tensor(player_matrix, dtype=torch.float32, device=device)
-        
-        # 堆叠为 (3, 15, 15) 并添加 batch 维度
-        input_tensor = torch.stack([black_tensor, white_tensor, player_tensor], dim=0)
-        input_tensor = input_tensor.unsqueeze(0)  # (1, 3, 15, 15)
-        
-        return input_tensor
-    
-    def predict(self, board_vector: List[int]) -> List[float]:
-        """预测每个落子位置的概率
-            
-        Args:
-            board_vector: 226 维向量，前 225 位是棋盘（按行展开，0=空, 1=黑, 2=白），
-                         最后 1 位是当前落子方（1=黑, 2=白）
-            
-        Returns:
-            225 维列表，格式为 [prob(0,0), prob(0,1), ..., prob(14,14)]
-            索引 i 对应位置 (i//15, i%15)，概率范围：0 < prob < 1
-            所有概率之和为 1（Softmax 输出）
-        """
-        # 获取设备（与网络所在设备一致）
-        device = next(self.network.parameters()).device
-            
-        # 将输入转换为 CNN 输入张量并移到对应设备
-        input_tensor = self._vector_to_tensor(board_vector, device=device)
-            
-        # 前向传播
-        self.network.eval()
-        with torch.no_grad():
-            output_tensor = self.network(input_tensor)
-    
-        # 将输出转换为列表 (值域 (0, 1)，Softmax 概率)
-        output_values = output_tensor.squeeze(0).tolist()
-    
-        # 构建 225 维结果，索引 i 对应位置 (i//15, i%15)
-        # 直接返回概率值
-        result = [float(prob) for prob in output_values]
-    
-        return result
-    
-    def save(self, model_path: str = None) -> str:
-        """保存模型参数
-        
-        Args:
-            model_path: 保存路径，默认使用 ai/models/cnn/cnn.pth
-            
-        Returns:
-            实际保存的路径
-        """
-        if model_path is None:
-            model_path = self.DEFAULT_MODEL_PATH
-        
-        # 保存模型状态字典
-        torch.save(self.network.state_dict(), model_path)
-        
-        return model_path
-    
-    def load(self, model_path: str):
-        """加载模型参数
-        
-        Args:
-            model_path: 模型文件路径
-        """
-        self.network.load_state_dict(torch.load(model_path, weights_only=True))
-        self.network.eval()
+        return board_vector_to_cnn_tensor(board_vector, device)

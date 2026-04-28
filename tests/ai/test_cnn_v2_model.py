@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 import torch
 from ai.models.cnn_v2.model import CNNV2Model, CNNV2Network
+from ai.base_model import board_vector_to_cnn_tensor
 
 
 class TestCNNv2Network(unittest.TestCase):
@@ -155,13 +156,12 @@ class TestCNNv2Model(unittest.TestCase):
 
     def test_vector_to_tensor_conversion(self):
         """测试向量到张量的转换"""
-        model = CNNV2Model()
-
         board_vector = [0] * 225 + [1]
         board_vector[0] = 1
         board_vector[1 * 15 + 1] = 2
 
-        tensor = model._vector_to_tensor(board_vector)
+        # 使用共用的工具函数进行转换
+        tensor = board_vector_to_cnn_tensor(board_vector, torch.device("cpu"))
 
         self.assertEqual(tensor.shape, (1, 3, 15, 15))
         self.assertEqual(tensor[0, 0, 0, 0].item(), 1.0)
