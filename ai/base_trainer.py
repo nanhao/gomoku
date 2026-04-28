@@ -46,12 +46,14 @@ class BaseTrainer(ABC):
     
     # 默认学习率，子类可覆盖
     DEFAULT_LR = 0.001
+    # 默认权重衰减（AdamW 解耦权重衰减），子类可覆盖
+    DEFAULT_WEIGHT_DECAY = 0.01
     
     def __init__(self, model: Optional[BaseModel] = None, fresh: bool = False,
                  device: Optional[torch.device] = None, loss_logger=None,
                  lr_scheduler_type: str = None, lr_step_size: int = 500,
                  lr_gamma: float = 0.9, lr_patience: int = 100,
-                 lr_factor: float = 0.5):
+                 lr_factor: float = 0.5, weight_decay: float = None):
         """初始化训练器
 
         Args:
@@ -64,6 +66,7 @@ class BaseTrainer(ABC):
             lr_gamma: StepLR 衰减系数，默认 0.9
             lr_patience: ReduceLROnPlateau 耐心值，默认 100
             lr_factor: ReduceLROnPlateau 衰减系数，默认 0.5
+            weight_decay: AdamW 权重衰减系数，None 时使用 DEFAULT_WEIGHT_DECAY
         """
         # 设置设备
         self.device = device if device is not None else get_device()
@@ -78,11 +81,13 @@ class BaseTrainer(ABC):
         if self.model.network is not None:
             self.model.network.to(self.device)
 
-        # 初始化优化器（Adam）
+        # 初始化优化器（AdamW，解耦权重衰减）
         if self.model.network is not None:
-            self.optimizer = optim.Adam(
+            wd = weight_decay if weight_decay is not None else self.DEFAULT_WEIGHT_DECAY
+            self.optimizer = optim.AdamW(
                 self.model.network.parameters(),
-                lr=self.DEFAULT_LR
+                lr=self.DEFAULT_LR,
+                weight_decay=wd
             )
         else:
             self.optimizer = None

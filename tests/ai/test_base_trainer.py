@@ -11,6 +11,8 @@ import shutil
 import unittest
 from unittest.mock import MagicMock
 
+import torch
+
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
@@ -89,6 +91,35 @@ class TestBaseTrainerWithCompleteSubclass(unittest.TestCase):
         trainer = self.TrainerClass()
         self.assertIsNotNone(trainer)
         self.assertIsNotNone(trainer.model)
+    
+    def test_optimizer_is_adamw(self):
+        """测试：默认优化器为 AdamW"""
+        trainer = self.TrainerClass()
+        self.assertIsInstance(trainer.optimizer, torch.optim.AdamW)
+    
+    def test_default_weight_decay(self):
+        """测试：默认权重衰减为 0.01"""
+        trainer = self.TrainerClass()
+        self.assertAlmostEqual(
+            trainer.optimizer.param_groups[0]['weight_decay'],
+            0.01
+        )
+    
+    def test_custom_weight_decay(self):
+        """测试：自定义权重衰减"""
+        trainer = self.TrainerClass(weight_decay=0.05)
+        self.assertAlmostEqual(
+            trainer.optimizer.param_groups[0]['weight_decay'],
+            0.05
+        )
+    
+    def test_zero_weight_decay(self):
+        """测试：weight_decay=0 时不做权重衰减"""
+        trainer = self.TrainerClass(weight_decay=0.0)
+        self.assertAlmostEqual(
+            trainer.optimizer.param_groups[0]['weight_decay'],
+            0.0
+        )
     
     def test_model_name_property(self):
         """测试：model_name 属性返回正确值"""

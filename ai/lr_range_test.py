@@ -168,8 +168,8 @@ def run_lr_range_test(
         # 重置模型到初始状态
         model.network.load_state_dict(initial_state)
 
-        # 创建优化器（当前 round 的固定 lr）
-        optimizer = optim.Adam(model.network.parameters(), lr=lr)
+        # 创建优化器（当前 round 的固定 lr，AdamW 解耦权重衰减）
+        optimizer = optim.AdamW(model.network.parameters(), lr=lr, weight_decay=0.01)
 
         # 训练 epochs 个 step
         round_loss_sum = 0.0
