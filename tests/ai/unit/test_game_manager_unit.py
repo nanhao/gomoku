@@ -150,33 +150,12 @@ class TestPlaySingleGameEdgeCases(unittest.TestCase):
         if os.path.exists(self.temp_dir):
             shutil.rmtree(self.temp_dir)
 
-    def test_game_with_on_progress_callback(self):
-        """带 on_progress 回调时，回调被正确调用"""
-        engine_black = AIEngine(RandomModel())
-        engine_white = AIEngine(RandomModel())
-        recorder = DataRecorder("test_unit_prog", self.test_ai_data_dir)
-
-        progress_calls = []
-
-        def on_progress(current, total):
-            progress_calls.append((current, total))
-
-        AIGameManager._play_single_game(
-            engine_black, engine_white, recorder,
-            game_num=1, on_progress=on_progress
-        )
-
-        # 回调应该被调用一次（单局游戏）
-        self.assertEqual(len(progress_calls), 1)
-        self.assertEqual(progress_calls[0], (1, 1))
-
-    def test_game_without_on_progress(self):
-        """不带 on_progress 回调时，正常运行不报错"""
+    def test_game_without_extra_params(self):
+        """仅传入必需参数时，正常运行不报错"""
         engine_black = AIEngine(RandomModel())
         engine_white = AIEngine(RandomModel())
         recorder = DataRecorder("test_unit_no_cb", self.test_ai_data_dir)
 
-        # 不传 on_progress，不应抛异常
         winner = AIGameManager._play_single_game(
             engine_black, engine_white, recorder, game_num=1
         )

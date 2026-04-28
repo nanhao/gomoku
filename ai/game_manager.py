@@ -125,7 +125,6 @@ class AIGameManager:
         recorder: DataRecorder,
         game_num: int,
         name_prefix: str = "ai_vs_ai",
-        on_progress=None,
     ) -> int:
         """执行单局 AI 内战
 
@@ -138,7 +137,6 @@ class AIGameManager:
             recorder: 数据记录器
             game_num: 当前局号（用于存档命名和日志）
             name_prefix: 存档名称前缀（"ai_vs_ai" 或 "ai_vs_ai_rnd"）
-            on_progress: 可选进度回调，参数为 (current: int, total: int)
 
         Returns:
             winner: 获胜方（1=黑, 2=白, 3=平局）
@@ -194,10 +192,6 @@ class AIGameManager:
         end_board = AIEngine.board_to_vector(end_state["board"], 0)
         recorder.save_game_result(current_game_id, winner, end_board)
 
-        # 进度回调
-        if on_progress is not None:
-            on_progress(game_num, game_num)
-
         return winner
 
     @staticmethod
@@ -235,7 +229,7 @@ class AIGameManager:
             )
             results.append({"game": game_num, "winner": winner})
 
-            # 多局进度回调
+            # 跨局进度回调
             if on_progress is not None:
                 on_progress(game_num, num_games)
 
