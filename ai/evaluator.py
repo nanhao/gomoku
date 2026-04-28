@@ -13,14 +13,13 @@
 
 import os
 import json
-import math
+import warnings
 from typing import List, Dict, Tuple
-from copy import deepcopy
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from concurrent.futures.process import BrokenProcessPool
 
 from ai.constants import AI_DATA_DIR, TRAIN_DATA_DIR
-from ai.shape_detector import detect_shapes as _detect_shapes, detect_single_direction as _detect_single_direction
+from ai.shape_detector import detect_shapes as _detect_shapes
 from ai.line_tracer import LineTracer
 from ai.reward_calculator import RewardCalculator, RewardConfig
 from ai.probability_utils import masked_softmax
@@ -59,22 +58,6 @@ class Evaluator:
     MIN_REWARD = -1000000
     DECAY_RATE = 0.9
     BLEND_ALPHA = 1.0  # 五连追溯奖励融合权重
-    
-    # 四个检测方向：横向、纵向、主对角线、副对角线
-    DIRECTIONS = [
-        (0, 1),   # 横向
-        (1, 0),   # 纵向
-        (1, 1),   # 主对角线
-        (1, -1),  # 副对角线
-    ]
-    
-    # 方向名称映射
-    DIRECTION_NAMES = {
-        (0, 1): "横向",
-        (1, 0): "纵向",
-        (1, 1): "主对角线",
-        (1, -1): "副对角线",
-    }
     
     def __init__(self, ai_data_dir: str = None, train_data_dir: str = None,
                  decay_rate: float = None, max_workers: int = None):
@@ -175,7 +158,7 @@ class Evaluator:
         if end_board and winner > 0 and winner < 3:
             # end_board 可能是 226 维，取前 225 位
             board_225 = end_board[:225] if len(end_board) >= 225 else end_board
-            bonuses = self.trace_winning_line(board_225, winner, history)
+            bonuses = self._line_tracer.trace_winning_line(board_225, winner, history)
             # 转换为 {step_index: bonus_reward} 字典
             line_bonuses = dict(bonuses)
         
@@ -201,8 +184,9 @@ class Evaluator:
                 else:
                     # 空位：mask = 1，计算 reward
                     mask[i] = 1
+                    # 直连 RewardCalculator 计算位置 reward
                     x, y = i // 15, i % 15
-                    raw_rewards[i] = float(self._compute_position_reward(board, x, y, current_player))
+                    raw_rewards[i] = float(self._reward_calculator.compute_position_reward(board, x, y, current_player))
             
             # 如果当前步骤有五连追溯奖励，叠加到实际落子位置
             if step_idx in line_bonuses:
@@ -211,14 +195,14 @@ class Evaluator:
                     px, py = position[0], position[1]
                     pos_idx = px * 15 + py
                     if 0 <= pos_idx < 225 and mask[pos_idx] == 1:
-                        # 融合棋型评估奖励和五连追溯奖励
-                        raw_rewards[pos_idx] = self.blend_rewards(
+                        # 直连 LineTracer 融合棋型评估奖励和五连追溯奖励
+                        raw_rewards[pos_idx] = self._line_tracer.blend_rewards(
                             raw_rewards[pos_idx],
                             line_bonuses[step_idx]
                         )
             
-            # 对 raw_rewards 应用 Softmax 转换为概率分布
-            output = self._softmax(raw_rewards, mask)
+            # 对 raw_rewards 应用 Softmax 转换为概率分布（直连 probability_utils）
+            output = masked_softmax(raw_rewards, mask)
             
             sample_dict.append({
                 "input": input_vector,
@@ -228,43 +212,30 @@ class Evaluator:
         
         return sample_dict
     
-    def _compute_position_reward(self, board: List[int], x: int, y: int, current_player: int) -> int:
-        """计算单个位置的 reward（委托给 RewardCalculator）"""
-        return self._reward_calculator.compute_position_reward(board, x, y, current_player)
-
     def detect_shapes(self, board: List[int], position: Tuple[int, int], player: int) -> List[Dict]:
-        """检测落子后形成的所有棋型（委托给 ai.shape_detector）"""
+        """检测落子后形成的所有棋型（委托给 ai.shape_detector）
+    
+        .. deprecated::
+            请直接使用 ai.shape_detector.detect_shapes。
+        """
+        warnings.warn(
+            "Evaluator.detect_shapes 已弃用，请直接使用 ai.shape_detector.detect_shapes",
+            DeprecationWarning, stacklevel=2
+        )
         return _detect_shapes(board, position, player)
-
-    def _detect_shape_in_direction(self, board: List[int], x: int, y: int,
-                                    player: int, dx: int, dy: int) -> str:
-        """检测单个方向上的棋型（委托给 ai.shape_detector）"""
-        return _detect_single_direction(board, x, y, player, dx, dy)
-
+    
     def shape_to_reward(self, board: List[int], shape_info: Dict,
                         player: int, is_current_player: bool, position=None) -> int:
-        """将棋型转换为 reward 值（委托给 RewardCalculator）"""
-        return self._reward_calculator.shape_to_reward(board, shape_info, player, is_current_player, position)
-
-    def _compute_four_reward(self, board: List[int], shape_info: Dict,
-                              player: int, is_current_player: bool, position=None) -> int:
-        """计算冲四的递归 reward（委托给 RewardCalculator）"""
-        return self._reward_calculator._compute_four_reward(board, shape_info, player, is_current_player, position)
-
-    def _find_four_defense(self, simulated_board, x, y, player, dx, dy):
-        """找到冲四的防守位置（委托给 RewardCalculator）"""
-        return self._reward_calculator._find_four_defense(simulated_board, x, y, player, dx, dy)
-
-    def _shape_reward_value(self, shape_type, count_directions, factor):
-        """获取棋型的奖励值（委托给 RewardCalculator）"""
-        return self._reward_calculator._shape_reward_value(shape_type, count_directions, factor)
+        """将棋型转换为 reward 值（委托给 RewardCalculator）
     
-    # Softmax 缩放因子（保留类常量以兼容外部引用）
-    SOFTMAX_SCALE = 1.0 / 100000.0
-
-    def _softmax(self, rewards: List[float], mask: List[int]) -> List[float]:
-        """对 reward 值应用 Softmax 转换为概率分布（委托给 probability_utils）"""
-        return masked_softmax(rewards, mask, scale=self.SOFTMAX_SCALE)
+        .. deprecated::
+            请直接使用 ai.reward_calculator.RewardCalculator.shape_to_reward。
+        """
+        warnings.warn(
+            "Evaluator.shape_to_reward 已弃用，请直接使用 ai.reward_calculator.RewardCalculator.shape_to_reward",
+            DeprecationWarning, stacklevel=2
+        )
+        return self._reward_calculator.shape_to_reward(board, shape_info, player, is_current_player, position)
     
     def _get_sample_path(self, record_file: str) -> str:
         """
@@ -397,17 +368,42 @@ class Evaluator:
         return {"sample_files": sample_files, "errors": errors}
     
     # ==================== 五连追溯奖励相关方法（委托给 LineTracer）====================
+    # 以下公开方法已弃用，请直接使用 LineTracer 对应方法
 
     def find_five_in_a_row(self, board: List[int], winner: int) -> List[Tuple[int, int]]:
-        """在棋盘上找到五连的位置（委托给 LineTracer）"""
+        """在棋盘上找到五连的位置（委托给 LineTracer）
+
+        .. deprecated::
+            请直接使用 ai.line_tracer.LineTracer.find_five_in_a_row。
+        """
+        warnings.warn(
+            "Evaluator.find_five_in_a_row 已弃用，请直接使用 ai.line_tracer.LineTracer.find_five_in_a_row",
+            DeprecationWarning, stacklevel=2
+        )
         return self._line_tracer.find_five_in_a_row(board, winner)
 
     def trace_winning_line(self, end_board: List[int], winner: int,
                            history: List[Dict]) -> List[Tuple[int, float]]:
-        """追溯形成五连的那 5 步落子，计算反向传播奖励（委托给 LineTracer）"""
+        """追溯形成五连的那 5 步落子，计算反向传播奖励（委托给 LineTracer）
+
+        .. deprecated::
+            请直接使用 ai.line_tracer.LineTracer.trace_winning_line。
+        """
+        warnings.warn(
+            "Evaluator.trace_winning_line 已弃用，请直接使用 ai.line_tracer.LineTracer.trace_winning_line",
+            DeprecationWarning, stacklevel=2
+        )
         return self._line_tracer.trace_winning_line(end_board, winner, history)
 
     def blend_rewards(self, shape_reward: float, line_bonus: float,
                       alpha: float = None) -> float:
-        """融合棋型评估奖励和五连追溯奖励（委托给 LineTracer）"""
+        """融合棋型评估奖励和五连追溯奖励（委托给 LineTracer）
+
+        .. deprecated::
+            请直接使用 ai.line_tracer.LineTracer.blend_rewards。
+        """
+        warnings.warn(
+            "Evaluator.blend_rewards 已弃用，请直接使用 ai.line_tracer.LineTracer.blend_rewards",
+            DeprecationWarning, stacklevel=2
+        )
         return self._line_tracer.blend_rewards(shape_reward, line_bonus, alpha)

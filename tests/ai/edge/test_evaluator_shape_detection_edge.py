@@ -46,7 +46,7 @@ class TestEvaluatorShapeDetectionEdge(unittest.TestCase):
         
         # 测试多个位置
         for pos in [(0, 0), (7, 7), (14, 14), (0, 14), (14, 0)]:
-            reward = self.evaluator._compute_position_reward(board, pos[0], pos[1], 1)
+            reward = self.evaluator._reward_calculator.compute_position_reward(board, pos[0], pos[1], 1)
             self.assertEqual(reward, 0, f"Position {pos} should have reward 0 for empty board")
     
     def test_board_edge_as_block(self):
@@ -69,7 +69,7 @@ class TestEvaluatorShapeDetectionEdge(unittest.TestCase):
         # 落子 (0, 5)，左端被白子阻挡 -> 眠三
         board[0 * 15 + 2] = 2  # 左端阻挡
         
-        reward = self.evaluator._compute_position_reward(board, 0, 5, 1)
+        reward = self.evaluator._reward_calculator.compute_position_reward(board, 0, 5, 1)
         # 眠三：一端被白子阻挡
         expected = int((0.1 + 1 * 0.1) * Evaluator.MAX_REWARD)
         self.assertEqual(reward, expected)
@@ -79,7 +79,7 @@ class TestEvaluatorShapeDetectionEdge(unittest.TestCase):
         board = [0] * 225
         # 角落 (0,0) 受两个边缘阻挡
         
-        reward = self.evaluator._compute_position_reward(board, 0, 0, 1)
+        reward = self.evaluator._reward_calculator.compute_position_reward(board, 0, 0, 1)
         # 独一，但角落位置可能有更多阻挡
         self.assertEqual(reward, 0)
     
@@ -97,7 +97,7 @@ class TestEvaluatorShapeDetectionEdge(unittest.TestCase):
         # 这种情况下，四子两端都被阻挡，不是冲四
         # 实际上 (7,7) 本身是空位，落子后形成的是被阻挡的四
         # 这不是有效的棋型威胁，应该视为更低级别
-        reward = self.evaluator._compute_position_reward(board, 7, 7, 1)
+        reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
         # 眠四不算威胁，应该返回较低的 reward
         # 实际上落子后变成四子，但两端被阻挡，这是眠四
         # 根据设计，眠四返回 0
@@ -148,7 +148,7 @@ class TestEvaluatorShapeDetectionEdge(unittest.TestCase):
         board[7 * 15 + 6] = 1
         
         # 我方 reward
-        my_reward = self.evaluator._compute_position_reward(board, 7, 7, 1)
+        my_reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
         
         # 同样棋盘，对手方 reward
         # 把黑子换成白子
@@ -157,7 +157,7 @@ class TestEvaluatorShapeDetectionEdge(unittest.TestCase):
         board2[7 * 15 + 6] = 2
         
         # 当前落子方是黑方，检测白方在此落子的价值
-        enemy_reward = self.evaluator._compute_position_reward(board2, 7, 7, 1)
+        enemy_reward = self.evaluator._reward_calculator.compute_position_reward(board2, 7, 7, 1)
         
         # 敌方 reward = 我方 reward * 0.95
         expected_ratio = enemy_reward / my_reward if my_reward > 0 else 0
@@ -172,7 +172,7 @@ class TestEvaluatorShapeDetectionEdge(unittest.TestCase):
         for col in range(3, 7):
             board[7 * 15 + col] = 1
         
-        reward = self.evaluator._compute_position_reward(board, 7, 7, 1)
+        reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
         self.assertLessEqual(reward, Evaluator.MAX_REWARD)
     
     def test_reward_not_negative(self):
@@ -185,7 +185,7 @@ class TestEvaluatorShapeDetectionEdge(unittest.TestCase):
         for x in range(15):
             for y in range(15):
                 if board[x * 15 + y] == 0:
-                    reward = self.evaluator._compute_position_reward(board, x, y, 1)
+                    reward = self.evaluator._reward_calculator.compute_position_reward(board, x, y, 1)
                     self.assertGreaterEqual(reward, 0, f"Reward should be non-negative at ({x},{y})")
     
     # ==================== 棋型优先级测试 ====================
@@ -199,7 +199,7 @@ class TestEvaluatorShapeDetectionEdge(unittest.TestCase):
             board[7 * 15 + col] = 1
         
         # 这里只能形成连五，不会有活四
-        reward = self.evaluator._compute_position_reward(board, 7, 7, 1)
+        reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
         self.assertEqual(reward, Evaluator.MAX_REWARD)
     
     # ==================== 完整 evaluate_record 测试 ====================

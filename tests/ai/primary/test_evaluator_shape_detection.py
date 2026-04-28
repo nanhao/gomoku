@@ -16,6 +16,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from ai.evaluator import Evaluator
+from ai.probability_utils import masked_softmax
 
 
 class TestEvaluatorShapeDetection(unittest.TestCase):
@@ -54,7 +55,7 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         board[1] = 2
         
         # 检测 (7,7) 位置的 reward（模拟落子后形成连五）
-        reward = self.evaluator._compute_position_reward(board, 7, 7, 1)
+        reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
         self.assertEqual(reward, Evaluator.MAX_REWARD)
     
     def test_live_five_opponent(self):
@@ -68,7 +69,7 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         board[0] = 1
         
         # 检测 (7,7) 位置对白方的价值
-        reward = self.evaluator._compute_position_reward(board, 7, 7, 1)
+        reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
         # 白方在此落子形成连五，敌方系数 0.95
         expected = int(Evaluator.MAX_REWARD * 0.95)
         self.assertEqual(reward, expected)
@@ -83,7 +84,7 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         for col in range(4, 7):
             board[7 * 15 + col] = 1
         
-        reward = self.evaluator._compute_position_reward(board, 7, 7, 1)
+        reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
         expected = int(0.9 * Evaluator.MAX_REWARD)
         self.assertEqual(reward, expected)
     
@@ -94,7 +95,7 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         for col in range(4, 7):
             board[7 * 15 + col] = 2
         
-        reward = self.evaluator._compute_position_reward(board, 7, 7, 1)  # 当前黑方
+        reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)  # 当前黑方
         expected = int(0.9 * Evaluator.MAX_REWARD * 0.95)
         self.assertEqual(reward, expected)
     
@@ -109,7 +110,7 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
             board[7 * 15 + col] = 1
         board[7 * 15 + 3] = 2  # 白方阻挡左端
         
-        reward = self.evaluator._compute_position_reward(board, 7, 7, 1)
+        reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
         # 冲四需要递归计算：模拟防守后的棋型
         # 这里先验证返回的是递归后的 reward
         self.assertIsInstance(reward, int)
@@ -131,7 +132,7 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         board[3 * 15 + 7] = 2  # 上端阻挡
         # 落子 (7,7) 后，横向和纵向都形成冲四 -> 多冲四
         
-        reward = self.evaluator._compute_position_reward(board, 7, 7, 1)
+        reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
         expected = int(0.9 * Evaluator.MAX_REWARD)
         self.assertEqual(reward, expected)
     
@@ -145,7 +146,7 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         board[7 * 15 + 5] = 1
         board[7 * 15 + 6] = 1
         
-        reward = self.evaluator._compute_position_reward(board, 7, 7, 1)
+        reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
         expected = int(0.5 * Evaluator.MAX_REWARD)
         self.assertEqual(reward, expected)
     
@@ -160,7 +161,7 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         board[5 * 15 + 7] = 1
         board[6 * 15 + 7] = 1
         
-        reward = self.evaluator._compute_position_reward(board, 7, 7, 1)
+        reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
         expected = int(0.8 * Evaluator.MAX_REWARD)
         self.assertEqual(reward, expected)
     
@@ -175,7 +176,7 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         board[7 * 15 + 6] = 1
         board[7 * 15 + 4] = 2  # 左端阻挡
         
-        reward = self.evaluator._compute_position_reward(board, 7, 7, 1)
+        reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
         expected = int((0.1 + 1 * 0.1) * Evaluator.MAX_REWARD)  # count_directions = 1
         self.assertEqual(reward, expected)
     
@@ -191,7 +192,7 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         board[6 * 15 + 7] = 1
         board[4 * 15 + 7] = 2
         
-        reward = self.evaluator._compute_position_reward(board, 7, 7, 1)
+        reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
         expected = int((0.1 + 2 * 0.1) * Evaluator.MAX_REWARD)  # count_directions = 2
         self.assertEqual(reward, expected)
     
@@ -203,7 +204,7 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         # 黑方 (7,6)，落子 (7,7) 形成活二
         board[7 * 15 + 6] = 1
         
-        reward = self.evaluator._compute_position_reward(board, 7, 7, 1)
+        reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
         expected = int((0.3 + 1 * 0.1) * Evaluator.MAX_REWARD)  # count_directions = 1
         self.assertEqual(reward, expected)
     
@@ -215,7 +216,7 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         # 纵向活二
         board[6 * 15 + 7] = 1
         
-        reward = self.evaluator._compute_position_reward(board, 7, 7, 1)
+        reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
         expected = int((0.3 + 2 * 0.1) * Evaluator.MAX_REWARD)  # count_directions = 2
         self.assertEqual(reward, expected)
     
@@ -228,7 +229,7 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         board[7 * 15 + 6] = 1
         board[7 * 15 + 5] = 2
         
-        reward = self.evaluator._compute_position_reward(board, 7, 7, 1)
+        reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
         # 眠二 reward = 0，但可能有其他方向的棋型
         # 这里应该返回独一 = 0（如果只有这一个眠二方向）
         # 实际上眠二为0，但如果同时有独一，独一也为0
@@ -240,7 +241,7 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         board = [0] * 225
         # 空棋盘，任何位置落子都是独一
         
-        reward = self.evaluator._compute_position_reward(board, 7, 7, 1)
+        reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
         self.assertEqual(reward, 0)
     
     # ==================== Mask 测试 ====================
@@ -305,7 +306,7 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         # 敌方在 (7,7) 落子：纵向活四 reward = 0.9 * MAX * 0.95 = 855000
         # 取 max = 855000
         
-        reward = self.evaluator._compute_position_reward(board, 7, 7, 1)
+        reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
         expected = int(0.9 * Evaluator.MAX_REWARD * 0.95)
         self.assertEqual(reward, expected)
 
@@ -324,7 +325,7 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         board[5 * 15 + 7] = 1
         board[6 * 15 + 7] = 1
         
-        reward = self.evaluator._compute_position_reward(board, 7, 7, 1)
+        reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
         # 冲四递归计算：防守后仍有活三，reward 应大于等于简单的 0.5*MAX
         # （冲四防守后的活三 = 0.5*MAX，恰好等于活三本身）
         self.assertGreaterEqual(reward, int(0.5 * Evaluator.MAX_REWARD))
@@ -338,7 +339,7 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
             board[7 * 15 + col] = 1
         board[7 * 15 + 3] = 2  # 左端阻挡
         
-        reward = self.evaluator._compute_position_reward(board, 7, 7, 1)
+        reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
         # 防守后无后续棋型，reward 应为 0.2 * MAX_REWARD
         expected = int(0.2 * Evaluator.MAX_REWARD)
         self.assertEqual(reward, expected)
@@ -360,8 +361,8 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         board_three[7 * 15 + 5] = 1
         board_three[7 * 15 + 6] = 1
 
-        reward_four = self.evaluator._compute_position_reward(board_four, 7, 7, 1)
-        reward_three = self.evaluator._compute_position_reward(board_three, 7, 7, 1)
+        reward_four = self.evaluator._reward_calculator.compute_position_reward(board_four, 7, 7, 1)
+        reward_three = self.evaluator._reward_calculator.compute_position_reward(board_three, 7, 7, 1)
 
         # 冲四（防守后无后续）应低于活三
         # 活三 = 0.5 * MAX_REWARD = 500000
@@ -397,7 +398,7 @@ class TestEvaluatorSoftmax(unittest.TestCase):
         rewards = [1000000.0, 500000.0, 0.0, -500000.0, -1000000.0] + [0.0] * 220
         mask = [1, 1, 1, 1, 1] + [0] * 220
         
-        softmax_output = self.evaluator._softmax(rewards, mask)
+        softmax_output = masked_softmax(rewards, mask)
         
         # 验证所有概率在 [0, 1] 范围内
         # 注意：当 reward 差距很大时，小的概率可能下溢为 0
@@ -413,7 +414,7 @@ class TestEvaluatorSoftmax(unittest.TestCase):
         rewards = [1000000.0, 500000.0, 0.0] + [0.0] * 222
         mask = [1, 1, 1] + [0] * 222
         
-        softmax_output = self.evaluator._softmax(rewards, mask)
+        softmax_output = masked_softmax(rewards, mask)
         
         # 验证概率总和为 1
         prob_sum = sum(softmax_output)
@@ -425,7 +426,7 @@ class TestEvaluatorSoftmax(unittest.TestCase):
         rewards = [1000000.0, 500000.0, 0.0] + [0.0] * 222
         mask = [1, 1, 1] + [0] * 222
         
-        softmax_output = self.evaluator._softmax(rewards, mask)
+        softmax_output = masked_softmax(rewards, mask)
         
         # 验证 reward 越高，概率越高
         self.assertGreater(softmax_output[0], softmax_output[1],
@@ -440,7 +441,7 @@ class TestEvaluatorSoftmax(unittest.TestCase):
         rewards = [100.0] * 225
         mask = [1] * 225
         
-        softmax_output = self.evaluator._softmax(rewards, mask)
+        softmax_output = masked_softmax(rewards, mask)
         
         # 验证均匀分布：每个位置概率为 1/225
         expected_prob = 1.0 / 225.0
@@ -453,7 +454,7 @@ class TestEvaluatorSoftmax(unittest.TestCase):
         rewards = [1000000.0, 500000.0, 0.0] + [0.0] * 222
         mask = [1, 1, 0] + [0] * 222  # 第3个位置 mask=0
         
-        softmax_output = self.evaluator._softmax(rewards, mask)
+        softmax_output = masked_softmax(rewards, mask)
         
         # 验证 mask=0 的位置概率为 0
         self.assertEqual(softmax_output[2], 0.0, "mask=0 的位置概率应为 0")
@@ -469,7 +470,7 @@ class TestEvaluatorSoftmax(unittest.TestCase):
         rewards = [1e6, 1e6 - 1, 1e6 - 2] + [0.0] * 222
         mask = [1, 1, 1] + [0] * 222
         
-        softmax_output = self.evaluator._softmax(rewards, mask)
+        softmax_output = masked_softmax(rewards, mask)
         
         # 验证没有溢出（概率在合理范围内）
         for i in range(3):
