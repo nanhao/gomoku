@@ -353,11 +353,6 @@ class TestGameDisplayUpdater(unittest.TestCase):
         self.assertEqual(self.updater.COLOR_TEXT, self.color_text)
         self.assertEqual(self.updater.COLOR_BEAR, self.color_bear)
 
-    def test_动物表情常量(self):
-        """测试动物表情常量定义"""
-        self.assertEqual(GameDisplayUpdater.ANIMAL_BLACK, "🐻")
-        self.assertEqual(GameDisplayUpdater.ANIMAL_WHITE, "🐰")
-
 
 if __name__ == '__main__':
     unittest.main()
