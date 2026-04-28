@@ -28,10 +28,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from ai.sample_loader import discover_all_data, SampleLoader
 from ai.merge_samples import merge_directories
+from ai import registry as _registry
 
 def get_trainer(model_name: str, fresh: bool = False, **kwargs):
     """
     根据模型名称创建对应的训练器
+
+    训练器映射由 ai.registry 统一维护，本函数委托给 registry.get_trainer()。
 
     Args:
         model_name: 模型名称，如 "fc_v1"、"cnn_v1"
@@ -44,17 +47,7 @@ def get_trainer(model_name: str, fresh: bool = False, **kwargs):
     Raises:
         ValueError: 不支持的模型名称
     """
-    if model_name == "fc_v1":
-        from ai.models.fc_v1.trainer import FCv1Trainer
-        return FCv1Trainer(fresh=fresh, **kwargs)
-    elif model_name == "cnn_v1":
-        from ai.models.cnn_v1.trainer import CNNV1Trainer
-        return CNNV1Trainer(fresh=fresh, **kwargs)
-    elif model_name == "cnn_v2":
-        from ai.models.cnn_v2.trainer import CNNV2Trainer
-        return CNNV2Trainer(fresh=fresh, **kwargs)
-    else:
-        raise ValueError(f"不支持的模型: {model_name}。目前支持: fc_v1, cnn_v1, cnn_v2")
+    return _registry.get_trainer(model_name, fresh=fresh, **kwargs)
 
 
 def discover_sample_dirs(train_data_dir: str) -> list:

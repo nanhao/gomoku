@@ -13,7 +13,7 @@ def create_engine(ai_name: str) -> "AIEngine":
     """
     根据 AI 名称创建对应的 AIEngine 实例。
 
-    AI 名称到模型的映射由 ai 包统一维护，外部调用者无需了解具体模型类。
+    AI 名称到模型的映射由 ai.registry 统一维护，外部调用者无需了解具体模型类。
 
     与 get_trainer 的行为差异：
     - create_engine 面向用户交互场景，未知名称时回退到 RandomModel（容错），
@@ -27,26 +27,18 @@ def create_engine(ai_name: str) -> "AIEngine":
     Returns:
         对应的 AIEngine 实例；未知名称时回退到 AIEngine(RandomModel) 并输出 warning
     """
-    from ai.models.random import RandomModel
-    from ai.models.fc_v1 import FCv1Model
-    from ai.models.cnn_v1 import CNNV1Model
-    from ai.models.cnn_v2 import CNNV2Model
+    from ai.registry import get_model, list_models
 
-    model_map = {
-        "random": RandomModel,
-        "fc_v1": FCv1Model,
-        "cnn_v1": CNNV1Model,
-        "cnn_v2": CNNV2Model,
-    }
-    model_cls = model_map.get(ai_name)
-    if model_cls is None:
+    try:
+        model = get_model(ai_name)
+    except ValueError:
         import logging
         logging.getLogger(__name__).warning(
             f"未知 AI 名称 '{ai_name}'，回退到 RandomModel。"
-            f"可选值: {list(model_map.keys())}"
+            f"可选值: {list_models()}"
         )
-        model_cls = RandomModel
-    return AIEngine(model_cls())
+        model = get_model("random")
+    return AIEngine(model)
 
 
 class AIEngine:

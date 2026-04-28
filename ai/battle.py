@@ -29,20 +29,14 @@ from ai.engine import AIEngine
 from ai.data_recorder import DataRecorder
 from ai.game_manager import AIGameManager
 from ai.constants import AI_DATA_DIR
-
-
-# 已知 AI 名称到模型类的映射
-_AI_MODEL_MAP = {
-    "random": "ai.models.random.model.RandomModel",
-    "fc_v1": "ai.models.fc_v1.model.FCv1Model",
-    "cnn_v1": "ai.models.cnn_v1.model.CNNV1Model",
-    "cnn_v2": "ai.models.cnn_v2.model.CNNV2Model",
-}
+from ai.registry import get_model
 
 
 def load_model(ai_name: str):
     """
     根据 AI 名称动态加载对应模型实例
+    
+    模型映射由 ai.registry 统一维护，本函数委托给 registry.get_model()。
     
     Args:
         ai_name: AI 名称（对应 ai/ 目录下的子目录名称）
@@ -52,18 +46,8 @@ def load_model(ai_name: str):
         
     Raises:
         ValueError: 未知的 AI 名称
-        ImportError: 加载模型失败
     """
-    if ai_name not in _AI_MODEL_MAP:
-        available = ", ".join(_AI_MODEL_MAP.keys())
-        raise ValueError(f"未知的 AI 名称: '{ai_name}'，可用的 AI: {available}")
-    
-    # 动态导入模型类
-    module_path, class_name = _AI_MODEL_MAP[ai_name].rsplit(".", 1)
-    import importlib
-    module = importlib.import_module(module_path)
-    model_class = getattr(module, class_name)
-    return model_class()
+    return get_model(ai_name)
 
 
 def get_color_name(color: int) -> str:
