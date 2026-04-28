@@ -32,24 +32,6 @@ from ai.constants import AI_DATA_DIR
 from ai.registry import get_model
 
 
-def load_model(ai_name: str):
-    """
-    根据 AI 名称动态加载对应模型实例
-    
-    模型映射由 ai.registry 统一维护，本函数委托给 registry.get_model()。
-    
-    Args:
-        ai_name: AI 名称（对应 ai/ 目录下的子目录名称）
-        
-    Returns:
-        模型实例
-        
-    Raises:
-        ValueError: 未知的 AI 名称
-    """
-    return get_model(ai_name)
-
-
 def get_color_name(color: int) -> str:
     """
     将棋子颜色数字转换为名称
@@ -121,9 +103,9 @@ def run_battle(ai1_name: str, ai2_name: str, num_games: int):
     print(f"开始 AI 对战: {ai1_name} vs {ai2_name}, 共 {num_games} 局")
     print()
     
-    # 加载模型
-    model1 = load_model(ai1_name)
-    model2 = load_model(ai2_name)
+    # 加载模型（直接调用 registry.get_model，根据 AI 名称获取对应模型实例）
+    model1 = get_model(ai1_name)
+    model2 = get_model(ai2_name)
     
     # 创建引擎
     engine1 = AIEngine(model1)

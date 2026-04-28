@@ -52,20 +52,21 @@ class Evaluator:
     """评价器 - 生成训练样本（双向棋型检测法）"""
     
     # 常量定义
-    MAX_REWARD = 1000000
-    MIN_REWARD = -1000000
-    DECAY_RATE = 0.9
     BLEND_ALPHA = 1.0  # 五连追溯奖励融合权重
     
     def __init__(self, ai_data_dir: str = None, train_data_dir: str = None,
-                 decay_rate: float = None, max_workers: int = None):
+                 decay_rate: float = 0.9, max_workers: int = None):
         """
         初始化评价器
+
+        创建 RewardConfig 作为唯一的奖励配置来源，
+        LineTracer 和 RewardCalculator 均从该配置获取 max_reward / min_reward，
+        避免在多处重复定义相同的常量值。
 
         Args:
             ai_data_dir: AI 数据目录路径，默认为 AI_DATA_DIR
             train_data_dir: 训练数据目录路径，默认为 TRAIN_DATA_DIR
-            decay_rate: 奖励衰减率 r（已弃用，保留参数兼容性）
+            decay_rate: 奖励衰减率 r，默认 0.9
             max_workers: 并行进程数，1 表示串行，默认 min(os.cpu_count(), 4)
         """
         if ai_data_dir is None:
@@ -74,7 +75,10 @@ class Evaluator:
             train_data_dir = TRAIN_DATA_DIR
         self.ai_data_dir = ai_data_dir
         self.train_data_dir = train_data_dir
-        self.decay_rate = decay_rate if decay_rate is not None else self.DECAY_RATE
+        self.decay_rate = decay_rate
+
+        # 奖励配置：单一来源，LineTracer / RewardCalculator 均从此获取
+        self._reward_config = RewardConfig()
 
         # 并行进程数：默认 min(cpu_count, 4)，1 表示串行
         if max_workers is not None:
@@ -83,17 +87,12 @@ class Evaluator:
             self.max_workers = min(os.cpu_count() or 4, 4)
 
         self._line_tracer = LineTracer(
-            max_reward=self.MAX_REWARD,
-            min_reward=self.MIN_REWARD,
+            max_reward=self._reward_config.max_reward,
+            min_reward=self._reward_config.min_reward,
             decay_rate=self.decay_rate,
             blend_alpha=self.BLEND_ALPHA
         )
-        self._reward_calculator = RewardCalculator(
-            RewardConfig(
-                max_reward=self.MAX_REWARD,
-                min_reward=self.MIN_REWARD
-            )
-        )
+        self._reward_calculator = RewardCalculator(self._reward_config)
     
     def evaluate_record(self, record_file: str) -> str:
         """
@@ -254,6 +253,27 @@ class Evaluator:
         # 委托给 _evaluate_files 执行
         return self._evaluate_files(record_files, max_workers)
 
+    def _evaluate_serial(self, record_files: List[str],
+                         sample_files: List[str], errors: List) -> None:
+        """串行评价多个记录文件，逐个调用 evaluate_record
+
+        评价成功的 sample 路径追加到 sample_files，
+        评价失败的 (record_file, exception) 追加到 errors。
+        单个文件失败不影响后续文件的评价。
+
+        Args:
+            record_files: record.json 文件路径列表
+            sample_files: 成功结果收集列表，会被原地修改
+            errors: 失败结果收集列表，会被原地修改
+        """
+        for record_file in record_files:
+            try:
+                sample_file = self.evaluate_record(record_file)
+                sample_files.append(sample_file)
+            except Exception as e:
+                errors.append((record_file, e))
+                print(f"评价失败 {record_file}: {e}")
+
     def _evaluate_files(self, record_files: List[str],
                          max_workers: int = None) -> dict:
         """评价多个记录文件，支持串行和并行模式
@@ -278,13 +298,7 @@ class Evaluator:
 
         # 串行模式：max_workers=1 或只有一个文件时直接串行
         if max_workers <= 1 or len(record_files) <= 1:
-            for record_file in record_files:
-                try:
-                    sample_file = self.evaluate_record(record_file)
-                    sample_files.append(sample_file)
-                except Exception as e:
-                    errors.append((record_file, e))
-                    print(f"评价失败 {record_file}: {e}")
+            self._evaluate_serial(record_files, sample_files, errors)
             return {"sample_files": sample_files, "errors": errors}
 
         # 并行模式：使用 ProcessPoolExecutor
@@ -330,12 +344,6 @@ class Evaluator:
             remaining_files = [f for f in record_files if f not in successful_record_files]
 
             print(f"串行模式处理剩余 {len(remaining_files)} 个文件...")
-            for record_file in remaining_files:
-                try:
-                    sample_file = self.evaluate_record(record_file)
-                    sample_files.append(sample_file)
-                except Exception as e:
-                    errors.append((record_file, e))
-                    print(f"评价失败 {record_file}: {e}")
+            self._evaluate_serial(remaining_files, sample_files, errors)
 
         return {"sample_files": sample_files, "errors": errors}

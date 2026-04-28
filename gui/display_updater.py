@@ -6,13 +6,12 @@
 import tkinter as tk
 from tkinter import messagebox
 
+from game import get_winner_text
+from gui.components.constants import ANIMALS
+
 
 class GameDisplayUpdater:
     """游戏显示更新器"""
-    
-    # 动物表情符号
-    ANIMAL_BLACK = "🐻"
-    ANIMAL_WHITE = "🐰"
     
     def __init__(self, board, save_name_label, status_label,
                  game_status_label, history_listbox, helper,
@@ -71,10 +70,10 @@ class GameDisplayUpdater:
             self.game_status_label.config(text=status_text, fg=self.COLOR_BEAR)
         elif winner == 3:
             self.status_label.config(text="🎯 当前玩家: -")
-            self.game_status_label.config(text="🌳 游戏状态: 平局", fg="#8B4513")
+            self.game_status_label.config(text=f"🌳 游戏状态: {get_winner_text(winner)}", fg="#8B4513")
         else:
             winner_name = self.helper.get_player_name(winner, winner=winner)
-            win_emoji = self.ANIMAL_BLACK if winner == 1 else self.ANIMAL_WHITE
+            win_emoji = ANIMALS["black"] if winner == 1 else ANIMALS["white"]
             self.status_label.config(text=f"🏆 获胜方: {winner_name}", fg=self.COLOR_BEAR)
             self.game_status_label.config(text=f"{win_emoji} {winner_name.split()[0]}获胜！", fg=self.COLOR_BEAR)
         
@@ -104,7 +103,7 @@ class GameDisplayUpdater:
         """显示游戏结束弹窗
         
         Args:
-            winner: 获胜方 (0=平局, 1=黑胜, 2=白胜)
+            winner: 获胜方 (1=黑胜, 2=白胜, 3=平局)
         """
-        winner_text = self.helper.get_winner_text(winner)
+        winner_text = get_winner_text(winner)
         messagebox.showinfo("游戏结束", f"{winner_text}！")

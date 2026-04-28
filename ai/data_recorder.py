@@ -78,6 +78,21 @@ class DataRecorder:
         }
         return self.current_game_id
     
+    def _ensure_game_id(self, game_id: int):
+        """校验并纠正游戏编号
+
+        当传入的 game_id 与 current_game_id 不一致时，记录警告日志
+        并自动将 current_game_id 修正为传入值，确保数据一致性。
+
+        Args:
+            game_id: 调用方传入的游戏编号
+        """
+        if game_id != self.current_game_id:
+            logger.warning(
+                f"游戏编号不匹配: 传入 {game_id}, 当前是 {self.current_game_id}, 已自动纠正"
+            )
+            self.current_game_id = game_id
+
     def record_move(self, game_id: int, input_vector: List[int],
                     output_vector: List[float], position: Tuple[int, int]):
         """
@@ -91,12 +106,9 @@ class DataRecorder:
             output_vector: 225 维输出向量（Softmax 概率分布，每个元素为 0~1 的浮点数）
             position: 引擎最终成功落子的位置 (x, y)
         """
-        if game_id != self.current_game_id:
-            logger.warning(
-                f"游戏编号不匹配: 传入 {game_id}, 当前是 {self.current_game_id}, 已自动纠正"
-            )
-            self.current_game_id = game_id
-        
+        # 校验游戏编号一致性
+        self._ensure_game_id(game_id)
+
         self.current_game_data["history"].append({
             "input": input_vector,
             "output": output_vector,
@@ -112,12 +124,9 @@ class DataRecorder:
             winner: 获胜方（1=黑胜, 2=白胜, 3=平局, 0=未结束）
             end_board: 最终棋盘状态（226 维向量）
         """
-        if game_id != self.current_game_id:
-            logger.warning(
-                f"游戏编号不匹配: 传入 {game_id}, 当前是 {self.current_game_id}, 已自动纠正"
-            )
-            self.current_game_id = game_id
-        
+        # 校验游戏编号一致性
+        self._ensure_game_id(game_id)
+
         self.current_game_data["winner"] = winner
         self.current_game_data["end_board"] = end_board
         

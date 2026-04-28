@@ -6,14 +6,11 @@
 import os
 
 from ai.constants import AI_DATA_DIR
+from gui.components.constants import ANIMALS
 
 
 class GUIHelper:
     """GUI 辅助类 - 处理与界面无关的业务逻辑"""
-
-    # 动物表情符号
-    ANIMAL_BLACK = "🐻"
-    ANIMAL_WHITE = "🐰"
 
     def __init__(self, controller, session):
         """初始化 GUIHelper
@@ -150,23 +147,6 @@ class GUIHelper:
             "history": history
         }
 
-    def get_winner_text(self, winner: int) -> str:
-        """获取获胜方文本
-
-        Args:
-            winner: 获胜方 (1=黑胜, 2=白胜, 3=平局)
-
-        Returns:
-            获胜方描述文本
-        """
-        if winner == 1:
-            return "黑方获胜"
-        elif winner == 2:
-            return "白方获胜"
-        elif winner == 3:
-            return "平局"
-        return ""
-
     def get_player_name(self, player: int, winner: int = 0) -> str:
         """获取玩家名称（含动物主题）
 
@@ -178,9 +158,9 @@ class GUIHelper:
             玩家名称文本
         """
         if player == 1:
-            return f"小熊 {self.ANIMAL_BLACK}"
+            return f"小熊 {ANIMALS['black']}"
         else:
-            return f"小兔 {self.ANIMAL_WHITE}"
+            return f"小兔 {ANIMALS['white']}"
 
 
 def get_ai_data_dir() -> str:

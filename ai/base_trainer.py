@@ -209,6 +209,56 @@ class BaseTrainer(ABC):
         self.optimizer.step()
         return loss, grad_norm
 
+    def _run_training_loop(self, inputs_tensor, targets_tensor, masks_tensor,
+                           epochs, loss_logger, verbose) -> float:
+        """执行训练循环（供 train_single / train_batch 复用）
+
+        包含完整的 for-epoch 循环：前向反向传播、loss 日志记录、verbose 打印、
+        学习率衰减、KeyboardInterrupt 处理、_finalize_training 调用。
+
+        Args:
+            inputs_tensor: 输入张量
+            targets_tensor: 目标张量
+            masks_tensor: mask 张量
+            epochs: 训练轮数
+            loss_logger: LossLogger 实例
+            verbose: 是否输出每个 epoch 的损失值
+
+        Returns:
+            训练后的平均损失值
+        """
+        total_loss = 0.0
+        completed_epochs = 0
+        interrupted = False
+
+        try:
+            for epoch in range(epochs):
+                loss, grad_norm = self._forward_backward_step(
+                    inputs_tensor, targets_tensor, masks_tensor
+                )
+
+                total_loss += loss.item()
+                completed_epochs += 1
+
+                # 记录 loss 日志（每 LOSS_LOG_INTERVAL 个 epoch）
+                if (epoch + 1) % LOSS_LOG_INTERVAL == 0:
+                    loss_logger.log(epoch + 1, loss.item(), grad_norm)
+                    if verbose:
+                        current_lr = self.optimizer.param_groups[0]['lr']
+                        print(f"Epoch {epoch + 1}/{epochs}, loss: {loss.item():.4f}, grad_norm: {grad_norm:.4f}, lr: {current_lr:.6f}")
+
+                # 学习率衰减
+                self._step_lr_scheduler(loss.item())
+        except KeyboardInterrupt:
+            interrupted = True
+            print("\n[中断] 检测到 Ctrl+C，正在保存模型和图表...")
+
+        avg_loss = self._finalize_training(loss_logger, total_loss, completed_epochs, save_model=interrupted)
+        if interrupted:
+            print("[中断] 已保存当前进度，可以安全退出")
+            raise KeyboardInterrupt
+        return avg_loss
+
     def train_single(self, sample_dir: str, epochs: int = 10, verbose: bool = False, **kwargs) -> float:
         """单轮次训练（单个 sample 文件）
 
@@ -233,43 +283,17 @@ class BaseTrainer(ABC):
         sample_data = self._sample_loader.load(sample_path)
 
         # 准备训练数据
-        inputs_tensor, targets_tensor, masks_expanded = self._sample_loader.prepare_tensors(sample_data)
+        inputs_tensor, targets_tensor, masks_tensor = self._sample_loader.prepare_tensors(sample_data)
 
         # 将 epochs 自动传递给 LossLogger（用于图表标题）
         setup_kwargs = dict(kwargs)
         setup_kwargs.setdefault('epochs', epochs)
         loss_logger = self._setup_training(**setup_kwargs)
-        total_loss = 0.0
-        completed_epochs = 0
-        interrupted = False
 
-        try:
-            for epoch in range(epochs):
-                loss, grad_norm = self._forward_backward_step(
-                    inputs_tensor, targets_tensor, masks_expanded
-                )
-
-                total_loss += loss.item()
-                completed_epochs += 1
-
-                # 记录 loss 日志（每 LOSS_LOG_INTERVAL 个 epoch）
-                if (epoch + 1) % LOSS_LOG_INTERVAL == 0:
-                    loss_logger.log(epoch + 1, loss.item(), grad_norm)
-                    if verbose:
-                        current_lr = self.optimizer.param_groups[0]['lr']
-                        print(f"Epoch {epoch + 1}/{epochs}, loss: {loss.item():.4f}, grad_norm: {grad_norm:.4f}, lr: {current_lr:.6f}")
-
-                # 学习率衰减
-                self._step_lr_scheduler(loss.item())
-        except KeyboardInterrupt:
-            interrupted = True
-            print("\n[中断] 检测到 Ctrl+C，正在保存模型和图表...")
-
-        avg_loss = self._finalize_training(loss_logger, total_loss, completed_epochs, save_model=interrupted)
-        if interrupted:
-            print("[中断] 已保存当前进度，可以安全退出")
-            raise KeyboardInterrupt
-        return avg_loss
+        # 执行训练循环
+        return self._run_training_loop(
+            inputs_tensor, targets_tensor, masks_tensor, epochs, loss_logger, verbose
+        )
 
     def train_batch(self, sample_dirs: List[str], epochs: int = 1000, verbose: bool = True, **kwargs) -> float:
         """批量训练：将多个 sample 文件数据合并，每个 epoch 只做一次参数更新。
@@ -304,37 +328,11 @@ class BaseTrainer(ABC):
         setup_kwargs = dict(kwargs)
         setup_kwargs.setdefault('epochs', epochs)
         loss_logger = self._setup_training(**setup_kwargs)
-        total_loss = 0.0
-        completed_epochs = 0
-        interrupted = False
 
-        try:
-            for epoch in range(epochs):
-                loss, grad_norm = self._forward_backward_step(
-                    inputs_tensor, targets_tensor, masks_tensor
-                )
-
-                total_loss += loss.item()
-                completed_epochs += 1
-
-                # 记录 loss 日志（每 LOSS_LOG_INTERVAL 个 epoch）
-                if (epoch + 1) % LOSS_LOG_INTERVAL == 0:
-                    loss_logger.log(epoch + 1, loss.item(), grad_norm)
-                    if verbose:
-                        current_lr = self.optimizer.param_groups[0]['lr']
-                        print(f"Epoch {epoch + 1}/{epochs}, loss: {loss.item():.4f}, grad_norm: {grad_norm:.4f}, lr: {current_lr:.6f}")
-
-                # 学习率衰减
-                self._step_lr_scheduler(loss.item())
-        except KeyboardInterrupt:
-            interrupted = True
-            print("\n[中断] 检测到 Ctrl+C，正在保存模型和图表...")
-
-        avg_loss = self._finalize_training(loss_logger, total_loss, completed_epochs, save_model=interrupted)
-        if interrupted:
-            print("[中断] 已保存当前进度，可以安全退出")
-            raise KeyboardInterrupt
-        return avg_loss
+        # 执行训练循环
+        return self._run_training_loop(
+            inputs_tensor, targets_tensor, masks_tensor, epochs, loss_logger, verbose
+        )
 
     def train_mini_batch(
         self,
@@ -483,6 +481,35 @@ class BaseTrainer(ABC):
             print("[中断] 已保存当前进度，可以安全退出")
             raise KeyboardInterrupt
         return avg_loss
+
+    def train_auto(self, sample_dirs: List[str], epochs: int = 1000,
+                   batch_size: int = None, shuffle: bool = True,
+                   verbose: bool = True, **kwargs) -> float:
+        """自动选择训练方法
+
+        提供 batch_size 时启用 mini-batch 训练，否则使用全量更新。
+        统一封装 train_batch 和 train_mini_batch 的分发逻辑。
+
+        Args:
+            sample_dirs: 包含 sample.json 的目录路径列表
+            epochs: 训练轮数，默认 1000
+            batch_size: 每批次样本数，提供时启用 mini-batch 训练，默认 None（全量更新）
+            shuffle: 每个 epoch 是否打乱数据顺序，仅 mini-batch 模式有效，默认 True
+            verbose: 是否输出训练信息，默认 True
+            **kwargs: 传递给 train_batch/train_mini_batch 的额外参数
+
+        Returns:
+            训练后的平均损失值
+        """
+        if batch_size is not None and batch_size > 0:
+            return self.train_mini_batch(
+                sample_dirs, epochs=epochs, batch_size=batch_size,
+                shuffle=shuffle, verbose=verbose, **kwargs
+            )
+        else:
+            return self.train_batch(
+                sample_dirs, epochs=epochs, verbose=verbose, **kwargs
+            )
 
     def _step_lr_scheduler(self, loss=None):
         """执行学习率衰减步进

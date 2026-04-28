@@ -7,6 +7,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from game import GomokuController
+from game import get_winner_text, get_player_name
 
 
 # 棋子显示符号
@@ -109,9 +110,8 @@ def handle_put(controller, args):
         return
     
     # 显示落子信息
-    player_name = "黑方" if result["current_player"] == 2 else "白方"  # 已经切换了
     last_player = 2 if result["current_player"] == 1 else 1
-    last_player_name = "黑方" if last_player == 1 else "白方"
+    last_player_name = get_player_name(last_player)
     print(f"{last_player_name}在 ({x}, {y}) 落子")
     
     # 检查游戏是否结束
@@ -119,7 +119,7 @@ def handle_put(controller, args):
         print(f"\n游戏结束！{result['result']}！")
         print_board(result["board"], result["current_player"], (x, y))
     else:
-        next_player = "黑方" if result["current_player"] == 1 else "白方"
+        next_player = get_player_name(result["current_player"])
         print(f"{next_player}回合")
         print()
         print_board(result["board"], result["current_player"], (x, y))
@@ -158,17 +158,14 @@ def handle_print(controller, args):
     
     # 显示游戏状态
     if state["winner"] == 0:
-        player_name = "黑方" if state["current_player"] == 1 else "白方"
+        player_name = get_player_name(state["current_player"])
         piece = PIECE_BLACK if state["current_player"] == 1 else PIECE_WHITE
         print(f"\n当前玩家: {player_name} ({piece})")
         if last_move:
             print(f"上次落子: {last_move}")
         print("游戏状态: 进行中")
-    elif state["winner"] == 3:
-        print("\n游戏状态: 平局")
     else:
-        winner_name = "黑方" if state["winner"] == 1 else "白方"
-        print(f"\n游戏状态: {winner_name}获胜")
+        print(f"\n游戏状态: {get_winner_text(state['winner'])}")
 
 
 def handle_show(controller, args):

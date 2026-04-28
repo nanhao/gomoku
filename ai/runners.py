@@ -237,20 +237,14 @@ def run_train_from_dir(args, trainer) -> None:
         print(f"  训练方法:            train_batch (全量更新)")
 
     try:
-        # 根据 batch_size 选择训练方法
-        if args.batch_size is not None and args.batch_size > 0:
-            avg_loss = trainer.train_mini_batch(
-                sample_dirs,
-                epochs=args.epochs,
-                batch_size=args.batch_size,
-                shuffle=args.shuffle,
-                dense_log=True
-            )
-        else:
-            avg_loss = trainer.train_batch(
-                sample_dirs,
-                epochs=args.epochs
-            )
+        # 自动选择训练方法（提供 batch_size 时使用 mini-batch，否则全量更新）
+        avg_loss = trainer.train_auto(
+            sample_dirs,
+            epochs=args.epochs,
+            batch_size=args.batch_size,
+            shuffle=args.shuffle,
+            dense_log=True
+        )
 
         print(f"训练完成！平均损失: {avg_loss:.4f}")
 

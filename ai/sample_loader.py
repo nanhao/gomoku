@@ -132,6 +132,7 @@ class SampleLoader:
         """加载合并后的样本文件
 
         与 load 方法行为一致，但语义上专用于加载 merge_*.json 文件。
+        实际逻辑委托给 load 方法，避免重复实现。
 
         Args:
             merge_path: merge_*.json 文件路径
@@ -143,8 +144,7 @@ class SampleLoader:
             FileNotFoundError: 文件不存在
             json.JSONDecodeError: JSON 格式错误
         """
-        with open(merge_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        return self.load(merge_path)
 
     def discover_and_load(self, data_dir: str) -> list:
         """从目录发现并加载所有训练数据（merge 文件 + 个体 sample.json）

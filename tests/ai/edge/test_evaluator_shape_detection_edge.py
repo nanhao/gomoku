@@ -15,6 +15,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from ai.evaluator import Evaluator
+from ai.reward_calculator import RewardConfig
 from ai.shape_detector import detect_shapes
 
 
@@ -72,7 +73,7 @@ class TestEvaluatorShapeDetectionEdge(unittest.TestCase):
         
         reward = self.evaluator._reward_calculator.compute_position_reward(board, 0, 5, 1)
         # 眠三：一端被白子阻挡
-        expected = int((0.1 + 1 * 0.1) * Evaluator.MAX_REWARD)
+        expected = int((0.1 + 1 * 0.1) * RewardConfig().max_reward)
         self.assertEqual(reward, expected)
     
     def test_corner_position(self):
@@ -174,7 +175,7 @@ class TestEvaluatorShapeDetectionEdge(unittest.TestCase):
             board[7 * 15 + col] = 1
         
         reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
-        self.assertLessEqual(reward, Evaluator.MAX_REWARD)
+        self.assertLessEqual(reward, RewardConfig().max_reward)
     
     def test_reward_not_negative(self):
         """测试 reward 值非负"""
@@ -201,7 +202,7 @@ class TestEvaluatorShapeDetectionEdge(unittest.TestCase):
         
         # 这里只能形成连五，不会有活四
         reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
-        self.assertEqual(reward, Evaluator.MAX_REWARD)
+        self.assertEqual(reward, RewardConfig().max_reward)
     
     # ==================== 完整 evaluate_record 测试 ====================
     

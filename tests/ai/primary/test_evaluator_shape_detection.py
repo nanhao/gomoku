@@ -16,6 +16,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from ai.evaluator import Evaluator
+from ai.reward_calculator import RewardConfig
 from ai.probability_utils import masked_softmax
 
 
@@ -56,7 +57,7 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         
         # 检测 (7,7) 位置的 reward（模拟落子后形成连五）
         reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
-        self.assertEqual(reward, Evaluator.MAX_REWARD)
+        self.assertEqual(reward, RewardConfig().max_reward)
     
     def test_live_five_opponent(self):
         """测试连五：对手方形成连五，reward = MAX_REWARD * 0.95"""
@@ -71,7 +72,7 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         # 检测 (7,7) 位置对白方的价值
         reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
         # 白方在此落子形成连五，敌方系数 0.95
-        expected = int(Evaluator.MAX_REWARD * 0.95)
+        expected = int(RewardConfig().max_reward * 0.95)
         self.assertEqual(reward, expected)
     
     # ==================== 活四测试 ====================
@@ -85,9 +86,9 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
             board[7 * 15 + col] = 1
         
         reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
-        expected = int(0.9 * Evaluator.MAX_REWARD)
+        expected = int(0.9 * RewardConfig().max_reward)
         self.assertEqual(reward, expected)
-    
+
     def test_live_four_opponent(self):
         """测试活四：对手方形成活四，reward = 0.9 * MAX_REWARD * 0.95"""
         board = [0] * 225
@@ -96,7 +97,7 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
             board[7 * 15 + col] = 2
         
         reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)  # 当前黑方
-        expected = int(0.9 * Evaluator.MAX_REWARD * 0.95)
+        expected = int(0.9 * RewardConfig().max_reward * 0.95)
         self.assertEqual(reward, expected)
     
     # ==================== 冲四测试 ====================
@@ -133,9 +134,9 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         # 落子 (7,7) 后，横向和纵向都形成冲四 -> 多冲四
         
         reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
-        expected = int(0.9 * Evaluator.MAX_REWARD)
+        expected = int(0.9 * RewardConfig().max_reward)
         self.assertEqual(reward, expected)
-    
+
     # ==================== 活三测试 ====================
     
     def test_live_three_single_direction(self):
@@ -147,9 +148,9 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         board[7 * 15 + 6] = 1
         
         reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
-        expected = int(0.5 * Evaluator.MAX_REWARD)
+        expected = int(0.5 * RewardConfig().max_reward)
         self.assertEqual(reward, expected)
-    
+
     def test_multi_live_three(self):
         """测试多活三：两个方向形成活三"""
         board = [0] * 225
@@ -162,9 +163,9 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         board[6 * 15 + 7] = 1
         
         reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
-        expected = int(0.8 * Evaluator.MAX_REWARD)
+        expected = int(0.8 * RewardConfig().max_reward)
         self.assertEqual(reward, expected)
-    
+
     # ==================== 眠三测试 ====================
     
     def test_sleep_three_single_direction(self):
@@ -177,7 +178,7 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         board[7 * 15 + 4] = 2  # 左端阻挡
         
         reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
-        expected = int((0.1 + 1 * 0.1) * Evaluator.MAX_REWARD)  # count_directions = 1
+        expected = int((0.1 + 1 * 0.1) * RewardConfig().max_reward)  # count_directions = 1
         self.assertEqual(reward, expected)
     
     def test_sleep_three_multi_direction(self):
@@ -193,7 +194,7 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         board[4 * 15 + 7] = 2
         
         reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
-        expected = int((0.1 + 2 * 0.1) * Evaluator.MAX_REWARD)  # count_directions = 2
+        expected = int((0.1 + 2 * 0.1) * RewardConfig().max_reward)  # count_directions = 2
         self.assertEqual(reward, expected)
     
     # ==================== 活二测试 ====================
@@ -205,7 +206,7 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         board[7 * 15 + 6] = 1
         
         reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
-        expected = int((0.3 + 1 * 0.1) * Evaluator.MAX_REWARD)  # count_directions = 1
+        expected = int((0.3 + 1 * 0.1) * RewardConfig().max_reward)  # count_directions = 1
         self.assertEqual(reward, expected)
     
     def test_live_two_multi_direction(self):
@@ -217,7 +218,7 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         board[6 * 15 + 7] = 1
         
         reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
-        expected = int((0.3 + 2 * 0.1) * Evaluator.MAX_REWARD)  # count_directions = 2
+        expected = int((0.3 + 2 * 0.1) * RewardConfig().max_reward)  # count_directions = 2
         self.assertEqual(reward, expected)
     
     # ==================== 眠二/独一测试 ====================
@@ -307,7 +308,7 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         # 取 max = 855000
         
         reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
-        expected = int(0.9 * Evaluator.MAX_REWARD * 0.95)
+        expected = int(0.9 * RewardConfig().max_reward * 0.95)
         self.assertEqual(reward, expected)
 
     # ==================== 冲四递归计算测试 ====================
@@ -328,7 +329,7 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
         # 冲四递归计算：防守后仍有活三，reward 应大于等于简单的 0.5*MAX
         # （冲四防守后的活三 = 0.5*MAX，恰好等于活三本身）
-        self.assertGreaterEqual(reward, int(0.5 * Evaluator.MAX_REWARD))
+        self.assertGreaterEqual(reward, int(0.5 * RewardConfig().max_reward))
     
     def test_four_recursive_no_subsequent_shape(self):
         """测试冲四递归计算：防守后无后续棋型"""
@@ -341,7 +342,7 @@ class TestEvaluatorShapeDetection(unittest.TestCase):
         
         reward = self.evaluator._reward_calculator.compute_position_reward(board, 7, 7, 1)
         # 防守后无后续棋型，reward 应为 0.2 * MAX_REWARD
-        expected = int(0.2 * Evaluator.MAX_REWARD)
+        expected = int(0.2 * RewardConfig().max_reward)
         self.assertEqual(reward, expected)
     
     def test_four_recursive_distinct_from_live_three(self):

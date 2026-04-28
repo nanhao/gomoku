@@ -11,6 +11,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from ai.evaluator import Evaluator
+from ai.reward_calculator import RewardConfig
 
 
 class TestFindFiveInARow(unittest.TestCase):
@@ -181,10 +182,10 @@ class TestTraceWinningLine(unittest.TestCase):
         # 最后一步 (step 8) 应该获得 MAX_REWARD
         for idx, reward in bonuses:
             if idx == 8:
-                self.assertEqual(reward, self.evaluator.MAX_REWARD)
+                self.assertEqual(reward, self.evaluator._reward_config.max_reward)
             else:
                 # 其他步骤奖励应该小于 MAX_REWARD
-                self.assertLess(reward, self.evaluator.MAX_REWARD)
+                self.assertLess(reward, self.evaluator._reward_config.max_reward)
                 self.assertGreater(reward, 0)
 
     def test_trace_non_consecutive_steps(self):
@@ -278,7 +279,7 @@ class TestBlendRewards(unittest.TestCase):
         
         # 加法融合：shape_reward + alpha * line_bonus = 500000 + 1000000 = 1500000
         # Bug M2 修复后裁剪到 MAX_REWARD = 1000000
-        self.assertEqual(blended, self.evaluator.MAX_REWARD)
+        self.assertEqual(blended, self.evaluator._reward_config.max_reward)
 
     def test_blend_without_line_bonus(self):
         """无五连奖励时，结果等于棋型评估"""
@@ -299,7 +300,7 @@ class TestBlendRewards(unittest.TestCase):
         
         # 加法融合：855000 + 729000 = 1584000
         # Bug M2 修复后裁剪到 MAX_REWARD = 1000000
-        self.assertEqual(blended, self.evaluator.MAX_REWARD)
+        self.assertEqual(blended, self.evaluator._reward_config.max_reward)
         # 结果仍大于单独的 shape_reward
         self.assertGreater(blended, shape_reward)
 
@@ -316,7 +317,7 @@ class TestBlendRewards(unittest.TestCase):
         blended = self.evaluator._line_tracer.blend_rewards(shape_reward, line_bonus)
         
         # 裁剪到 MAX_REWARD
-        self.assertEqual(blended, self.evaluator.MAX_REWARD)
+        self.assertEqual(blended, self.evaluator._reward_config.max_reward)
 
     def test_blend_early_step_not_dropped(self):
         """五连追溯早期步骤的信号不被丢弃
@@ -339,7 +340,7 @@ class TestBlendRewards(unittest.TestCase):
         # 旧 max 融合会返回 max(500000, 656100) = 656100
         # 加法融合理论上返回 500000 + 656100 = 1156100
         # 但 Bug M2 修复后裁剪到 MAX_REWARD = 1000000
-        self.assertEqual(blended, self.evaluator.MAX_REWARD)
+        self.assertEqual(blended, self.evaluator._reward_config.max_reward)
 
     def test_blend_custom_alpha(self):
         """自定义 alpha 参数控制融合权重"""

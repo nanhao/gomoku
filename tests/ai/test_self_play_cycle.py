@@ -1,6 +1,7 @@
 """SelfPlayCycle 编排逻辑补充测试
 
 测试训练周期的各个阶段衔接、参数传递、结果统计。
+对弈+评价步骤已委托给 run_self_play_and_evaluate，本测试重点验证编排逻辑。
 """
 
 import os
@@ -20,80 +21,81 @@ def _create_mock_trainer():
     trainer.model_name = "fc_v1"
     trainer.loss_logger = MagicMock()
     trainer.model.save.return_value = "/tmp/model.pth"
-    trainer.train_batch.return_value = 0.0050
-    trainer.train_mini_batch.return_value = 0.0045
+    # train_auto 是 SelfPlayCycle.run 的入口方法，需要返回 float
+    trainer.train_auto.return_value = 0.0050
     return trainer
 
 
-def _mock_cycle_dependencies(mock_engine, mock_evaluator_cls, mock_recorder_cls, mock_start):
-    """统一 Mock SelfPlayCycle.run 的外部依赖"""
-    mock_start.return_value = [{"winner": 1}, {"winner": 2}]
+def _mock_run_self_play_and_evaluate(mock_func):
+    """统一 Mock run_self_play_and_evaluate 的返回值
 
-    recorder = MagicMock()
-    recorder.get_round_dir.return_value = "/tmp/round"
-    mock_recorder_cls.return_value = recorder
-
-    evaluator = MagicMock()
-    evaluator.evaluate_round.return_value = {
-        "sample_files": ["/tmp/train_data/1/sample.json", "/tmp/train_data/2/sample.json"],
-        "errors": []
+    Args:
+        mock_func: run_self_play_and_evaluate 的 mock 对象
+    """
+    mock_func.return_value = {
+        "round_dir": "/tmp/round",
+        "train_data_dir": "/tmp/train_data/round",
+        "sample_dirs": ["/tmp/train_data/1", "/tmp/train_data/2"],
+        "sample_count": 2,
+        "results": [{"winner": 1}, {"winner": 2}],
+        "recorder": MagicMock(),
+        "interrupted": False
     }
-    mock_evaluator_cls.return_value = evaluator
 
 
 class TestSelfPlayCycleOrchestration(unittest.TestCase):
     """测试 SelfPlayCycle 训练周期编排逻辑"""
 
-    @patch('ai.self_play_cycle.AIGameManager.start_ai_vs_ai')
-    @patch('ai.self_play_cycle.DataRecorder')
-    @patch('ai.self_play_cycle.Evaluator')
-    @patch('ai.self_play_cycle.AIEngine')
-    def test_ai_vs_ai_called_with_correct_params(self, mock_engine, mock_evaluator_cls, mock_recorder_cls, mock_start):
-        """AIGameManager.start_ai_vs_ai 应使用正确的 engine 和 games 参数"""
+    @patch('ai.self_play_cycle.run_self_play_and_evaluate')
+    def test_calls_run_self_play_and_evaluate_with_correct_params(self, mock_func):
+        """run_self_play_and_evaluate 应被正确调用，传入 games、rate 等参数"""
         trainer = _create_mock_trainer()
-        cycle = SelfPlayCycle(trainer)
-        _mock_cycle_dependencies(mock_engine, mock_evaluator_cls, mock_recorder_cls, mock_start)
+        cycle = SelfPlayCycle(trainer, max_workers=4)
+        _mock_run_self_play_and_evaluate(mock_func)
 
         with patch('os.listdir', return_value=['game_1', 'game_2']):
             with patch('os.path.isdir', return_value=True):
                 with patch('os.path.exists', return_value=True):
-                    cycle.run(rounds=1, games=5, epochs=10)
+                    cycle.run(rounds=1, games=5, epochs=10, rate=0.85)
 
-        # 验证 start_ai_vs_ai 被调用
-        mock_start.assert_called_once()
-        # 验证 games 参数
-        call_kwargs = mock_start.call_args[1]
-        self.assertEqual(call_kwargs['num_games'], 5)
+        # 验证 run_self_play_and_evaluate 被调用
+        mock_func.assert_called_once()
+        call_kwargs = mock_func.call_args[1]
+        # 验证关键参数
+        self.assertEqual(call_kwargs['games'], 5)
+        self.assertEqual(call_kwargs['rate'], 0.85)
+        self.assertEqual(call_kwargs['max_workers'], 4)
+        self.assertEqual(call_kwargs['name_prefix'], 'cycle_1')
 
-    @patch('ai.self_play_cycle.AIGameManager.start_ai_vs_ai')
-    @patch('ai.self_play_cycle.DataRecorder')
-    @patch('ai.self_play_cycle.Evaluator')
-    @patch('ai.self_play_cycle.AIEngine')
-    def test_multiple_rounds_iteration(self, mock_engine, mock_evaluator_cls, mock_recorder_cls, mock_start):
-        """多轮训练应正确迭代"""
+    @patch('ai.self_play_cycle.run_self_play_and_evaluate')
+    def test_multiple_rounds_iteration(self, mock_func):
+        """多轮训练应正确迭代，每轮调用一次 run_self_play_and_evaluate"""
         trainer = _create_mock_trainer()
         cycle = SelfPlayCycle(trainer)
-        _mock_cycle_dependencies(mock_engine, mock_evaluator_cls, mock_recorder_cls, mock_start)
+        _mock_run_self_play_and_evaluate(mock_func)
 
         with patch('os.listdir', return_value=['game_1']):
             with patch('os.path.isdir', return_value=True):
                 with patch('os.path.exists', return_value=True):
                     cycle.run(rounds=3, games=2, epochs=10)
 
-        # 验证 3 轮对局（start_ai_vs_ai 调用 3 次）
-        self.assertEqual(mock_start.call_count, 3)
-        # 验证 3 轮训练
-        self.assertEqual(trainer.train_batch.call_count, 3)
+        # 验证 3 轮对弈（run_self_play_and_evaluate 调用 3 次）
+        self.assertEqual(mock_func.call_count, 3)
+        # 验证 3 轮训练（train_auto 被调用 3 次）
+        self.assertEqual(trainer.train_auto.call_count, 3)
 
-    @patch('ai.self_play_cycle.AIGameManager.start_ai_vs_ai')
-    @patch('ai.self_play_cycle.DataRecorder')
-    @patch('ai.self_play_cycle.Evaluator')
-    @patch('ai.self_play_cycle.AIEngine')
-    def test_model_saved_after_each_round(self, mock_engine, mock_evaluator_cls, mock_recorder_cls, mock_start):
+        # 验证每轮的 name_prefix 递增
+        call_kwargs_list = [call[1] for call in mock_func.call_args_list]
+        self.assertEqual(call_kwargs_list[0]['name_prefix'], 'cycle_1')
+        self.assertEqual(call_kwargs_list[1]['name_prefix'], 'cycle_2')
+        self.assertEqual(call_kwargs_list[2]['name_prefix'], 'cycle_3')
+
+    @patch('ai.self_play_cycle.run_self_play_and_evaluate')
+    def test_model_saved_after_each_round(self, mock_func):
         """每轮训练后应保存模型"""
         trainer = _create_mock_trainer()
         cycle = SelfPlayCycle(trainer)
-        _mock_cycle_dependencies(mock_engine, mock_evaluator_cls, mock_recorder_cls, mock_start)
+        _mock_run_self_play_and_evaluate(mock_func)
 
         with patch('os.listdir', return_value=['game_1']):
             with patch('os.path.isdir', return_value=True):
@@ -103,23 +105,22 @@ class TestSelfPlayCycleOrchestration(unittest.TestCase):
         # 验证每轮保存一次模型
         self.assertEqual(trainer.model.save.call_count, 2)
 
-    @patch('ai.self_play_cycle.AIGameManager.start_ai_vs_ai')
-    @patch('ai.self_play_cycle.DataRecorder')
-    @patch('ai.self_play_cycle.Evaluator')
-    @patch('ai.self_play_cycle.AIEngine')
-    def test_no_sample_dirs_skips_training(self, mock_engine, mock_evaluator_cls, mock_recorder_cls, mock_start):
+    @patch('ai.self_play_cycle.run_self_play_and_evaluate')
+    def test_no_sample_dirs_skips_training(self, mock_func):
         """无 sample 时跳过训练"""
         trainer = _create_mock_trainer()
         cycle = SelfPlayCycle(trainer)
-        _mock_cycle_dependencies(mock_engine, mock_evaluator_cls, mock_recorder_cls, mock_start)
 
-        # 修改 evaluator 返回空 sample
-        evaluator = MagicMock()
-        evaluator.evaluate_round.return_value = {
-            "sample_files": [],
-            "errors": []
+        # 修改 mock 返回空 sample
+        mock_func.return_value = {
+            "round_dir": "/tmp/round",
+            "train_data_dir": "/tmp/train_data/round",
+            "sample_dirs": [],
+            "sample_count": 0,
+            "results": [],
+            "recorder": MagicMock(),
+            "interrupted": False
         }
-        mock_evaluator_cls.return_value = evaluator
 
         with patch('os.listdir', return_value=[]):
             with patch('os.path.isdir', return_value=True):
@@ -127,78 +128,111 @@ class TestSelfPlayCycleOrchestration(unittest.TestCase):
                     cycle.run(rounds=1, games=2, epochs=10)
 
         # 不应调用训练
-        trainer.train_batch.assert_not_called()
-        trainer.train_mini_batch.assert_not_called()
+        trainer.train_auto.assert_not_called()
 
-    @patch('ai.self_play_cycle.AIGameManager.start_ai_vs_ai')
-    @patch('ai.self_play_cycle.DataRecorder')
-    @patch('ai.self_play_cycle.Evaluator')
-    @patch('ai.self_play_cycle.AIEngine')
-    def test_evaluator_receives_decay_rate(self, mock_engine, mock_evaluator_cls, mock_recorder_cls, mock_start):
-        """Evaluator 应接收正确的 decay_rate 参数"""
+    @patch('ai.self_play_cycle.run_self_play_and_evaluate')
+    def test_rate_passed_to_run_self_play(self, mock_func):
+        """rate 参数应传递给 run_self_play_and_evaluate"""
         trainer = _create_mock_trainer()
         cycle = SelfPlayCycle(trainer)
-        _mock_cycle_dependencies(mock_engine, mock_evaluator_cls, mock_recorder_cls, mock_start)
+        _mock_run_self_play_and_evaluate(mock_func)
 
         with patch('os.listdir', return_value=['game_1']):
             with patch('os.path.isdir', return_value=True):
                 with patch('os.path.exists', return_value=True):
                     cycle.run(rounds=1, games=2, epochs=10, rate=0.85)
 
-        # 验证 Evaluator 创建时传入 decay_rate=0.85
-        eval_call_kwargs = mock_evaluator_cls.call_args[1]
-        self.assertEqual(eval_call_kwargs['decay_rate'], 0.85)
+        # 验证 rate 正确传递
+        call_kwargs = mock_func.call_args[1]
+        self.assertEqual(call_kwargs['rate'], 0.85)
 
-    @patch('ai.self_play_cycle.AIGameManager.start_ai_vs_ai')
-    @patch('ai.self_play_cycle.DataRecorder')
-    @patch('ai.self_play_cycle.Evaluator')
-    @patch('ai.self_play_cycle.AIEngine')
-    def test_max_workers_passed_to_evaluator(self, mock_engine, mock_evaluator_cls, mock_recorder_cls, mock_start):
-        """max_workers 应传递给 Evaluator"""
+    @patch('ai.self_play_cycle.run_self_play_and_evaluate')
+    def test_max_workers_passed_to_run_self_play(self, mock_func):
+        """max_workers 应传递给 run_self_play_and_evaluate"""
         trainer = _create_mock_trainer()
         cycle = SelfPlayCycle(trainer, max_workers=4)
-        _mock_cycle_dependencies(mock_engine, mock_evaluator_cls, mock_recorder_cls, mock_start)
+        _mock_run_self_play_and_evaluate(mock_func)
 
         with patch('os.listdir', return_value=['game_1']):
             with patch('os.path.isdir', return_value=True):
                 with patch('os.path.exists', return_value=True):
                     cycle.run(rounds=1, games=2, epochs=10)
 
-        eval_call_kwargs = mock_evaluator_cls.call_args[1]
-        self.assertEqual(eval_call_kwargs['max_workers'], 4)
+        # 验证 max_workers 正确传递
+        call_kwargs = mock_func.call_args[1]
+        self.assertEqual(call_kwargs['max_workers'], 4)
 
-    @patch('ai.self_play_cycle.AIGameManager.start_ai_vs_ai')
-    @patch('ai.self_play_cycle.DataRecorder')
-    @patch('ai.self_play_cycle.Evaluator')
-    @patch('ai.self_play_cycle.AIEngine')
-    def test_epochs_passed_to_train_batch(self, mock_engine, mock_evaluator_cls, mock_recorder_cls, mock_start):
-        """epochs 参数应正确传递给 train_batch"""
+    @patch('ai.self_play_cycle.run_self_play_and_evaluate')
+    def test_epochs_passed_to_train_auto(self, mock_func):
+        """epochs 参数应正确传递给 train_auto"""
         trainer = _create_mock_trainer()
         cycle = SelfPlayCycle(trainer)
-        _mock_cycle_dependencies(mock_engine, mock_evaluator_cls, mock_recorder_cls, mock_start)
+        _mock_run_self_play_and_evaluate(mock_func)
 
         with patch('os.listdir', return_value=['game_1']):
             with patch('os.path.isdir', return_value=True):
                 with patch('os.path.exists', return_value=True):
                     cycle.run(rounds=1, games=2, epochs=500)
 
-        call_kwargs = trainer.train_batch.call_args[1]
+        call_kwargs = trainer.train_auto.call_args[1]
         self.assertEqual(call_kwargs['epochs'], 500)
+
+    @patch('ai.self_play_cycle.run_self_play_and_evaluate')
+    def test_interrupted_result_breaks_loop(self, mock_func):
+        """对弈阶段中断时应跳出循环"""
+        trainer = _create_mock_trainer()
+        cycle = SelfPlayCycle(trainer)
+
+        # 第一轮中断
+        mock_func.return_value = {
+            "round_dir": "/tmp/round",
+            "train_data_dir": "/tmp/train_data/round",
+            "sample_dirs": [],
+            "sample_count": 0,
+            "results": [],
+            "recorder": MagicMock(),
+            "interrupted": True
+        }
+
+        with patch('os.listdir', return_value=[]):
+            with patch('os.path.isdir', return_value=True):
+                with patch('os.path.exists', return_value=True):
+                    cycle.run(rounds=3, games=2, epochs=10)
+
+        # 只调用了一次 run_self_play_and_evaluate（第一轮中断后跳出）
+        self.assertEqual(mock_func.call_count, 1)
+        # 不应调用训练
+        trainer.train_auto.assert_not_called()
+
+    @patch('ai.self_play_cycle.run_self_play_and_evaluate')
+    def test_project_root_passed_to_run_self_play(self, mock_func):
+        """project_root 应传递给 run_self_play_and_evaluate"""
+        trainer = _create_mock_trainer()
+        cycle = SelfPlayCycle(trainer)
+        _mock_run_self_play_and_evaluate(mock_func)
+
+        with patch('os.listdir', return_value=['game_1']):
+            with patch('os.path.isdir', return_value=True):
+                with patch('os.path.exists', return_value=True):
+                    cycle.run(rounds=1, games=2, epochs=10, project_root="/tmp/project")
+
+        # 验证 project_root 和计算后的 ai_data_dir
+        call_kwargs = mock_func.call_args[1]
+        self.assertEqual(call_kwargs['project_root'], "/tmp/project")
+        self.assertEqual(call_kwargs['ai_data_dir'], os.path.join("/tmp/project", "ai", "ai_data"))
+        self.assertEqual(call_kwargs['train_data_dir'], os.path.join("/tmp/project", "ai", "train_data"))
 
 
 class TestSelfPlayCycleLossLogging(unittest.TestCase):
     """测试 SelfPlayCycle 的 loss 记录行为"""
 
-    @patch('ai.self_play_cycle.AIGameManager.start_ai_vs_ai')
-    @patch('ai.self_play_cycle.DataRecorder')
-    @patch('ai.self_play_cycle.Evaluator')
-    @patch('ai.self_play_cycle.AIEngine')
-    def test_loss_logger_logs_each_round(self, mock_engine, mock_evaluator_cls, mock_recorder_cls, mock_start):
+    @patch('ai.self_play_cycle.run_self_play_and_evaluate')
+    def test_loss_logger_logs_each_round(self, mock_func):
         """每轮训练后应记录 avg_loss"""
         trainer = _create_mock_trainer()
-        trainer.train_batch.return_value = 0.1234
+        trainer.train_auto.return_value = 0.1234
         cycle = SelfPlayCycle(trainer)
-        _mock_cycle_dependencies(mock_engine, mock_evaluator_cls, mock_recorder_cls, mock_start)
+        _mock_run_self_play_and_evaluate(mock_func)
 
         with patch('os.listdir', return_value=['game_1']):
             with patch('os.path.isdir', return_value=True):
@@ -211,15 +245,12 @@ class TestSelfPlayCycleLossLogging(unittest.TestCase):
         self.assertEqual(call_args[0], 1)  # round_num=1
         self.assertAlmostEqual(call_args[1], 0.1234)
 
-    @patch('ai.self_play_cycle.AIGameManager.start_ai_vs_ai')
-    @patch('ai.self_play_cycle.DataRecorder')
-    @patch('ai.self_play_cycle.Evaluator')
-    @patch('ai.self_play_cycle.AIEngine')
-    def test_loss_logger_plot_called_at_end(self, mock_engine, mock_evaluator_cls, mock_recorder_cls, mock_start):
+    @patch('ai.self_play_cycle.run_self_play_and_evaluate')
+    def test_loss_logger_plot_called_at_end(self, mock_func):
         """训练结束应生成 loss 曲线图"""
         trainer = _create_mock_trainer()
         cycle = SelfPlayCycle(trainer)
-        _mock_cycle_dependencies(mock_engine, mock_evaluator_cls, mock_recorder_cls, mock_start)
+        _mock_run_self_play_and_evaluate(mock_func)
 
         with patch('os.listdir', return_value=['game_1']):
             with patch('os.path.isdir', return_value=True):

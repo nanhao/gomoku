@@ -181,13 +181,13 @@ class TestTrainFromDirModes(unittest.TestCase):
             ]):
                 with patch('ai.train_main.get_trainer') as mock_get:
                     mock_trainer = MagicMock()
-                    mock_trainer.train_batch = MagicMock(return_value=0.5)
+                    mock_trainer.train_auto = MagicMock(return_value=0.5)
                     mock_get.return_value = mock_trainer
 
                     main()
 
-                    mock_trainer.train_batch.assert_called_once()
-                    call_args = mock_trainer.train_batch.call_args
+                    mock_trainer.train_auto.assert_called_once()
+                    call_args = mock_trainer.train_auto.call_args
                     self.assertEqual(call_args[1]['epochs'], 1)
 
     def test_train_from_dir_with_merge(self):
@@ -213,14 +213,13 @@ class TestTrainFromDirModes(unittest.TestCase):
             ]):
                 with patch('ai.train_main.get_trainer') as mock_get:
                     mock_trainer = MagicMock()
-                    mock_trainer.train_batch = MagicMock(return_value=0.3)
+                    mock_trainer.train_auto = MagicMock(return_value=0.3)
                     mock_get.return_value = mock_trainer
 
                     main()
 
-                    mock_trainer.train_batch.assert_called_once()
-                    # train_batch 接收的是临时目录列表，验证样本数需检查内部逻辑
-                    call_args = mock_trainer.train_batch.call_args
+                    mock_trainer.train_auto.assert_called_once()
+                    call_args = mock_trainer.train_auto.call_args
                     self.assertEqual(call_args[1]['epochs'], 1)
 
     def test_train_from_dir_empty_raises(self):
@@ -253,13 +252,13 @@ class TestTrainFromDirModes(unittest.TestCase):
             ]):
                 with patch('ai.train_main.get_trainer') as mock_get:
                     mock_trainer = MagicMock()
-                    mock_trainer.train_mini_batch = MagicMock(return_value=0.2)
+                    mock_trainer.train_auto = MagicMock(return_value=0.2)
                     mock_get.return_value = mock_trainer
 
                     main()
 
-                    mock_trainer.train_mini_batch.assert_called_once()
-                    call_kwargs = mock_trainer.train_mini_batch.call_args[1]
+                    mock_trainer.train_auto.assert_called_once()
+                    call_kwargs = mock_trainer.train_auto.call_args[1]
                     self.assertEqual(call_kwargs['batch_size'], 1)
                     self.assertEqual(call_kwargs['epochs'], 1)
 
@@ -279,17 +278,17 @@ class TestTrainFromDirModes(unittest.TestCase):
             ]):
                 with patch('ai.train_main.get_trainer') as mock_get:
                     mock_trainer = MagicMock()
-                    mock_trainer.train_mini_batch = MagicMock(return_value=0.1)
+                    mock_trainer.train_auto = MagicMock(return_value=0.1)
                     mock_get.return_value = mock_trainer
 
                     main()
 
-                    call_kwargs = mock_trainer.train_mini_batch.call_args[1]
+                    call_kwargs = mock_trainer.train_auto.call_args[1]
                     self.assertTrue(call_kwargs.get('dense_log', False),
                                     "--train-from-dir + --batch-size 应传 dense_log=True")
 
     def test_train_from_dir_no_batch_no_dense_log(self):
-        """--train-from-dir 不指定 --batch-size 时不传 dense_log（全量更新模式）"""
+        """--train-from-dir 不指定 --batch-size 时，train_auto 接收 dense_log=True 但内部走 train_batch 路径"""
         with tempfile.TemporaryDirectory() as tmp_dir:
             sample_dir = os.path.join(tmp_dir, "1")
             os.makedirs(sample_dir)
@@ -304,15 +303,16 @@ class TestTrainFromDirModes(unittest.TestCase):
             ]):
                 with patch('ai.train_main.get_trainer') as mock_get:
                     mock_trainer = MagicMock()
-                    mock_trainer.train_batch = MagicMock(return_value=0.3)
+                    mock_trainer.train_auto = MagicMock(return_value=0.3)
                     mock_get.return_value = mock_trainer
 
                     main()
 
-                    mock_trainer.train_batch.assert_called_once()
-                    call_kwargs = mock_trainer.train_batch.call_args[1]
-                    self.assertNotIn('dense_log', call_kwargs,
-                                     "全量更新模式不应传 dense_log")
+                    mock_trainer.train_auto.assert_called_once()
+                    # train_auto 统一接收 dense_log=True，但 batch_size=None 时
+                    # 内部走 train_batch 路径（train_batch 不使用 dense_log）
+                    call_kwargs = mock_trainer.train_auto.call_args[1]
+                    self.assertIsNone(call_kwargs.get('batch_size'))
 
 
 if __name__ == '__main__':

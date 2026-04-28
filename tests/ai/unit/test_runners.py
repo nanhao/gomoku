@@ -182,7 +182,7 @@ class TestRunTrainFromDir(unittest.TestCase):
                 run_train_from_dir(args, trainer)
 
     def test_json_file_trains_with_batch(self):
-        """.json 文件 + batch_size 应调用 train_mini_batch"""
+        """.json 文件 + batch_size 应调用 train_auto（内部走 mini-batch 路径）"""
         with tempfile.TemporaryDirectory() as tmp_dir:
             json_path = os.path.join(tmp_dir, "data.json")
             sample_data = [{"input": [1.0] * 226, "output": [0.0] * 225, "mask": [1] * 225}]
@@ -191,18 +191,18 @@ class TestRunTrainFromDir(unittest.TestCase):
 
             args = _make_args(train_from_dir=json_path, epochs=1, batch_size=16, shuffle=True)
             trainer = MagicMock()
-            trainer.train_mini_batch.return_value = 0.5
+            trainer.train_auto.return_value = 0.5
 
             run_train_from_dir(args, trainer)
 
-            trainer.train_mini_batch.assert_called_once()
-            call_kwargs = trainer.train_mini_batch.call_args[1]
+            trainer.train_auto.assert_called_once()
+            call_kwargs = trainer.train_auto.call_args[1]
             self.assertEqual(call_kwargs['batch_size'], 16)
             self.assertTrue(call_kwargs['shuffle'])
             self.assertTrue(call_kwargs['dense_log'])
 
     def test_directory_trains_with_train_batch(self):
-        """目录路径 + 无 batch_size 应调用 train_batch"""
+        """目录路径 + 无 batch_size 应调用 train_auto（内部走全量更新路径）"""
         with tempfile.TemporaryDirectory() as tmp_dir:
             sub_dir = os.path.join(tmp_dir, "1")
             os.makedirs(sub_dir)
@@ -211,11 +211,13 @@ class TestRunTrainFromDir(unittest.TestCase):
 
             args = _make_args(train_from_dir=tmp_dir, epochs=1)
             trainer = MagicMock()
-            trainer.train_batch.return_value = 0.3
+            trainer.train_auto.return_value = 0.3
 
             run_train_from_dir(args, trainer)
 
-            trainer.train_batch.assert_called_once()
+            trainer.train_auto.assert_called_once()
+            call_kwargs = trainer.train_auto.call_args[1]
+            self.assertIsNone(call_kwargs['batch_size'])
 
     @patch('shutil.rmtree')
     def test_cleanup_on_success(self, mock_rmtree):
@@ -227,7 +229,7 @@ class TestRunTrainFromDir(unittest.TestCase):
 
             args = _make_args(train_from_dir=json_path)
             trainer = MagicMock()
-            trainer.train_batch.return_value = 0.5
+            trainer.train_auto.return_value = 0.5
 
             with patch('ai.runners._create_temp_sample_dir', return_value='/fake/tmp/dir'):
                 run_train_from_dir(args, trainer)
@@ -244,7 +246,7 @@ class TestRunTrainFromDir(unittest.TestCase):
 
             args = _make_args(train_from_dir=json_path)
             trainer = MagicMock()
-            trainer.train_batch.side_effect = RuntimeError("boom")
+            trainer.train_auto.side_effect = RuntimeError("boom")
 
             with patch('ai.runners._create_temp_sample_dir', return_value='/fake/tmp/dir'):
                 with self.assertRaises(SystemExit):

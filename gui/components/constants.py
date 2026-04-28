@@ -57,3 +57,10 @@ FONTS = {
     "small": ("微软雅黑", 9),
     "mono": ("Consolas", 9),
 }
+
+# 动物表情符号（森林/小动物主题）
+ANIMALS = {
+    "black": "🐻",
+    "white": "🐰",
+    "last_move": "🐾",
+}

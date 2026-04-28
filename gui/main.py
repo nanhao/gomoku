@@ -22,7 +22,7 @@ from gui.components import GameModeSelector, GameBoard
 from gui.components import ReplayBrowser, ReplayWindow
 from gui.components import AIBattleConfigDialog, AIBattleProgressWindow
 from gui.components import LoadGameDialog
-from gui.components.constants import COLORS, FONTS
+from gui.components.constants import ANIMALS, COLORS, FONTS
 from gui.display_updater import GameDisplayUpdater
 from gui.ai_battle import run_ai_vs_ai_mode
 
@@ -37,10 +37,6 @@ class GomokuGUI:
     COLOR_BUNNY = COLORS["rabbit"]
     COLOR_BORDER = COLORS["border"]
     
-    # 动物表情符号
-    ANIMAL_BLACK = "🐻"
-    ANIMAL_WHITE = "🐰"
-    ANIMAL_LAST = "🐾"
     
     def __init__(self, root, game_mode="pvp", ai_player=None, ai_model="random"):
         """
@@ -125,7 +121,7 @@ class GomokuGUI:
         
         tk.Label(
             title_frame,
-            text=self.ANIMAL_BLACK,
+            text=ANIMALS["black"],
             font=("微软雅黑", 24),
             bg=self.COLOR_BG
         ).pack(side=tk.LEFT, padx=3)
@@ -140,7 +136,7 @@ class GomokuGUI:
         
         tk.Label(
             title_frame,
-            text=self.ANIMAL_WHITE,
+            text=ANIMALS["white"],
             font=("微软雅黑", 24),
             bg=self.COLOR_BG
         ).pack(side=tk.LEFT, padx=3)
@@ -282,7 +278,7 @@ class GomokuGUI:
         """显示游戏结束弹窗
 
         Args:
-            winner: 获胜方 (0=平局, 1=黑胜, 2=白胜)
+            winner: 获胜方 (1=黑胜, 2=白胜, 3=平局)
         """
         self._display_updater.show_game_over(winner)
     

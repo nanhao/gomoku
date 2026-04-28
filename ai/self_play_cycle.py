@@ -1,6 +1,7 @@
 """自我对弈训练周期模块
 
 将 BaseTrainer.train_cycle 提取为独立类，消除循环依赖。
+对弈 + 评价逻辑委托给 run_self_play_and_evaluate，本模块只负责训练编排。
 """
 
 import os
@@ -9,10 +10,7 @@ from datetime import datetime
 
 from ai.constants import AI_DATA_DIR, TRAIN_DATA_DIR, LOSS_LOG_DIR
 from ai.loss_logger import LossLogger
-from ai.engine import AIEngine
-from ai.game_manager import AIGameManager
-from ai.data_recorder import DataRecorder
-from ai.evaluator import Evaluator
+from ai.self_play_generator import run_self_play_and_evaluate
 
 
 class SelfPlayCycle:
@@ -20,6 +18,7 @@ class SelfPlayCycle:
     
     让模型自己跟自己对战 n 个轮次，每个轮次 m 场对局。
     每个轮次结束后，将本轮所有 sample 数据合并，调用 train_batch 训练模型。
+    对弈 + 评价步骤委托给 run_self_play_and_evaluate。
     """
     
     def __init__(self, trainer, max_workers: int = None):
@@ -57,18 +56,19 @@ class SelfPlayCycle:
             shuffle: 每个 epoch 是否打乱数据顺序，仅 mini-batch 模式有效，默认 False
             project_root: 项目根目录，用于确定数据保存路径
         """
-        # 确定项目根目录
+        # 确定数据目录：默认使用常量，测试隔离时基于 project_root 拼接
         if project_root is None:
-            project_root = os.path.dirname(os.path.dirname(__file__))
-        
-        # 创建数据目录（基于 project_root，测试时可隔离到临时目录）
-        ai_data_dir = os.path.join(project_root, "ai", "ai_data")
-        train_data_dir = os.path.join(project_root, "ai", "train_data")
+            # 正常运行：直接使用常量
+            ai_data_dir = AI_DATA_DIR
+            train_data_dir = TRAIN_DATA_DIR
+        else:
+            # 测试隔离：基于 project_root 拼接路径
+            ai_data_dir = os.path.join(project_root, "ai", "ai_data")
+            train_data_dir = os.path.join(project_root, "ai", "train_data")
+
+        # 确保目录存在
         os.makedirs(ai_data_dir, exist_ok=True)
         os.makedirs(train_data_dir, exist_ok=True)
-        
-        # 创建 AI 引擎（使用当前模型）
-        engine = AIEngine(self.trainer.model)
 
         # 生成训练会话唯一子目录名
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -99,76 +99,41 @@ class SelfPlayCycle:
             for round_num in range(1, rounds + 1):
                 print(f"\n===== 第 {round_num}/{rounds} 轮 =====")
 
-                # 1. 创建数据记录器
-                recorder = DataRecorder(
-                    ai_name=f"{self.trainer.model_name}_cycle_{round_num}",
-                    ai_data_dir=ai_data_dir
-                )
-
-                # 2. 执行 AI 内战（模型自我对弈）
-                print(f"执行 {games} 局自我对弈...")
-                results = AIGameManager.start_ai_vs_ai(
-                    engine1=engine,
-                    engine2=engine,
-                    num_games=games,
-                    recorder=recorder,
+                # 1-3. 自我对弈 + 评价（委托给公共函数）
+                result = run_self_play_and_evaluate(
+                    model=self.trainer.model,
+                    games=games,
+                    rate=rate,
+                    ai_data_dir=ai_data_dir,
+                    train_data_dir=train_data_dir,
+                    max_workers=self.max_workers,
+                    name_prefix=f"cycle_{round_num}",
                     project_root=project_root
                 )
 
-                # 统计结果
-                black_wins = sum(1 for r in results if r["winner"] == 1)
-                white_wins = sum(1 for r in results if r["winner"] == 2)
-                draws = sum(1 for r in results if r["winner"] == 3)
-                print(f"对局结果: 黑胜 {black_wins}, 白胜 {white_wins}, 平局 {draws}")
+                # 检测对弈阶段是否被中断
+                if result["interrupted"]:
+                    interrupted = True
+                    break
 
-                # 3. 调用 Evaluator 对每局生成 sample.json，收集所有 sample 目录
-                print("生成训练样本...")
-                evaluator = Evaluator(
-                    ai_data_dir=ai_data_dir,
-                    train_data_dir=train_data_dir,
-                    decay_rate=rate,
-                    max_workers=self.max_workers
-                )
+                sample_dirs = result["sample_dirs"]
 
-                round_dir = recorder.get_round_dir()
-                # 使用 evaluate_round 并行评价，收集 sample 目录
-                result = evaluator.evaluate_round(round_dir)
-                sample_dirs = [os.path.dirname(f) for f in result["sample_files"]]
-
-                # 打印错误信息
-                for record_file, err in result["errors"]:
-                    print(f"  评价失败 {record_file}: {err}")
-
-                print(f"生成 {len(sample_dirs)} 个样本文件")
-
-                # 4. 调用 train_batch 将本轮所有 sample 合并训练
-                #    train_batch 内部会创建自己的 LossLogger（内层 epoch 级日志）
+                # 4. 自动选择训练方法（提供 batch_size 时使用 mini-batch，否则全量更新）
+                #    train_auto 内部会创建自己的 LossLogger（内层 epoch 级日志）
                 if sample_dirs:
                     print(f"训练模型 ({epochs} epochs，共 {len(sample_dirs)} 个样本合并训练)...")
-                    # 根据 batch_size 选择训练方法
-                    if batch_size is not None and batch_size > 0:
-                        avg_loss = self.trainer.train_mini_batch(
-                            sample_dirs,
-                            epochs=epochs,
-                            batch_size=batch_size,
-                            shuffle=shuffle,
-                            verbose=True,
-                            session_dir=session_dir,
-                            log_type="epoch_level",
-                            round_num=round_num,
-                            total_rounds=rounds,
-                            dense_log=True
-                        )
-                    else:
-                        avg_loss = self.trainer.train_batch(
-                            sample_dirs,
-                            epochs=epochs,
-                            verbose=True,
-                            session_dir=session_dir,
-                            log_type="epoch_level",
-                            round_num=round_num,
-                            total_rounds=rounds
-                        )
+                    avg_loss = self.trainer.train_auto(
+                        sample_dirs,
+                        epochs=epochs,
+                        batch_size=batch_size,
+                        shuffle=shuffle,
+                        verbose=True,
+                        session_dir=session_dir,
+                        log_type="epoch_level",
+                        round_num=round_num,
+                        total_rounds=rounds,
+                        dense_log=True
+                    )
                     print(f"本轮平均损失: {avg_loss:.4f}")
 
                     # 记录每轮的 avg_loss（外层 round 级日志）

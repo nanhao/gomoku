@@ -5,6 +5,7 @@ import json
 
 from .game import GomokuGame
 from .save import GomokuSave
+from . import get_winner_text
 
 
 class GomokuController:
@@ -68,11 +69,7 @@ class GomokuController:
         
         # 检查游戏是否已结束
         if self.game.winner != 0:
-            winner = self.game.winner
-            if winner == 3:
-                return {"error": "游戏已结束，平局"}
-            else:
-                return {"error": f"游戏已结束，{'黑方' if winner == 1 else '白方'}获胜"}
+            return {"error": f"游戏已结束，{get_winner_text(self.game.winner)}"}
         
         try:
             # 执行落子
@@ -92,10 +89,7 @@ class GomokuController:
             # 如果有获胜方，添加获胜信息
             if winner != 0:
                 result["game_over"] = True
-                if winner == 3:
-                    result["result"] = "平局"
-                else:
-                    result["result"] = f"{'黑方' if winner == 1 else '白方'}获胜"
+                result["result"] = get_winner_text(winner)
             
             return result
             

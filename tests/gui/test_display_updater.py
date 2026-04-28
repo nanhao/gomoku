@@ -7,11 +7,11 @@
 
 测试策略：
 1. 创建 tkinter root 窗口（withdraw），构建所有需要的 mock/真实组件
-2. Mock helper 的 get_player_name 和 get_winner_text 方法
+2. Mock helper 的 get_player_name 方法
 3. Mock board 的 draw_board 和 draw_pieces 方法
 4. 测试各种显示状态下的 label 更新
 5. 测试历史记录更新
-6. 测试游戏结束弹窗
+6. 测试游戏结束弹窗（get_winner_text 已从 game 包导入，无需 mock）
 """
 
 import os
@@ -59,8 +59,7 @@ class TestGameDisplayUpdater(unittest.TestCase):
         self.mock_helper = MagicMock()
         # 配置 get_player_name 默认返回值
         self.mock_helper.get_player_name.side_effect = self._mock_get_player_name
-        # 配置 get_winner_text 默认返回值
-        self.mock_helper.get_winner_text.side_effect = self._mock_get_winner_text
+        # get_winner_text 已从 game 包导入，无需 mock，使用真实函数
 
         # 颜色常量
         self.color_text = "#2C2C2C"
@@ -101,17 +100,6 @@ class TestGameDisplayUpdater(unittest.TestCase):
         if player == 1:
             return "🐻 黑方"
         return "🐰 白方"
-
-    @staticmethod
-    def _mock_get_winner_text(winner):
-        """模拟 get_winner_text 返回值"""
-        if winner == 0:
-            return "平局"
-        elif winner == 1:
-            return "黑方获胜"
-        elif winner == 2:
-            return "白方获胜"
-        return "未知结果"
 
     def _make_display_state(self, has_game=True, save_name="测试存档",
                             board_state=None, last_move=None,
@@ -314,33 +302,31 @@ class TestGameDisplayUpdater(unittest.TestCase):
         """测试黑方获胜时显示弹窗"""
         self.updater.show_game_over(1)
 
-        # 验证 helper.get_winner_text 被调用
-        self.mock_helper.get_winner_text.assert_called_once_with(1)
         # 验证 messagebox.showinfo 被调用
         mock_showinfo.assert_called_once()
         # 验证弹窗标题
         args, kwargs = mock_showinfo.call_args
         self.assertEqual(args[0], "游戏结束")
         # 验证弹窗内容包含获胜信息
-        self.assertIn("获胜", args[1])
+        self.assertIn("黑方获胜", args[1])
 
     @patch('gui.display_updater.messagebox.showinfo')
     def test_show_game_over_白方获胜(self, mock_showinfo):
         """测试白方获胜时显示弹窗"""
         self.updater.show_game_over(2)
 
-        # 验证 helper.get_winner_text 被调用
-        self.mock_helper.get_winner_text.assert_called_once_with(2)
-        # 验证弹窗被调用
+        # 验证 messagebox.showinfo 被调用
         mock_showinfo.assert_called_once()
+        args, kwargs = mock_showinfo.call_args
+        self.assertIn("白方获胜", args[1])
 
     @patch('gui.display_updater.messagebox.showinfo')
     def test_show_game_over_平局(self, mock_showinfo):
         """测试平局时显示弹窗"""
-        self.updater.show_game_over(0)
+        self.updater.show_game_over(3)
 
-        # 验证 helper.get_winner_text 被调用
-        self.mock_helper.get_winner_text.assert_called_once_with(0)
+        # 验证 messagebox.showinfo 被调用
+        mock_showinfo.assert_called_once()
         # 验证弹窗内容包含"平局"
         args, kwargs = mock_showinfo.call_args
         self.assertIn("平局", args[1])

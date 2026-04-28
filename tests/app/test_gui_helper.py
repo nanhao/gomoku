@@ -14,6 +14,7 @@ if project_root not in sys.path:
 
 import unittest
 from game import GomokuController
+from game import get_winner_text
 from game.save import GomokuSave
 from app import GameSession
 from app.gui_helper import GUIHelper, get_ai_data_dir, create_pve_config
@@ -126,24 +127,6 @@ class TestGUIHelper(unittest.TestCase):
 
         self.assertFalse(state["has_game"])
 
-    def test_get_winner_text_black(self):
-        """获取黑方获胜文本"""
-        helper = self._create_helper(game_mode="pvp")
-        text = helper.get_winner_text(1)
-        self.assertIn("黑方", text)
-
-    def test_get_winner_text_white(self):
-        """获取白方获胜文本"""
-        helper = self._create_helper(game_mode="pvp")
-        text = helper.get_winner_text(2)
-        self.assertIn("白方", text)
-
-    def test_get_winner_text_draw(self):
-        """获取平局文本"""
-        helper = self._create_helper(game_mode="pvp")
-        text = helper.get_winner_text(3)
-        self.assertIn("平局", text)
-
     def test_get_player_name_black(self):
         """获取黑方玩家名称"""
         helper = self._create_helper(game_mode="pvp")
@@ -193,14 +176,13 @@ class TestGUIHelper(unittest.TestCase):
         # 验证最后一步返回游戏结束
         self.assertTrue(result.get("game_over", False) or result["status"] == "success")
 
-    def test_get_winner_text_invalid(self):
-        """获取无效获胜方文本"""
-        helper = self._create_helper(game_mode="pvp")
-        text = helper.get_winner_text(0)  # 未结束
-        self.assertEqual(text, "")
-
-        text = helper.get_winner_text(99)  # 无效值
-        self.assertEqual(text, "")
+    def test_get_winner_text_from_game(self):
+        """测试 game 包的 get_winner_text 函数"""
+        self.assertEqual(get_winner_text(0), "")       # 未结束
+        self.assertEqual(get_winner_text(1), "黑方获胜")  # 黑胜
+        self.assertEqual(get_winner_text(2), "白方获胜")  # 白胜
+        self.assertEqual(get_winner_text(3), "平局")      # 平局
+        self.assertEqual(get_winner_text(99), "")        # 无效值
 
 
 class TestGUIHelperFunctions(unittest.TestCase):
