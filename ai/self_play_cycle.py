@@ -39,7 +39,8 @@ class SelfPlayCycle:
         rate: float = 0.9,
         batch_size: int = None,
         shuffle: bool = False,
-        project_root: str = None
+        project_root: str = None,
+        val_ratio: float = 0.0
     ) -> None:
         """执行训练周期
 
@@ -55,6 +56,7 @@ class SelfPlayCycle:
             batch_size: 每批次样本数，提供时启用 mini-batch 训练，默认 None（全量更新）
             shuffle: 每个 epoch 是否打乱数据顺序，仅 mini-batch 模式有效，默认 False
             project_root: 项目根目录，用于确定数据保存路径
+            val_ratio: 验证集比例，0 表示不分割，默认 0.0
         """
         # 确定数据目录：默认使用常量，测试隔离时基于 project_root 拼接
         if project_root is None:
@@ -132,7 +134,8 @@ class SelfPlayCycle:
                         log_type="epoch_level",
                         round_num=round_num,
                         total_rounds=rounds,
-                        dense_log=True
+                        dense_log=True,
+                        val_ratio=val_ratio
                     )
                     print(f"本轮平均损失: {avg_loss:.4f}")
 

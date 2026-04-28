@@ -124,7 +124,7 @@ class TestTrainAutoDispatch(unittest.TestCase):
         )
         self.trainer.train_batch.assert_called_once_with(
             ["dir1"], epochs=50, verbose=False,
-            session_dir="/tmp/s", dense_log=True
+            session_dir="/tmp/s", dense_log=True, val_ratio=0.0
         )
 
     def test_kwargs_passed_to_train_mini_batch(self):
@@ -137,7 +137,7 @@ class TestTrainAutoDispatch(unittest.TestCase):
         self.trainer.train_mini_batch.assert_called_once_with(
             ["dir1"], epochs=50, batch_size=16, shuffle=False,
             verbose=False, session_dir="/tmp/s", log_type="epoch_level",
-            round_num=1, total_rounds=10, dense_log=True
+            round_num=1, total_rounds=10, dense_log=True, val_ratio=0.0
         )
 
     def test_default_parameter_values(self):
@@ -145,7 +145,7 @@ class TestTrainAutoDispatch(unittest.TestCase):
         self.trainer.train_auto(["dir1"])
         # 默认 batch_size=None → 走 train_batch
         self.trainer.train_batch.assert_called_once_with(
-            ["dir1"], epochs=1000, verbose=True
+            ["dir1"], epochs=1000, verbose=True, val_ratio=0.0
         )
 
     # ---------- 返回值测试 ----------

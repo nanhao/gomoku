@@ -197,6 +197,32 @@ class BaseTrainer(ABC):
                 print(f"模型保存失败: {e}")
         return total_loss / count if count > 0 else 0.0
 
+    def _evaluate_val_loss(
+        self,
+        val_inputs: torch.Tensor,
+        val_targets: torch.Tensor,
+        val_masks: torch.Tensor
+    ) -> float:
+        """在验证集上计算 loss（仅前向传播，不更新参数）
+
+        评估时切换到 eval 模式，完成后恢复 train 模式。
+        使用 torch.no_grad() 避免计算梯度，节省显存。
+
+        Args:
+            val_inputs: 验证集输入张量
+            val_targets: 验证集目标张量
+            val_masks: 验证集 mask 张量
+
+        Returns:
+            验证集 loss 值（标量 float）
+        """
+        self.model.network.eval()
+        with torch.no_grad():
+            outputs = self.model.network(val_inputs)
+            val_loss = self._masked_loss(outputs, val_targets, val_masks)
+        self.model.network.train()
+        return val_loss.item()
+
     def _forward_backward_step(self, inputs, targets, masks) -> Tuple[torch.Tensor, float]:
         """执行一次前向+反向传播+参数更新，返回 (loss张量, grad_norm标量)
 
@@ -214,20 +240,28 @@ class BaseTrainer(ABC):
         self.optimizer.step()
         return loss, grad_norm
 
-    def _run_training_loop(self, inputs_tensor, targets_tensor, masks_tensor,
-                           epochs, loss_logger, verbose) -> float:
+    def _run_training_loop(
+        self,
+        inputs_tensor, targets_tensor, masks_tensor,
+        epochs, loss_logger, verbose,
+        val_inputs=None, val_targets=None, val_masks=None
+    ) -> float:
         """执行训练循环（供 train_single / train_batch 复用）
 
         包含完整的 for-epoch 循环：前向反向传播、loss 日志记录、verbose 打印、
         学习率衰减、KeyboardInterrupt 处理、_finalize_training 调用。
+        提供验证集张量时，每 LOSS_LOG_INTERVAL 个 epoch 评估并记录 val_loss。
 
         Args:
-            inputs_tensor: 输入张量
-            targets_tensor: 目标张量
-            masks_tensor: mask 张量
+            inputs_tensor: 训练输入张量
+            targets_tensor: 训练目标张量
+            masks_tensor: 训练 mask 张量
             epochs: 训练轮数
             loss_logger: LossLogger 实例
             verbose: 是否输出每个 epoch 的损失值
+            val_inputs: 验证集输入张量（可选）
+            val_targets: 验证集目标张量（可选）
+            val_masks: 验证集 mask 张量（可选）
 
         Returns:
             训练后的平均损失值
@@ -235,6 +269,8 @@ class BaseTrainer(ABC):
         total_loss = 0.0
         completed_epochs = 0
         interrupted = False
+        # 是否有验证集（用于决定 x 轴键名）
+        has_val = val_inputs is not None
 
         try:
             for epoch in range(epochs):
@@ -251,6 +287,11 @@ class BaseTrainer(ABC):
                     if verbose:
                         current_lr = self.optimizer.param_groups[0]['lr']
                         print(f"Epoch {epoch + 1}/{epochs}, loss: {loss.item():.4f}, grad_norm: {grad_norm:.4f}, lr: {current_lr:.6f}")
+
+                    # val loss 评估：与 train loss 同步记录
+                    if has_val:
+                        val_loss = self._evaluate_val_loss(val_inputs, val_targets, val_masks)
+                        loss_logger.log_val(epoch + 1, val_loss)
 
                 # 学习率衰减
                 self._step_lr_scheduler(loss.item())
@@ -300,34 +341,41 @@ class BaseTrainer(ABC):
             inputs_tensor, targets_tensor, masks_tensor, epochs, loss_logger, verbose
         )
 
-    def train_batch(self, sample_dirs: List[str], epochs: int = 1000, verbose: bool = True, **kwargs) -> float:
+    def train_batch(self, sample_dirs: List[str], epochs: int = 1000,
+                    verbose: bool = True, val_ratio: float = 0.0, **kwargs) -> float:
         """批量训练：将多个 sample 文件数据合并，每个 epoch 只做一次参数更新。
 
         正确实现"一个 epoch 只更新一次参数"的语义：
         先将所有 sample 文件的数据合并为一个大数据集，
         然后在合并数据集上训练 epochs 次，每次只做一次前向+反向传播。
+        提供 val_ratio > 0 时，自动分割训练集和验证集，并在训练过程中监控 val_loss。
 
         Args:
             sample_dirs: 包含 sample.json 的目录路径列表
             epochs: 训练轮数，默认 1000
             verbose: 是否输出每个 epoch 的损失值，默认 True
+            val_ratio: 验证集比例，0 表示不分割，默认 0.0
             **kwargs: 传递给 LossLogger 的可选参数（session_dir、log_type、round_num 等）
 
         Returns:
             训练后的平均损失值
 
         Raises:
-            ValueError: sample_dirs 为空列表
+            ValueError: sample_dirs 为空列表或 val_ratio 不合法
             FileNotFoundError: 某个目录下不存在 sample.json
         """
         if not sample_dirs:
             raise ValueError("sample_dirs 不能为空列表")
 
-        # 收集所有 sample 数据（合并为一个数据集）
-        all_sample_data = self._sample_loader.load_multiple(sample_dirs)
-
-        # 准备合并后的训练数据（转换为张量）
-        inputs_tensor, targets_tensor, masks_tensor = self._sample_loader.prepare_tensors(all_sample_data)
+        # 加载数据：有验证集时分割，无验证集时全部用于训练
+        if val_ratio > 0:
+            train_data, val_data = self._sample_loader.load_and_split(sample_dirs, val_ratio)
+            train_inputs, train_targets, train_masks = self._sample_loader.prepare_tensors(train_data)
+            val_inputs, val_targets, val_masks = self._sample_loader.prepare_tensors(val_data)
+        else:
+            all_sample_data = self._sample_loader.load_multiple(sample_dirs)
+            train_inputs, train_targets, train_masks = self._sample_loader.prepare_tensors(all_sample_data)
+            val_inputs, val_targets, val_masks = None, None, None
 
         # 将 epochs 自动传递给 LossLogger（用于图表标题）
         setup_kwargs = dict(kwargs)
@@ -336,7 +384,9 @@ class BaseTrainer(ABC):
 
         # 执行训练循环
         return self._run_training_loop(
-            inputs_tensor, targets_tensor, masks_tensor, epochs, loss_logger, verbose
+            train_inputs, train_targets, train_masks,
+            epochs, loss_logger, verbose,
+            val_inputs, val_targets, val_masks
         )
 
     def train_mini_batch(
@@ -346,12 +396,14 @@ class BaseTrainer(ABC):
         batch_size: int = 32,
         shuffle: bool = True,
         verbose: bool = True,
+        val_ratio: float = 0.0,
         **kwargs
     ) -> float:
         """Mini-Batch 训练：将多个 sample 文件数据合并，分批次训练。
 
         每个 epoch 内将数据分成多个 mini-batch，每个 batch 进行一次前向+反向传播。
         相比 train_batch，mini-batch 训练更高效，收敛更快。
+        提供 val_ratio > 0 时，自动分割训练集和验证集，每个 epoch 结束后评估 val_loss。
 
         Args:
             sample_dirs: 包含 sample.json 的目录路径列表
@@ -359,25 +411,30 @@ class BaseTrainer(ABC):
             batch_size: 每批次样本数，默认 32
             shuffle: 每个 epoch 是否打乱数据顺序，默认 True
             verbose: 是否输出训练信息，默认 True
+            val_ratio: 验证集比例，0 表示不分割，默认 0.0
 
         Returns:
             训练后的平均损失值
 
         Raises:
-            ValueError: sample_dirs 为空列表
+            ValueError: sample_dirs 为空列表或 val_ratio 不合法
             FileNotFoundError: 某个目录下不存在 sample.json
         """
         if not sample_dirs:
             raise ValueError("sample_dirs 不能为空列表")
 
-        # 收集所有 sample 数据（合并为一个数据集）
-        all_sample_data = self._sample_loader.load_multiple(sample_dirs)
-
-        # 准备合并后的训练数据（转换为张量）
-        inputs_tensor, targets_tensor, masks_tensor = self._sample_loader.prepare_tensors(all_sample_data)
+        # 加载数据：有验证集时分割，无验证集时全部用于训练
+        if val_ratio > 0:
+            train_data, val_data = self._sample_loader.load_and_split(sample_dirs, val_ratio)
+            train_inputs, train_targets, train_masks = self._sample_loader.prepare_tensors(train_data)
+            val_inputs, val_targets, val_masks = self._sample_loader.prepare_tensors(val_data)
+        else:
+            all_sample_data = self._sample_loader.load_multiple(sample_dirs)
+            train_inputs, train_targets, train_masks = self._sample_loader.prepare_tensors(all_sample_data)
+            val_inputs, val_targets, val_masks = None, None, None
 
         # 获取样本总数
-        n_samples = inputs_tensor.shape[0]
+        n_samples = train_inputs.shape[0]
 
         # 将 epochs 自动传递给 LossLogger（用于图表标题）
         setup_kwargs = dict(kwargs)
@@ -415,9 +472,9 @@ class BaseTrainer(ABC):
                     batch_indices = indices[start_idx:start_idx + batch_size]
 
                     # 获取批次数据
-                    batch_inputs = inputs_tensor[batch_indices]
-                    batch_targets = targets_tensor[batch_indices]
-                    batch_masks = masks_tensor[batch_indices]
+                    batch_inputs = train_inputs[batch_indices]
+                    batch_targets = train_targets[batch_indices]
+                    batch_masks = train_masks[batch_indices]
 
                     # 前向传播
                     self.optimizer.zero_grad()
@@ -468,6 +525,13 @@ class BaseTrainer(ABC):
                         current_lr = self.optimizer.param_groups[0]['lr']
                         print(f"Epoch {epoch + 1}/{epochs}, avg_loss: {epoch_avg_loss:.4f}, lr: {current_lr:.6f}")
 
+                # epoch 结束后评估 val loss（mini-batch 模式每个 epoch 都评估）
+                if val_inputs is not None:
+                    val_loss = self._evaluate_val_loss(val_inputs, val_targets, val_masks)
+                    # dense 模式用 step，稀疏模式用 epoch 编号
+                    x_value = global_step if dense_log else (epoch + 1)
+                    loss_logger.log_val(x_value, val_loss)
+
                 # 学习率衰减
                 epoch_avg_loss = epoch_loss_sum / epoch_batches_count if epoch_batches_count > 0 else 0.0
                 self._step_lr_scheduler(epoch_avg_loss)
@@ -489,7 +553,7 @@ class BaseTrainer(ABC):
 
     def train_auto(self, sample_dirs: List[str], epochs: int = 1000,
                    batch_size: int = None, shuffle: bool = True,
-                   verbose: bool = True, **kwargs) -> float:
+                   verbose: bool = True, val_ratio: float = 0.0, **kwargs) -> float:
         """自动选择训练方法
 
         提供 batch_size 时启用 mini-batch 训练，否则使用全量更新。
@@ -501,6 +565,7 @@ class BaseTrainer(ABC):
             batch_size: 每批次样本数，提供时启用 mini-batch 训练，默认 None（全量更新）
             shuffle: 每个 epoch 是否打乱数据顺序，仅 mini-batch 模式有效，默认 True
             verbose: 是否输出训练信息，默认 True
+            val_ratio: 验证集比例，0 表示不分割，默认 0.0
             **kwargs: 传递给 train_batch/train_mini_batch 的额外参数
 
         Returns:
@@ -509,11 +574,11 @@ class BaseTrainer(ABC):
         if batch_size is not None and batch_size > 0:
             return self.train_mini_batch(
                 sample_dirs, epochs=epochs, batch_size=batch_size,
-                shuffle=shuffle, verbose=verbose, **kwargs
+                shuffle=shuffle, verbose=verbose, val_ratio=val_ratio, **kwargs
             )
         else:
             return self.train_batch(
-                sample_dirs, epochs=epochs, verbose=verbose, **kwargs
+                sample_dirs, epochs=epochs, verbose=verbose, val_ratio=val_ratio, **kwargs
             )
 
     def _step_lr_scheduler(self, loss=None):
@@ -540,7 +605,8 @@ class BaseTrainer(ABC):
         rate: float = 0.9,
         batch_size: int = None,
         shuffle: bool = False,
-        project_root: str = None
+        project_root: str = None,
+        val_ratio: float = 0.0
     ) -> None:
         """训练周期
 
@@ -556,6 +622,7 @@ class BaseTrainer(ABC):
             batch_size: 每批次样本数，提供时启用 mini-batch 训练，默认 None（全量更新）
             shuffle: 每个 epoch 是否打乱数据顺序，仅 mini-batch 模式有效，默认 False
             project_root: 项目根目录，用于确定数据保存路径
+            val_ratio: 验证集比例，0 表示不分割，默认 0.0
         """
         SelfPlayCycle(self).run(
             rounds=rounds,
@@ -564,7 +631,8 @@ class BaseTrainer(ABC):
             rate=rate,
             batch_size=batch_size,
             shuffle=shuffle,
-            project_root=project_root
+            project_root=project_root,
+            val_ratio=val_ratio
         )
     
     def _convert_inputs(self, inputs: list) -> torch.Tensor:

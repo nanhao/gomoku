@@ -6,6 +6,7 @@
 import json
 import os
 from typing import List, Tuple, Callable, Optional
+import random
 
 import torch
 
@@ -127,6 +128,57 @@ class SampleLoader:
                 raise FileNotFoundError(f"Sample file not found: {sample_path}")
             all_sample_data.extend(self.load(sample_path))
         return all_sample_data
+
+    def load_and_split(
+        self,
+        sample_dirs: List[str],
+        val_ratio: float = 0.2,
+        seed: int = 42
+    ) -> Tuple[list, list]:
+        """加载多个 sample.json 并按比例分割为训练集和验证集
+
+        在样本级别进行随机分割，使用 random.Random(seed) 确保结果可复现。
+        val_ratio=0 时所有数据归训练集，验证集为空。
+
+        Args:
+            sample_dirs: 包含 sample.json 的目录路径列表
+            val_ratio: 验证集比例，默认 0.2（20%）
+            seed: 随机种子，确保分割可复现，默认 42
+
+        Returns:
+            (train_data, val_data): 训练集和验证集的 sample 数据列表
+
+        Raises:
+            ValueError: val_ratio < 0 或 val_ratio >= 1
+            FileNotFoundError: 某个目录下不存在 sample.json
+        """
+        if val_ratio < 0 or val_ratio >= 1:
+            raise ValueError(f"val_ratio 必须在 [0, 1) 范围内，当前值为 {val_ratio}")
+
+        all_sample_data = self.load_multiple(sample_dirs)
+        n_total = len(all_sample_data)
+
+        # val_ratio=0 时直接返回全部训练集
+        if val_ratio == 0 or n_total == 0:
+            return all_sample_data, []
+
+        # 使用独立 Random 实例确保可复现，不影响全局随机状态
+        rng = random.Random(seed)
+        indices = list(range(n_total))
+        rng.shuffle(indices)
+
+        n_val = max(1, int(n_total * val_ratio))
+        # 边界保护：至少留一个样本给训练集
+        if n_val >= n_total:
+            n_val = n_total - 1
+        if n_val < 0:
+            n_val = 0
+
+        val_indices = set(indices[:n_val])
+        train_data = [all_sample_data[i] for i in range(n_total) if i not in val_indices]
+        val_data = [all_sample_data[i] for i in range(n_total) if i in val_indices]
+
+        return train_data, val_data
 
     def load_merge_file(self, merge_path: str) -> list:
         """加载合并后的样本文件

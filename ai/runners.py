@@ -243,7 +243,8 @@ def run_train_from_dir(args, trainer) -> None:
             epochs=args.epochs,
             batch_size=args.batch_size,
             shuffle=args.shuffle,
-            dense_log=True
+            dense_log=True,
+            val_ratio=args.val_ratio
         )
 
         print(f"训练完成！平均损失: {avg_loss:.4f}")
@@ -305,7 +306,8 @@ def run_cycle(args, trainer) -> None:
             epochs=args.epochs,
             rate=args.rate,
             batch_size=args.batch_size,
-            shuffle=args.shuffle
+            shuffle=args.shuffle,
+            val_ratio=args.val_ratio
         )
 
         print("训练周期完成！")

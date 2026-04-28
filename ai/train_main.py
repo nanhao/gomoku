@@ -179,6 +179,13 @@ def main():
         help='ReduceLROnPlateau 衰减系数，默认 0.5'
     )
 
+    parser.add_argument(
+        '--val-ratio',
+        type=float,
+        default=0.0,
+        help='验证集比例，0 表示不分割，推荐 0.2，默认 0.0'
+    )
+
     args = parser.parse_args()
     
     # 验证参数：四个模式互斥（--cycle、--self-play、--sample-dir、--train-from-dir 四选一）

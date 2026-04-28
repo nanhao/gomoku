@@ -42,6 +42,7 @@ def _make_args(**overrides) -> argparse.Namespace:
         'lr_gamma': 0.9,
         'lr_patience': 100,
         'lr_factor': 0.5,
+        'val_ratio': 0.0,
     }
     defaults.update(overrides)
     return argparse.Namespace(**defaults)
@@ -268,7 +269,7 @@ class TestRunCycle(unittest.TestCase):
 
         trainer.train_cycle.assert_called_once_with(
             rounds=5, games=20, epochs=100,
-            rate=0.95, batch_size=32, shuffle=True
+            rate=0.95, batch_size=32, shuffle=True, val_ratio=0.0
         )
 
     def test_not_implemented_exits(self):

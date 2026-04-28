@@ -42,6 +42,7 @@ class TestTrainFromDirTempCleanup(unittest.TestCase):
     def _make_mock_trainer(self):
         """创建 mock trainer"""
         mock_trainer = MagicMock()
+        mock_trainer.train_auto.return_value = 0.5
         mock_trainer.train_batch.return_value = 0.5
         mock_trainer.train_mini_batch.return_value = 0.5
         mock_trainer.model.save.return_value = "/fake/model/path"
@@ -69,7 +70,7 @@ class TestTrainFromDirTempCleanup(unittest.TestCase):
     def test_json_path_cleans_temp_dir_on_failure(self, mock_get_trainer, mock_create, mock_rmtree):
         """训练失败时仍清理临时目录（.json 文件路径）"""
         mock_trainer = self._make_mock_trainer()
-        mock_trainer.train_batch.side_effect = RuntimeError("训练异常")
+        mock_trainer.train_auto.side_effect = RuntimeError("训练异常")
         mock_get_trainer.return_value = mock_trainer
 
         with patch('sys.argv', ['train_main.py', '--model', 'fc_v1',
@@ -105,7 +106,7 @@ class TestTrainFromDirTempCleanup(unittest.TestCase):
     def test_directory_path_cleans_temp_dir_on_failure(self, mock_get_trainer, mock_loader_cls, mock_create, mock_rmtree):
         """训练失败时仍清理临时目录（目录路径）"""
         mock_trainer = self._make_mock_trainer()
-        mock_trainer.train_batch.side_effect = RuntimeError("训练异常")
+        mock_trainer.train_auto.side_effect = RuntimeError("训练异常")
         mock_get_trainer.return_value = mock_trainer
         mock_loader = MagicMock()
         mock_loader.discover_and_load.return_value = self.sample_data

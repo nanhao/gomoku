@@ -135,6 +135,22 @@ class LossLogger:
         with open(self._log_path, 'a', encoding='utf-8') as f:
             f.write(json.dumps(entry) + "\n")
 
+    def log_val(self, x_value: int, val_loss: float) -> None:
+        """记录一条验证集 loss 日志
+
+        与 train loss 日志分开记录，写入同一文件的不同条目。
+        val_loss 条目使用 val_loss 字段标识，绘图时独立绘制。
+        稀疏模式使用 epoch 作为 x 轴，密集模式使用 step 作为 x 轴。
+
+        Args:
+            x_value: x 轴值（epoch 编号或 step 编号，与当前日志格式一致）
+            val_loss: 验证集 loss 值
+        """
+        x_key = "step" if self.dense_log else "epoch"
+        entry = {x_key: x_value, "val_loss": val_loss}
+        with open(self._log_path, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(entry) + "\n")
+
     def log_dense(self, step: int, loss: float, grad_norm: float) -> None:
         """记录一条密集日志（存入内存缓冲区，不直接写文件）
 
@@ -163,6 +179,7 @@ class LossLogger:
         """根据已记录的日志生成 loss 曲线图
 
         如果日志中包含 grad_norm 字段，绘制双 Y 轴图（左轴 Loss，右轴 Grad Norm）。
+        如果日志中包含 val_loss 条目，在左 Y 轴叠加绿色 "Val Loss" 折线。
         数据点超过 5000 时自动降采样，防止图表过于密集。
 
         Args:
@@ -188,19 +205,28 @@ class LossLogger:
         if output_path is None:
             output_path = self._log_path.replace(".jsonl", ".png")
 
+        # 分离 train entries（含 loss 字段）和 val entries（含 val_loss 字段）
+        train_entries = [e for e in entries if "loss" in e]
+        val_entries = [e for e in entries if "val_loss" in e]
+
+        # 向后兼容：无可绘图 train entries 时返回 None
+        if not train_entries:
+            return None
+
         # 判断是否包含 grad_norm（密集日志模式）
-        has_grad_norm = "grad_norm" in entries[0]
+        has_grad_norm = "grad_norm" in train_entries[0]
 
         try:
             if has_grad_norm:
-                # 双 Y 轴图（Loss + Grad Norm）
-                entries = self._downsample(entries, max_points=5000)
-                losses = [entry["loss"] for entry in entries]
-                grad_norms = [entry["grad_norm"] for entry in entries]
+                # 双 Y 轴图（Loss + Grad Norm + 可选 Val Loss）
+                train_entries = self._downsample(train_entries, max_points=5000)
+                losses = [entry["loss"] for entry in train_entries]
+                grad_norms = [entry["grad_norm"] for entry in train_entries]
 
                 # 判断是否有 step 字段（密集模式）还是 epoch 字段（稀疏模式）
-                has_step = "step" in entries[0]
-                x_values = [entry["step" if has_step else "epoch"] for entry in entries]
+                has_step = "step" in train_entries[0]
+                x_key = "step" if has_step else "epoch"
+                x_values = [entry[x_key] for entry in train_entries]
                 x_label = "Step" if has_step else "Epoch"
 
                 fig, ax1 = plt.subplots(figsize=(12, 7))
@@ -208,6 +234,13 @@ class LossLogger:
 
                 ax1.plot(x_values, losses, 'b-', label='Loss', linewidth=1)
                 ax2.plot(x_values, grad_norms, 'r-', label='Grad Norm', linewidth=1, alpha=0.7)
+
+                # 叠加 val_loss 折线（绿色，共享左 Y 轴）
+                if val_entries:
+                    val_x = [entry[x_key] for entry in val_entries if x_key in entry]
+                    val_y = [entry["val_loss"] for entry in val_entries if x_key in entry]
+                    if val_x:
+                        ax1.plot(val_x, val_y, 'g-', label='Val Loss', linewidth=1.5, marker='o', markersize=3)
 
                 ax1.set_xlabel(x_label)
                 ax1.set_ylabel("Loss", color='b')
@@ -226,16 +259,27 @@ class LossLogger:
                 plt.savefig(output_path, dpi=150)
                 plt.close()
             else:
-                # 稀疏模式：单 Y 轴图（向后兼容）
-                epochs = [entry["epoch"] for entry in entries]
-                losses = [entry["loss"] for entry in entries]
+                # 稀疏模式：单 Y 轴图（向后兼容，可选叠加 Val Loss）
+                epochs = [entry["epoch"] for entry in train_entries]
+                losses = [entry["loss"] for entry in train_entries]
 
                 plt.figure(figsize=(10, 6))
-                plt.plot(epochs, losses, marker='o', linestyle='-', linewidth=1.5, markersize=3)
+                plt.plot(epochs, losses, marker='o', linestyle='-', linewidth=1.5, markersize=3, label='Loss')
+
+                # 叠加 val_loss 折线（绿色）
+                if val_entries:
+                    val_epochs = [entry["epoch"] for entry in val_entries if "epoch" in entry]
+                    val_losses = [entry["val_loss"] for entry in val_entries if "epoch" in entry]
+                    if val_epochs:
+                        plt.plot(val_epochs, val_losses, 'g-', label='Val Loss',
+                                 linewidth=1.5, marker='s', markersize=4)
+
                 plt.xlabel("Epoch")
                 plt.ylabel("Loss")
                 plt.title(self._generate_title())
                 plt.grid(True, linestyle='--', alpha=0.7)
+                if val_entries:
+                    plt.legend(loc='upper right')
                 plt.tight_layout()
                 plt.savefig(output_path, dpi=150)
                 plt.close()
@@ -285,25 +329,37 @@ class LossLogger:
         """降采样：超过 max_points 时合并相邻点
 
         通过滑动窗口取平均的方式减少数据点数量，防止图表过于密集。
+        兼容 val_loss 条目（无 grad_norm 字段），仅对含 loss 字段的条目降采样。
+        val_loss 条目不进入降采样，由调用方（plot）单独处理。
 
         Args:
             entries: 原始日志记录列表
             max_points: 最大允许的数据点数，默认 5000
 
         Returns:
-            降采样后的记录列表
+            降采样后的 train entries 列表（不含 val_loss 条目）
         """
-        if len(entries) <= max_points:
-            return entries
+        # 仅对含 loss 字段的 train entries 降采样
+        train_entries = [e for e in entries if "loss" in e]
 
-        window = max(1, len(entries) // max_points)
+        if len(train_entries) <= max_points:
+            return train_entries
+
+        window = max(1, len(train_entries) // max_points)
         result = []
-        for i in range(0, len(entries), window):
-            chunk = entries[i:i + window]
-            avg_step = sum(e["step"] for e in chunk) / len(chunk)
+        x_key = "step" if "step" in train_entries[0] else "epoch"
+        has_grad = "grad_norm" in train_entries[0]
+
+        for i in range(0, len(train_entries), window):
+            chunk = train_entries[i:i + window]
+            avg_x = sum(e[x_key] for e in chunk) / len(chunk)
             avg_loss = sum(e["loss"] for e in chunk) / len(chunk)
-            avg_grad = sum(e["grad_norm"] for e in chunk) / len(chunk)
-            result.append({"step": avg_step, "loss": avg_loss, "grad_norm": avg_grad})
+            entry = {x_key: avg_x, "loss": avg_loss}
+            if has_grad:
+                avg_grad = sum(e["grad_norm"] for e in chunk) / len(chunk)
+                entry["grad_norm"] = avg_grad
+            result.append(entry)
+
         return result
 
     @classmethod
