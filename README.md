@@ -12,9 +12,11 @@ gomoku/
 ├── app/              # 应用层（会话管理、GUI辅助）
 ├── ai/               # AI 模块
 │   ├── ai_data/      # AI 对战记录数据
-│   └── train_data/   # 训练样本数据
+│   ├── train_data/   # 训练样本数据
+│   └── merge_samples/# 合并后的训练样本
 ├── tests/            # 测试脚本
-└── design/           # 设计文档
+├── design/           # 设计文档
+└── temp/             # 临时工具脚本（lr_range_test、分析脚本等）
 ```
 
 ## 快速开始
@@ -28,7 +30,7 @@ gomoku/
 ### 安装依赖
 
 ```bash
-pip install torch
+pip install torch matplotlib numpy
 ```
 
 ---
@@ -41,6 +43,13 @@ pip install torch
 |------|------|
 | `python gui/main.py` | 启动图形界面（推荐） |
 | `python cli/main.py` | 启动命令行界面 |
+
+GUI 支持三种游戏模式：
+- **人人对战（PvP）**：两名玩家轮流落子
+- **人机对战（PvE）**：玩家选择执黑或执白，对阵 AI
+- **AI 内战（AI vs AI）**：选择双方 AI 和局数，自动对战并统计胜率
+
+GUI 还支持：存档加载、AI 对战回放（含热力图对比）、游戏存档列表。
 
 ### AI 对战
 
@@ -121,9 +130,9 @@ python ai/train_main.py --model <模型名称> --train-from-dir <数据目录或
 # 示例：从目录训练
 python ai/train_main.py --model cnn_v1 --train-from-dir ai/train_data/cnn_v1_self_play_1 --epochs 1000
 
-python ai/train_main.py --model cnn_v2 --train-from-dir .\ai\merge_samples --epochs 1000 --batch-size 256 --shuffle
+python ai/train_main.py --model cnn_v2 --train-from-dir ai/merge_samples --epochs 1000 --batch-size 256 --shuffle
 # 示例：从合并文件训练
-python ai/train_main.py --model cnn_v1 --train-from-dir ai/train_data/merge_cnn_v1.json --epochs 1000
+python ai/train_main.py --model cnn_v1 --train-from-dir ai/merge_samples/merge_cnn_v1.json --epochs 1000
 
 # 示例：mini-batch 训练
 python ai/train_main.py --model cnn_v1 --train-from-dir ai/train_data/cnn_v1_self_play_1 --epochs 1000 --batch-size 32 --shuffle
@@ -191,10 +200,10 @@ python ai/merge_samples.py <目录1> [目录2] ... -o <输出文件路径>
 
 ```bash
 # 示例：合并单个目录
-python ai/merge_samples.py ai/train_data/cnn_v2_self_play_1 -o ai/train_data/merge_cnn_v2.json
+python ai/merge_samples.py ai/train_data/cnn_v2_self_play_1 -o ai/merge_samples/merge_cnn_v2.json
 
 # 示例：合并多个目录
-python ai/merge_samples.py ai/train_data/cnn_v2_cycle_1_1 ai/train_data/cnn_v2_cycle_1_2 -o ai/train_data/merge_cnn_v2_all.json
+python ai/merge_samples.py ai/train_data/cnn_v2_cycle_1_1 ai/train_data/cnn_v2_cycle_1_2 -o ai/merge_samples/merge_cnn_v2_all.json
 ```
 
 ### 样本检视
@@ -240,7 +249,7 @@ python temp/lr_range_test.py --model cnn_v2 --data ai/merge_samples/merge_cnn_v1
 python tests/run_tests.py
 ```
 
-> 覆盖全部 823 个测试
+> 覆盖全部 836 个测试（基础测试 212 + AI 测试 624）
 
 ---
 
@@ -304,7 +313,7 @@ python tests/run_tests.py
 | `ai/ai_data/` | AI 对战记录（record.json） |
 | `ai/ai_data/loss_logs/` | 训练 loss 日志和曲线图 |
 | `ai/train_data/` | 训练样本（sample.json） |
-| `ai/train_data/merge_*.json` | 合并后的训练样本大文件 |
+| `ai/merge_samples/` | 合并后的训练样本大文件 |
 
 ---
 
