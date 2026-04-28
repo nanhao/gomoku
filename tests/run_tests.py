@@ -45,6 +45,26 @@ from tests.gui.test_replay_viewer import TestReplayViewer, TestReplayWindow
 from tests.gui.test_replay_browser import TestRoundSelector, TestGameSelector, TestReplayBrowser
 from tests.gui.test_ai_battle import TestAIBattleConfigDialog, TestAIBattleProgressWindow, TestAIBattleManager
 from tests.gui.test_gomoku_gui import TestGomokuGUIOnBoardClick, TestGomokuGUIPveAiPlayer2, TestGomokuGUIPveAiPlayer1
+from tests.gui.test_main import (
+    TestOnBoardClick, TestStartGameWithAiFirst, TestAiMove,
+    TestUpdateDisplay, TestNewGame, TestSaveGame
+)
+from tests.gui.test_display_updater import TestGameDisplayUpdater
+
+# 导入 App 遗漏测试类
+from tests.app.primary.test_battle import TestBattleSessionRun
+from tests.app.edge.test_session import TestGameSessionEdge, TestGameSessionStartGameEdge
+
+# 导入 CLI 测试类
+from tests.cli.test_main import (
+    TestParseCommand, TestHandleNew, TestHandlePut, TestHandleList,
+    TestHandlePrint, TestHandleShow, TestHandleShort, TestHandleHelp, TestMainREPL
+)
+
+# 导入 Unit 测试类
+from tests.unit.test_lr_range_test import (
+    TestLoadModel, TestLoadData, TestPlotLrLossCurve, TestRunLrRangeTest
+)
 
 def run_test_method(test_class, method_name):
     """运行单个测试方法
@@ -140,8 +160,24 @@ def run_all_tests():
         ("App - GameSession PvE 测试", TestGameSessionPve),
         ("App - GUIHelper 测试", TestGUIHelper),
         ("App - GUIHelper 函数测试", TestGUIHelperFunctions),
+        ("App - BattleSession 测试", TestBattleSessionRun),
+        ("App - GameSession 边缘测试", TestGameSessionEdge),
+        ("App - GameSession start_game 边缘测试", TestGameSessionStartGameEdge),
+        ("CLI - ParseCommand 测试", TestParseCommand),
+        ("CLI - HandleNew 测试", TestHandleNew),
+        ("CLI - HandlePut 测试", TestHandlePut),
+        ("CLI - HandleList 测试", TestHandleList),
+        ("CLI - HandlePrint 测试", TestHandlePrint),
+        ("CLI - HandleShow 测试", TestHandleShow),
+        ("CLI - HandleShort 测试", TestHandleShort),
+        ("CLI - HandleHelp 测试", TestHandleHelp),
+        ("CLI - MainREPL 测试", TestMainREPL),
+        ("Unit - LoadModel 测试", TestLoadModel),
+        ("Unit - LoadData 测试", TestLoadData),
+        ("Unit - PlotLrLossCurve 测试", TestPlotLrLossCurve),
+        ("Unit - RunLrRangeTest 测试", TestRunLrRangeTest),
     ]
-    
+
     # 添加 GUI 测试
     if gui_tests_available:
         test_modules.extend([
@@ -160,6 +196,12 @@ def run_all_tests():
             ("GUI - GomokuGUI 棋盘点击测试", TestGomokuGUIOnBoardClick),
             ("GUI - GomokuGUI 人机对战(AI执白)测试", TestGomokuGUIPveAiPlayer2),
             ("GUI - GomokuGUI 人机对战(AI执黑)测试", TestGomokuGUIPveAiPlayer1),
+            ("GUI - OnBoardClick 测试", TestOnBoardClick),
+            ("GUI - StartGameWithAiFirst 测试", TestStartGameWithAiFirst),
+            ("GUI - AiMove 测试", TestAiMove),
+            ("GUI - UpdateDisplay 测试", TestUpdateDisplay),
+            ("GUI - NewGame 测试", TestNewGame),
+            ("GUI - SaveGame 测试", TestSaveGame),
         ])
     
     total_tests = 0
@@ -199,15 +241,39 @@ def run_all_tests():
     int_failures = len(int_result.failures) + len(int_result.errors)
     int_passed = int_tests_run - int_failures
 
+    # 运行 CLI 测试（tests/cli/ 目录）
+    print("\nCLI 测试")
+    print("-" * 60)
+    cli_loader = unittest.TestLoader()
+    cli_suite = cli_loader.discover('tests/cli', pattern='test_*.py')
+    cli_runner = unittest.TextTestRunner(verbosity=1, stream=sys.stdout)
+    cli_result = cli_runner.run(cli_suite)
+    cli_tests_run = cli_result.testsRun
+    cli_failures = len(cli_result.failures) + len(cli_result.errors)
+    cli_passed = cli_tests_run - cli_failures
+
+    # 运行 GUI DisplayUpdater 测试（unittest 风格，含 setUpClass）
+    print("\nGUI DisplayUpdater 测试")
+    print("-" * 60)
+    du_loader = unittest.TestLoader()
+    du_suite = du_loader.loadTestsFromTestCase(TestGameDisplayUpdater)
+    du_runner = unittest.TextTestRunner(verbosity=1, stream=sys.stdout)
+    du_result = du_runner.run(du_suite)
+    du_tests_run = du_result.testsRun
+    du_failures = len(du_result.failures) + len(du_result.errors)
+    du_passed = du_tests_run - du_failures
+
     # 汇总
-    grand_total = total_tests + ai_tests_run + int_tests_run
-    grand_passed = passed_tests + ai_passed + int_passed
+    grand_total = total_tests + ai_tests_run + int_tests_run + cli_tests_run + du_tests_run
+    grand_passed = passed_tests + ai_passed + int_passed + cli_passed + du_passed
 
     print("\n" + "=" * 60)
     print(f"汇总结果: {grand_passed}/{grand_total} 通过")
     print(f"  - 基础测试: {passed_tests}/{total_tests}")
     print(f"  - AI 测试:  {ai_passed}/{ai_tests_run}")
     print(f"  - 集成测试: {int_passed}/{int_tests_run}")
+    print(f"  - CLI 测试: {cli_passed}/{cli_tests_run}")
+    print(f"  - GUI DisplayUpdater: {du_passed}/{du_tests_run}")
     print("=" * 60)
 
     if grand_passed == grand_total:
