@@ -39,7 +39,7 @@ class TestFCv1TrainerErrorHandling(unittest.TestCase):
             
             # 应该抛出 json.JSONDecodeError
             with self.assertRaises(json.JSONDecodeError):
-                trainer._load_sample_data(invalid_sample_path)
+                trainer._sample_loader.load(invalid_sample_path)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 

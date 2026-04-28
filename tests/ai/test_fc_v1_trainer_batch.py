@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from ai.models.fc_v1.trainer import FCv1Trainer
 from ai.models.fc_v1.model import FCv1Model
+from ai.sample_loader import compute_masked_l1_loss
 from tests.ai.helpers import create_output
 
 
@@ -218,7 +219,7 @@ class TestFCv1TrainerPrepareTensors(unittest.TestCase):
     def test_prepare_tensors_output_shapes(self):
         """_prepare_tensors 返回的张量形状正确"""
         sample = self._make_sample(0)
-        inputs_t, targets_t, masks_t = self.trainer._prepare_tensors([sample])
+        inputs_t, targets_t, masks_t = self.trainer._sample_loader.prepare_tensors([sample])
         
         # inputs: (1, 226), targets: (1, 225), masks: (1, 225)
         self.assertEqual(inputs_t.shape, (1, 226))
@@ -230,7 +231,7 @@ class TestFCv1TrainerPrepareTensors(unittest.TestCase):
         for i in [0, 1, 7, 100, 223]:
             with self.subTest(mask_idx=i):
                 sample = self._make_sample(i)
-                _, _, masks_t = self.trainer._prepare_tensors([sample])
+                _, _, masks_t = self.trainer._sample_loader.prepare_tensors([sample])
                 
                 # 只有第 i 个位置是 1
                 self.assertEqual(masks_t[0, i].item(), 1.0,
@@ -260,8 +261,8 @@ class TestFCv1TrainerPrepareTensors(unittest.TestCase):
         mask = [0] * 225
         mask[0] = 1
         
-        # _compute_loss：|0.7 - 0.5| = 0.2
-        py_loss = self.trainer._compute_loss(output_estimated, output_target, mask)
+        # compute_masked_l1_loss：|0.7 - 0.5| = 0.2
+        py_loss = compute_masked_l1_loss(output_estimated, output_target, mask)
         self.assertAlmostEqual(py_loss, 0.2, places=4)
         
         # _masked_loss 接收的 targets 已经是 Softmax 概率
@@ -271,7 +272,7 @@ class TestFCv1TrainerPrepareTensors(unittest.TestCase):
             "output": output_target,  # 传入 Softmax 概率
             "mask": mask
         }
-        inputs_t, targets_t, masks_t = self.trainer._prepare_tensors([sample])
+        inputs_t, targets_t, masks_t = self.trainer._sample_loader.prepare_tensors([sample])
         
         outputs_t = torch.tensor([output_estimated], dtype=torch.float32)
         # 将张量移到与训练器相同的设备

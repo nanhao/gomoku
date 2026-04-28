@@ -14,8 +14,58 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 import torch
 
-from ai.sample_loader import SampleLoader, discover_all_data
+from ai.sample_loader import SampleLoader, compute_masked_l1_loss, discover_all_data
 from tests.ai.helpers import create_sample_dir
+
+
+class TestComputeMaskedL1Loss(unittest.TestCase):
+    """测试 compute_masked_l1_loss 独立函数"""
+
+    def test_single_mask_position(self):
+        """单个 mask=1 位置时正确计算 L1 loss"""
+        estimated = [0.0] * 225
+        sample = [0.0] * 225
+        mask = [0] * 225
+        estimated[0] = 100.0
+        sample[0] = 50.0
+        mask[0] = 1
+
+        loss = compute_masked_l1_loss(estimated, sample, mask)
+        # |100 - 50| / 1 = 50
+        self.assertEqual(loss, 50.0)
+
+    def test_multiple_mask_positions(self):
+        """多个 mask=1 位置时正确计算平均 L1 loss"""
+        estimated = [0.0] * 225
+        sample = [0.0] * 225
+        mask = [0] * 225
+        estimated[0] = 0.7
+        sample[0] = 0.5
+        mask[0] = 1
+        estimated[1] = 0.3
+        sample[1] = 0.1
+        mask[1] = 1
+
+        loss = compute_masked_l1_loss(estimated, sample, mask)
+        # (|0.7-0.5| + |0.3-0.1|) / 2 = (0.2 + 0.2) / 2 = 0.2
+        self.assertAlmostEqual(loss, 0.2, places=6)
+
+    def test_zero_mask_returns_zero(self):
+        """mask 全为 0 时返回 0.0"""
+        estimated = [100.0] * 225
+        sample = [0.0] * 225
+        mask = [0] * 225
+
+        loss = compute_masked_l1_loss(estimated, sample, mask)
+        self.assertEqual(loss, 0.0)
+
+    def test_identical_values_zero_loss(self):
+        """估计值与样本值完全相同时 loss 为 0"""
+        values = [0.5] * 225
+        mask = [1] * 225
+
+        loss = compute_masked_l1_loss(values, values, mask)
+        self.assertEqual(loss, 0.0)
 
 
 class TestLoadMergeFile(unittest.TestCase):

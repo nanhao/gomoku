@@ -5,8 +5,7 @@
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Optional
-import json
+from typing import List, Optional, Tuple
 import os
 import torch
 import torch.optim as optim
@@ -193,6 +192,23 @@ class BaseTrainer(ABC):
                 print(f"模型保存失败: {e}")
         return total_loss / count if count > 0 else 0.0
 
+    def _forward_backward_step(self, inputs, targets, masks) -> Tuple[torch.Tensor, float]:
+        """执行一次前向+反向传播+参数更新，返回 (loss张量, grad_norm标量)
+
+        供 train_single 和 train_batch 复用。train_mini_batch 保持独立实现。
+        """
+        self.optimizer.zero_grad()
+        outputs = self.model.network(inputs)
+        loss = self._masked_loss(outputs, targets, masks)
+        loss.backward()
+        grad_norm = sum(
+            p.grad.norm().item()
+            for p in self.model.network.parameters()
+            if p.grad is not None
+        )
+        self.optimizer.step()
+        return loss, grad_norm
+
     def train_single(self, sample_dir: str, epochs: int = 10, verbose: bool = False, **kwargs) -> float:
         """单轮次训练（单个 sample 文件）
 
@@ -229,25 +245,9 @@ class BaseTrainer(ABC):
 
         try:
             for epoch in range(epochs):
-                self.optimizer.zero_grad()
-
-                # 前向传播
-                outputs = self.model.network(inputs_tensor)
-
-                # 计算损失（使用 mask）
-                loss = self._masked_loss(outputs, targets_tensor, masks_expanded)
-
-                # 反向传播
-                loss.backward()
-
-                # 计算梯度 L2 范数
-                grad_norm = sum(
-                    p.grad.norm().item()
-                    for p in self.model.network.parameters()
-                    if p.grad is not None
+                loss, grad_norm = self._forward_backward_step(
+                    inputs_tensor, targets_tensor, masks_expanded
                 )
-
-                self.optimizer.step()
 
                 total_loss += loss.item()
                 completed_epochs += 1
@@ -310,25 +310,9 @@ class BaseTrainer(ABC):
 
         try:
             for epoch in range(epochs):
-                self.optimizer.zero_grad()
-
-                # 前向传播（基于全部合并数据）
-                outputs = self.model.network(inputs_tensor)
-
-                # 计算损失（使用 mask）
-                loss = self._masked_loss(outputs, targets_tensor, masks_tensor)
-
-                # 反向传播，只做一次参数更新
-                loss.backward()
-
-                # 计算梯度 L2 范数
-                grad_norm = sum(
-                    p.grad.norm().item()
-                    for p in self.model.network.parameters()
-                    if p.grad is not None
+                loss, grad_norm = self._forward_backward_step(
+                    inputs_tensor, targets_tensor, masks_tensor
                 )
-
-                self.optimizer.step()
 
                 total_loss += loss.item()
                 completed_epochs += 1
@@ -550,88 +534,6 @@ class BaseTrainer(ABC):
             shuffle=shuffle,
             project_root=project_root
         )
-    
-    def _compute_loss(self, estimated: List[float], sample: List[float], mask: List[int]) -> float:
-        """计算损失（Python 纯实现，供单元测试使用）
-            
-        loss(x,y) = mask(x,y) * abs(estimated_reward(x,y) - sample_reward(x,y))
-        
-        当前版本 mask 全为 1，等价于对全部 225 个位置求平均 L1 损失。
-        mask 机制保留，未来版本可能重新启用（如只对特定位置计算损失）。
-            
-        Args:
-            estimated: 模型预测的 reward 列表（225维）
-            sample: sample.json 中的 reward 列表（225维）
-            mask: mask 列表（225维，当前版本全为 1）
-                
-        Returns:
-            损失値
-        """
-        total_loss = 0.0
-        mask_sum = 0
-            
-        for i in range(225):
-            if mask[i] == 1:
-                estimated_reward = estimated[i]
-                sample_reward = sample[i]
-                total_loss += abs(estimated_reward - sample_reward)
-                mask_sum += 1
-            
-        # 返回平均损失
-        if mask_sum > 0:
-            return total_loss / mask_sum
-        return 0.0
-    
-    def _load_sample_data(self, sample_path: str) -> list:
-        """加载 sample.json 数据
-        
-        Args:
-            sample_path: sample.json 文件路径
-            
-        Returns:
-            sample 数据列表
-            
-        Raises:
-            FileNotFoundError: 文件不存在
-            json.JSONDecodeError: JSON 格式错误
-        """
-        with open(sample_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    
-    def _prepare_tensors(self, sample_data: list):
-        """将 sample 数据转换为训练所需的 PyTorch 张量
-            
-        Args:
-            sample_data: sample 数据列表（可来自单个或多个 sample.json 合并）
-                
-        Returns:
-            (inputs_tensor, targets_tensor, masks_tensor): 三个张量，已移到 GPU
-        """
-        inputs = []
-        targets = []
-        masks = []
-            
-        for item in sample_data:
-            inputs.append(item["input"])
-            targets.append(item["output"])
-            masks.append(item["mask"])
-            
-        # 转换输入为模型所需的格式
-        inputs_tensor = self._convert_inputs(inputs)
-        targets_tensor = torch.tensor(targets, dtype=torch.float32)  # (N, 225)
-        masks_tensor = torch.tensor(masks, dtype=torch.float32)      # (N, 225)
-            
-        # 将张量移到 GPU（如果可用）
-        inputs_tensor = inputs_tensor.to(self.device)
-        targets_tensor = targets_tensor.to(self.device)
-        masks_tensor = masks_tensor.to(self.device)
-            
-        # 注意：targets 已经是 Softmax 概率分布（由 Evaluator 生成）
-        # 值域 (0, 1)，所有 mask=1 位置的概率和为 1
-        # 不需要额外的归一化操作
-            
-        # mask 和 targets 都是 225 维，直接返回
-        return inputs_tensor, targets_tensor, masks_tensor
     
     def _convert_inputs(self, inputs: list) -> torch.Tensor:
         """将输入数据转换为模型所需的张量格式

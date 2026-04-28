@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from ai.models.cnn_v1.trainer import CNNV1Trainer
 from ai.models.cnn_v1.model import CNNV1Model
+from ai.sample_loader import compute_masked_l1_loss
 from tests.ai.helpers import create_sample_dir, create_output
 
 
@@ -111,8 +112,8 @@ class TestCNNTrainer(unittest.TestCase):
         trainer = CNNV1Trainer()
         sample_path = os.path.join(self.sample_dir, "sample.json")
         
-        data = trainer._load_sample_data(sample_path)
-        
+        data = trainer._sample_loader.load(sample_path)
+
         self.assertIsInstance(data, list)
         self.assertEqual(len(data), 2)
         self.assertIn("input", data[0])
@@ -123,9 +124,9 @@ class TestCNNTrainer(unittest.TestCase):
         """测试准备张量"""
         trainer = CNNV1Trainer()
         sample_path = os.path.join(self.sample_dir, "sample.json")
-        sample_data = trainer._load_sample_data(sample_path)
-        
-        inputs, targets, masks = trainer._prepare_tensors(sample_data)
+        sample_data = trainer._sample_loader.load(sample_path)
+
+        inputs, targets, masks = trainer._sample_loader.prepare_tensors(sample_data)
         
         # 验证张量形状（CNN 输入是 4D: batch, channels, height, width）
         self.assertEqual(inputs.shape, (2, 3, 15, 15))  # 2 个样本，3 通道，15x15 棋盘
@@ -146,7 +147,7 @@ class TestCNNTrainer(unittest.TestCase):
         sample[0] = 1.0
         mask = [1] + [0] * 224
         
-        loss = trainer._compute_loss(estimated, sample, mask)
+        loss = compute_masked_l1_loss(estimated, sample, mask)
         
         # 损失应该是非负数
         self.assertIsInstance(loss, float)
@@ -237,7 +238,7 @@ class TestCNNTrainerEdgeCases(unittest.TestCase):
             f.write("invalid json content")
         
         with self.assertRaises(json.JSONDecodeError):
-            trainer._load_sample_data(invalid_json_path)
+            trainer._sample_loader.load(invalid_json_path)
 
 
 if __name__ == '__main__':

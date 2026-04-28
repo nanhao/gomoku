@@ -50,7 +50,7 @@ class TestSoftmaxProbabilityInput(unittest.TestCase):
                 "mask": [1] * 225
             }
         ]
-        _, targets_tensor, _ = self.trainer._prepare_tensors(sample_data)
+        _, targets_tensor, _ = self.trainer._sample_loader.prepare_tensors(sample_data)
 
         # 应直接读取，不做转换
         self.assertAlmostEqual(targets_tensor[0][0].item(), 0.7, places=5,
@@ -73,7 +73,7 @@ class TestSoftmaxProbabilityInput(unittest.TestCase):
                 "mask": [1] * 225
             }
         ]
-        _, targets_tensor, _ = self.trainer._prepare_tensors(sample_data)
+        _, targets_tensor, _ = self.trainer._sample_loader.prepare_tensors(sample_data)
 
         # 验证概率总和为 1
         prob_sum = targets_tensor[0].sum().item()
@@ -95,7 +95,7 @@ class TestSoftmaxProbabilityInput(unittest.TestCase):
                 "mask": [1] * 225
             }
         ]
-        inputs_tensor, targets_tensor, masks_tensor = self.trainer._prepare_tensors(sample_data)
+        inputs_tensor, targets_tensor, masks_tensor = self.trainer._sample_loader.prepare_tensors(sample_data)
 
         # 模型输出和 target 都是 Softmax 概率，loss 应在合理范围内
         self.trainer.model.network.train()
@@ -119,7 +119,7 @@ class TestSoftmaxProbabilityInput(unittest.TestCase):
         ]
         original_output_val = sample_data[0]["output"][0]
 
-        self.trainer._prepare_tensors(sample_data)
+        self.trainer._sample_loader.prepare_tensors(sample_data)
 
         # 原始数据不变
         self.assertEqual(sample_data[0]["output"][0], original_output_val,
@@ -143,7 +143,7 @@ class TestSoftmaxProbabilityInput(unittest.TestCase):
                 "mask": mask
             }
         ]
-        _, targets_tensor, masks_tensor = self.trainer._prepare_tensors(sample_data)
+        _, targets_tensor, masks_tensor = self.trainer._sample_loader.prepare_tensors(sample_data)
 
         # mask=1 的位置保持原值
         self.assertAlmostEqual(targets_tensor[0][0].item(), 0.7, places=5)

@@ -25,6 +25,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from ai.models.fc_v1.trainer import FCv1Trainer
 from ai.models.fc_v1.model import FCv1Model
+from ai.sample_loader import compute_masked_l1_loss
 from tests.ai.helpers import create_output
 
 
@@ -112,7 +113,7 @@ class TestFCv1Trainer(unittest.TestCase):
         trainer = FCv1Trainer()
         
         sample_path = os.path.join(self.sample_dir, "sample.json")
-        data = trainer._load_sample_data(sample_path)
+        data = trainer._sample_loader.load(sample_path)
         
         # 应该返回列表
         self.assertIsInstance(data, list)
@@ -144,7 +145,7 @@ class TestFCv1Trainer(unittest.TestCase):
         sample[0] = 50
         mask[0] = 1
         
-        loss = trainer._compute_loss(estimated, sample, mask)
+        loss = compute_masked_l1_loss(estimated, sample, mask)
         
         # 损失应该是 |100 - 50| = 50
         self.assertEqual(loss, 50)
@@ -162,7 +163,7 @@ class TestFCv1Trainer(unittest.TestCase):
         estimated[0] = 100
         sample[0] = 50
         
-        loss = trainer._compute_loss(estimated, sample, mask)
+        loss = compute_masked_l1_loss(estimated, sample, mask)
         
         # mask 为 0，损失应该是 0
         self.assertEqual(loss, 0)
@@ -176,7 +177,7 @@ class TestFCv1Trainer(unittest.TestCase):
         sample = create_output(0, 0, 50)
         mask = [1] + [0] * 224
         
-        loss = trainer._compute_loss(estimated, sample, mask)
+        loss = compute_masked_l1_loss(estimated, sample, mask)
         
         # 只有第一个位置参与计算，损失 = |100 - 50| = 50
         self.assertEqual(loss, 50)

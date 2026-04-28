@@ -92,9 +92,9 @@ class TestCNNv2Trainer(unittest.TestCase):
         """测试准备张量"""
         trainer = CNNV2Trainer()
         sample_path = os.path.join(self.sample_dir, "sample.json")
-        sample_data = trainer._load_sample_data(sample_path)
+        sample_data = trainer._sample_loader.load(sample_path)
 
-        inputs, targets, masks = trainer._prepare_tensors(sample_data)
+        inputs, targets, masks = trainer._sample_loader.prepare_tensors(sample_data)
 
         # CNN 输入是 4D: batch, channels, height, width
         self.assertEqual(inputs.shape, (2, 3, 15, 15))

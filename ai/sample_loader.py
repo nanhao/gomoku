@@ -10,6 +10,28 @@ from typing import List, Tuple, Callable, Optional
 import torch
 
 
+def compute_masked_l1_loss(estimated: List[float], sample: List[float], mask: List[int]) -> float:
+    """纯 Python 实现的 masked L1 loss（供单元测试使用）
+
+    计算 mask=1 的位置的平均绝对误差。
+
+    Args:
+        estimated: 模型预测的 reward 列表（225维）
+        sample: sample.json 中的 reward 列表（225维）
+        mask: mask 列表（225维）
+
+    Returns:
+        mask=1 位置的平均绝对误差；若 mask 全为 0 则返回 0.0
+    """
+    total_loss = 0.0
+    mask_sum = 0
+    for i in range(225):
+        if mask[i] == 1:
+            total_loss += abs(estimated[i] - sample[i])
+            mask_sum += 1
+    return total_loss / mask_sum if mask_sum > 0 else 0.0
+
+
 def discover_all_data(data_dir: str) -> dict:
     """发现目录下所有训练数据源
 
