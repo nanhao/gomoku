@@ -26,7 +26,7 @@ class TestFindFiveInARow(unittest.TestCase):
         for y in range(7, 12):
             board[7 * 15 + y] = 1  # 黑方棋子
         
-        positions = self.evaluator.find_five_in_a_row(board, 1)
+        positions = self.evaluator._line_tracer.find_five_in_a_row(board, 1)
         
         self.assertEqual(len(positions), 5)
         # 验证是横向的
@@ -40,7 +40,7 @@ class TestFindFiveInARow(unittest.TestCase):
         for x in range(5, 10):
             board[x * 15 + 7] = 1  # 黑方棋子
         
-        positions = self.evaluator.find_five_in_a_row(board, 1)
+        positions = self.evaluator._line_tracer.find_five_in_a_row(board, 1)
         
         self.assertEqual(len(positions), 5)
         for i, (x, y) in enumerate(positions):
@@ -53,7 +53,7 @@ class TestFindFiveInARow(unittest.TestCase):
         for i in range(5):
             board[(3 + i) * 15 + (3 + i)] = 1
         
-        positions = self.evaluator.find_five_in_a_row(board, 1)
+        positions = self.evaluator._line_tracer.find_five_in_a_row(board, 1)
         
         self.assertEqual(len(positions), 5)
 
@@ -63,7 +63,7 @@ class TestFindFiveInARow(unittest.TestCase):
         for i in range(5):
             board[(3 + i) * 15 + (11 - i)] = 1
         
-        positions = self.evaluator.find_five_in_a_row(board, 1)
+        positions = self.evaluator._line_tracer.find_five_in_a_row(board, 1)
         
         self.assertEqual(len(positions), 5)
 
@@ -74,7 +74,7 @@ class TestFindFiveInARow(unittest.TestCase):
         for y in range(4):
             board[7 * 15 + y] = 1
         
-        positions = self.evaluator.find_five_in_a_row(board, 1)
+        positions = self.evaluator._line_tracer.find_five_in_a_row(board, 1)
         
         self.assertEqual(len(positions), 0)
 
@@ -84,7 +84,7 @@ class TestFindFiveInARow(unittest.TestCase):
         for y in range(6):
             board[7 * 15 + y] = 1
         
-        positions = self.evaluator.find_five_in_a_row(board, 1)
+        positions = self.evaluator._line_tracer.find_five_in_a_row(board, 1)
         
         # 返回前 5 个
         self.assertEqual(len(positions), 5)
@@ -168,7 +168,7 @@ class TestTraceWinningLine(unittest.TestCase):
         end_board[48] = 2
         
         # 追溯五连
-        bonuses = self.evaluator.trace_winning_line(end_board, 1, history)
+        bonuses = self.evaluator._line_tracer.trace_winning_line(end_board, 1, history)
         
         # 应该找到 5 个黑方落子步骤
         self.assertEqual(len(bonuses), 5)
@@ -253,7 +253,7 @@ class TestTraceWinningLine(unittest.TestCase):
         for y in range(5):
             end_board[0 * 15 + y] = 1  # 黑方五连
         
-        bonuses = self.evaluator.trace_winning_line(end_board, 1, history)
+        bonuses = self.evaluator._line_tracer.trace_winning_line(end_board, 1, history)
         
         # 应该找到 5 个黑方落子步骤
         self.assertEqual(len(bonuses), 5)
@@ -274,7 +274,7 @@ class TestBlendRewards(unittest.TestCase):
         shape_reward = 500000
         line_bonus = 1000000
         
-        blended = self.evaluator.blend_rewards(shape_reward, line_bonus)
+        blended = self.evaluator._line_tracer.blend_rewards(shape_reward, line_bonus)
         
         # 加法融合：shape_reward + alpha * line_bonus = 500000 + 1000000 = 1500000
         # Bug M2 修复后裁剪到 MAX_REWARD = 1000000
@@ -285,7 +285,7 @@ class TestBlendRewards(unittest.TestCase):
         shape_reward = 500000
         line_bonus = 0
         
-        blended = self.evaluator.blend_rewards(shape_reward, line_bonus)
+        blended = self.evaluator._line_tracer.blend_rewards(shape_reward, line_bonus)
         
         # 加法融合：shape_reward + 0 = shape_reward
         self.assertEqual(blended, 500000)
@@ -295,7 +295,7 @@ class TestBlendRewards(unittest.TestCase):
         shape_reward = 855000
         line_bonus = 729000
         
-        blended = self.evaluator.blend_rewards(shape_reward, line_bonus)
+        blended = self.evaluator._line_tracer.blend_rewards(shape_reward, line_bonus)
         
         # 加法融合：855000 + 729000 = 1584000
         # Bug M2 修复后裁剪到 MAX_REWARD = 1000000
@@ -313,7 +313,7 @@ class TestBlendRewards(unittest.TestCase):
         shape_reward = 1000000
         line_bonus = 1000000
         
-        blended = self.evaluator.blend_rewards(shape_reward, line_bonus)
+        blended = self.evaluator._line_tracer.blend_rewards(shape_reward, line_bonus)
         
         # 裁剪到 MAX_REWARD
         self.assertEqual(blended, self.evaluator.MAX_REWARD)
@@ -331,7 +331,7 @@ class TestBlendRewards(unittest.TestCase):
         shape_reward = 500000  # 活三的评估值
         line_bonus = 656100    # 五连第1步（0.9^4 * MAX_REWARD）
         
-        blended = self.evaluator.blend_rewards(shape_reward, line_bonus)
+        blended = self.evaluator._line_tracer.blend_rewards(shape_reward, line_bonus)
         
         # 加法融合：两种信号都贡献
         self.assertGreater(blended, shape_reward)
@@ -347,12 +347,12 @@ class TestBlendRewards(unittest.TestCase):
         line_bonus = 1000000
         
         # alpha = 0.5
-        blended = self.evaluator.blend_rewards(shape_reward, line_bonus, alpha=0.5)
+        blended = self.evaluator._line_tracer.blend_rewards(shape_reward, line_bonus, alpha=0.5)
         expected = shape_reward + 0.5 * line_bonus
         self.assertEqual(blended, expected)
         
         # alpha = 0（不考虑五连追溯）
-        blended_zero = self.evaluator.blend_rewards(shape_reward, line_bonus, alpha=0)
+        blended_zero = self.evaluator._line_tracer.blend_rewards(shape_reward, line_bonus, alpha=0)
         self.assertEqual(blended_zero, shape_reward)
 
 
@@ -367,7 +367,7 @@ class TestNoWinnerNoBonus(unittest.TestCase):
         history = [{"input": [0] * 226, "output": [], "position": [0, 0]}]
         end_board = [0] * 225
         
-        bonuses = self.evaluator.trace_winning_line(end_board, 0, history)
+        bonuses = self.evaluator._line_tracer.trace_winning_line(end_board, 0, history)
         self.assertEqual(len(bonuses), 0)
 
     def test_draw_empty_bonus(self):
@@ -376,7 +376,7 @@ class TestNoWinnerNoBonus(unittest.TestCase):
         end_board = [0] * 225
         
         # winner = 3 表示平局
-        bonuses = self.evaluator.trace_winning_line(end_board, 3, history)
+        bonuses = self.evaluator._line_tracer.trace_winning_line(end_board, 3, history)
         self.assertEqual(len(bonuses), 0)
 
 

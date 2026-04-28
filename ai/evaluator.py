@@ -13,13 +13,11 @@
 
 import os
 import json
-import warnings
 from typing import List, Dict, Tuple
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from concurrent.futures.process import BrokenProcessPool
 
 from ai.constants import AI_DATA_DIR, TRAIN_DATA_DIR
-from ai.shape_detector import detect_shapes as _detect_shapes
 from ai.line_tracer import LineTracer
 from ai.reward_calculator import RewardCalculator, RewardConfig
 from ai.probability_utils import masked_softmax
@@ -212,31 +210,6 @@ class Evaluator:
         
         return sample_dict
     
-    def detect_shapes(self, board: List[int], position: Tuple[int, int], player: int) -> List[Dict]:
-        """检测落子后形成的所有棋型（委托给 ai.shape_detector）
-    
-        .. deprecated::
-            请直接使用 ai.shape_detector.detect_shapes。
-        """
-        warnings.warn(
-            "Evaluator.detect_shapes 已弃用，请直接使用 ai.shape_detector.detect_shapes",
-            DeprecationWarning, stacklevel=2
-        )
-        return _detect_shapes(board, position, player)
-    
-    def shape_to_reward(self, board: List[int], shape_info: Dict,
-                        player: int, is_current_player: bool, position=None) -> int:
-        """将棋型转换为 reward 值（委托给 RewardCalculator）
-    
-        .. deprecated::
-            请直接使用 ai.reward_calculator.RewardCalculator.shape_to_reward。
-        """
-        warnings.warn(
-            "Evaluator.shape_to_reward 已弃用，请直接使用 ai.reward_calculator.RewardCalculator.shape_to_reward",
-            DeprecationWarning, stacklevel=2
-        )
-        return self._reward_calculator.shape_to_reward(board, shape_info, player, is_current_player, position)
-    
     def _get_sample_path(self, record_file: str) -> str:
         """
         根据 record.json 路径生成对应的 sample.json 路径
@@ -366,44 +339,3 @@ class Evaluator:
                     print(f"评价失败 {record_file}: {e}")
 
         return {"sample_files": sample_files, "errors": errors}
-    
-    # ==================== 五连追溯奖励相关方法（委托给 LineTracer）====================
-    # 以下公开方法已弃用，请直接使用 LineTracer 对应方法
-
-    def find_five_in_a_row(self, board: List[int], winner: int) -> List[Tuple[int, int]]:
-        """在棋盘上找到五连的位置（委托给 LineTracer）
-
-        .. deprecated::
-            请直接使用 ai.line_tracer.LineTracer.find_five_in_a_row。
-        """
-        warnings.warn(
-            "Evaluator.find_five_in_a_row 已弃用，请直接使用 ai.line_tracer.LineTracer.find_five_in_a_row",
-            DeprecationWarning, stacklevel=2
-        )
-        return self._line_tracer.find_five_in_a_row(board, winner)
-
-    def trace_winning_line(self, end_board: List[int], winner: int,
-                           history: List[Dict]) -> List[Tuple[int, float]]:
-        """追溯形成五连的那 5 步落子，计算反向传播奖励（委托给 LineTracer）
-
-        .. deprecated::
-            请直接使用 ai.line_tracer.LineTracer.trace_winning_line。
-        """
-        warnings.warn(
-            "Evaluator.trace_winning_line 已弃用，请直接使用 ai.line_tracer.LineTracer.trace_winning_line",
-            DeprecationWarning, stacklevel=2
-        )
-        return self._line_tracer.trace_winning_line(end_board, winner, history)
-
-    def blend_rewards(self, shape_reward: float, line_bonus: float,
-                      alpha: float = None) -> float:
-        """融合棋型评估奖励和五连追溯奖励（委托给 LineTracer）
-
-        .. deprecated::
-            请直接使用 ai.line_tracer.LineTracer.blend_rewards。
-        """
-        warnings.warn(
-            "Evaluator.blend_rewards 已弃用，请直接使用 ai.line_tracer.LineTracer.blend_rewards",
-            DeprecationWarning, stacklevel=2
-        )
-        return self._line_tracer.blend_rewards(shape_reward, line_bonus, alpha)

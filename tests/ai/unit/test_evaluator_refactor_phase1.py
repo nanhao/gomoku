@@ -1,8 +1,8 @@
-"""Evaluator 阶段1瘦身重构单元测试
+"""Evaluator 阶段1+2 瘦身重构单元测试
 
-验证阶段1的变更：
+验证阶段1+2的变更：
 1. 6 个私有委托方法已删除
-2. 5 个公开委托方法发出 DeprecationWarning
+2. 5 个公开委托方法已彻底删除
 3. 3 个重复常量已删除
 4. 内部调用已直连底层组件，evaluate_record 能正常完成
 """
@@ -12,7 +12,6 @@ import os
 import shutil
 import sys
 import unittest
-import warnings
 
 # 添加项目根目录到路径
 project_root = os.path.dirname(
@@ -76,84 +75,51 @@ class TestPrivateDelegateMethodsRemoved(unittest.TestCase):
         )
 
 
-class TestPublicDelegateMethodsDeprecationWarning(unittest.TestCase):
-    """验证 5 个公开委托方法调用时发出 DeprecationWarning"""
+class TestPublicDelegateMethodsRemoved(unittest.TestCase):
+    """验证 5 个公开委托方法已从 Evaluator 中彻底删除
+
+    阶段1：这些方法曾发出 DeprecationWarning。
+    阶段2：调用方已全部迁移，方法彻底删除。
+    """
 
     def setUp(self):
         """创建 Evaluator 实例"""
         self.evaluator = Evaluator()
 
-    def test_detect_shapes_emits_deprecation_warning(self):
-        """detect_shapes 调用时发出 DeprecationWarning"""
-        board = [0] * 225
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            self.evaluator.detect_shapes(board, (7, 7), 1)
-            # 检查是否触发了 DeprecationWarning
-            deprecation_warnings = [
-                x for x in w if issubclass(x.category, DeprecationWarning)
-            ]
-            self.assertGreaterEqual(
-                len(deprecation_warnings), 1,
-                "detect_shapes 应发出 DeprecationWarning"
-            )
+    def test_detect_shapes_removed(self):
+        """detect_shapes 不再是 Evaluator 的方法"""
+        self.assertFalse(
+            hasattr(self.evaluator, 'detect_shapes'),
+            "detect_shapes 应已被删除，请直接使用 ai.shape_detector.detect_shapes"
+        )
 
-    def test_shape_to_reward_emits_deprecation_warning(self):
-        """shape_to_reward 调用时发出 DeprecationWarning"""
-        board = [0] * 225
-        shape_info = {"shape": "活二", "directions": [(0, 1)]}
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            self.evaluator.shape_to_reward(board, shape_info, 1, True)
-            deprecation_warnings = [
-                x for x in w if issubclass(x.category, DeprecationWarning)
-            ]
-            self.assertGreaterEqual(
-                len(deprecation_warnings), 1,
-                "shape_to_reward 应发出 DeprecationWarning"
-            )
+    def test_shape_to_reward_removed(self):
+        """shape_to_reward 不再是 Evaluator 的方法"""
+        self.assertFalse(
+            hasattr(self.evaluator, 'shape_to_reward'),
+            "shape_to_reward 应已被删除，请直接使用 RewardCalculator.shape_to_reward"
+        )
 
-    def test_find_five_in_a_row_emits_deprecation_warning(self):
-        """find_five_in_a_row 调用时发出 DeprecationWarning"""
-        board = [0] * 225
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            self.evaluator.find_five_in_a_row(board, 1)
-            deprecation_warnings = [
-                x for x in w if issubclass(x.category, DeprecationWarning)
-            ]
-            self.assertGreaterEqual(
-                len(deprecation_warnings), 1,
-                "find_five_in_a_row 应发出 DeprecationWarning"
-            )
+    def test_find_five_in_a_row_removed(self):
+        """find_five_in_a_row 不再是 Evaluator 的方法"""
+        self.assertFalse(
+            hasattr(self.evaluator, 'find_five_in_a_row'),
+            "find_five_in_a_row 应已被删除，请直接使用 LineTracer.find_five_in_a_row"
+        )
 
-    def test_trace_winning_line_emits_deprecation_warning(self):
-        """trace_winning_line 调用时发出 DeprecationWarning"""
-        board = [0] * 225
-        history = [{"input": [0] * 226, "output": [], "position": [7, 7]}]
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            self.evaluator.trace_winning_line(board, 0, history)
-            deprecation_warnings = [
-                x for x in w if issubclass(x.category, DeprecationWarning)
-            ]
-            self.assertGreaterEqual(
-                len(deprecation_warnings), 1,
-                "trace_winning_line 应发出 DeprecationWarning"
-            )
+    def test_trace_winning_line_removed(self):
+        """trace_winning_line 不再是 Evaluator 的方法"""
+        self.assertFalse(
+            hasattr(self.evaluator, 'trace_winning_line'),
+            "trace_winning_line 应已被删除，请直接使用 LineTracer.trace_winning_line"
+        )
 
-    def test_blend_rewards_emits_deprecation_warning(self):
-        """blend_rewards 调用时发出 DeprecationWarning"""
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            self.evaluator.blend_rewards(100.0, 200.0)
-            deprecation_warnings = [
-                x for x in w if issubclass(x.category, DeprecationWarning)
-            ]
-            self.assertGreaterEqual(
-                len(deprecation_warnings), 1,
-                "blend_rewards 应发出 DeprecationWarning"
-            )
+    def test_blend_rewards_removed(self):
+        """blend_rewards 不再是 Evaluator 的方法"""
+        self.assertFalse(
+            hasattr(self.evaluator, 'blend_rewards'),
+            "blend_rewards 应已被删除，请直接使用 LineTracer.blend_rewards"
+        )
 
 
 class TestDuplicateConstantsRemoved(unittest.TestCase):

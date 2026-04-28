@@ -15,6 +15,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from ai.evaluator import Evaluator
+from ai.shape_detector import detect_shapes
 
 
 class TestEvaluatorShapeDetectionEdge(unittest.TestCase):
@@ -127,7 +128,7 @@ class TestEvaluatorShapeDetectionEdge(unittest.TestCase):
         # 落子 (7,7) 后，横向：(7,6), (7,7) = 2子
         # 纵向：(6,7), (7,7) = 2子
         
-        shapes = self.evaluator.detect_shapes(board, (7, 7), 1)
+        shapes = detect_shapes(board, (7, 7), 1)
         
         # 应该有活二棋型
         live_two_found = False
@@ -263,7 +264,7 @@ class TestEvaluatorShapeDetectionEdge(unittest.TestCase):
     def test_detect_shapes_returns_list(self):
         """测试 detect_shapes 返回列表"""
         board = [0] * 225
-        shapes = self.evaluator.detect_shapes(board, (7, 7), 1)
+        shapes = detect_shapes(board, (7, 7), 1)
         
         self.assertIsInstance(shapes, list)
     
@@ -272,7 +273,7 @@ class TestEvaluatorShapeDetectionEdge(unittest.TestCase):
         board = [0] * 225
         board[7 * 15 + 6] = 1  # 有一个己方子
         
-        shapes = self.evaluator.detect_shapes(board, (7, 7), 1)
+        shapes = detect_shapes(board, (7, 7), 1)
         
         for shape in shapes:
             self.assertIn("shape", shape)
