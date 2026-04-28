@@ -16,7 +16,7 @@ gomoku/
 │   └── merge_samples/# 合并后的训练样本
 ├── tests/            # 测试脚本
 ├── design/           # 设计文档
-└── temp/             # 临时工具脚本（lr_range_test、分析脚本等）
+└── temp/             # 临时分析脚本等
 ```
 
 ## 快速开始
@@ -222,7 +222,7 @@ python ai/models/fc_v1/inspect_main.py --sample <sample.json路径> [--model-pat
 学习率范围测试工具，用于确定最优学习率区间。每个 round 使用一个固定 lr，训练 `epochs` 个 step 后记录平均 loss，lr 从 `min_lr` 线性递增至 `max_lr`。每个 round 开始前重置模型到初始状态，确保 loss 只反映 lr 的影响。
 
 ```bash
-python temp/lr_range_test.py --model <模型名称> --data <数据路径> [选项]
+python ai/lr_range_test.py --model <模型名称> --data <数据路径> [选项]
 ```
 
 | 参数 | 说明 | 默认值 |
@@ -237,10 +237,10 @@ python temp/lr_range_test.py --model <模型名称> --data <数据路径> [选�
 
 ```bash
 # 示例：对 CNN v2 执行 LR Range Test
-python temp/lr_range_test.py --model cnn_v2 --data ai/merge_samples/merge_cnn_v1_100.json
+python ai/lr_range_test.py --model cnn_v2 --data ai/merge_samples/merge_cnn_v1_100.json
 
 # 示例：自定义 lr 范围和输出路径
-python temp/lr_range_test.py --model cnn_v2 --data ai/merge_samples/merge_cnn_v1_100.json --min-lr 1e-6 --max-lr 1e-2 --output temp/my_lr_test.png
+python ai/lr_range_test.py --model cnn_v2 --data ai/merge_samples/merge_cnn_v1_100.json --min-lr 1e-6 --max-lr 1e-2 --output temp/my_lr_test.png
 ```
 
 ### 运行测试

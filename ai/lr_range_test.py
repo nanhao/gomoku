@@ -19,10 +19,15 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
+import matplotlib
+matplotlib.use('Agg')  # 非交互后端
+import matplotlib.pyplot as plt
+
 # 添加项目根目录到路径
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from ai.base_model import BaseModel
+from ai.base_trainer import get_device
 from ai.sample_loader import SampleLoader
 
 
@@ -136,7 +141,6 @@ def run_lr_range_test(
     """
     # 获取设备
     if device is None:
-        from ai.base_trainer import get_device
         device = get_device()
 
     # 创建模型
@@ -203,10 +207,6 @@ def plot_lr_loss_curve(
         losses: loss 列表
         output_path: 图片保存路径
     """
-    import matplotlib
-    matplotlib.use('Agg')  # 非交互后端
-    import matplotlib.pyplot as plt
-
     fig, ax = plt.subplots(figsize=(10, 6))
     ax.plot(lrs, losses, linewidth=1)
     ax.set_xscale('log')
