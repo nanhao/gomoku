@@ -245,11 +245,22 @@ python ai/lr_range_test.py --model cnn_v2 --data ai/merge_samples/merge_cnn_v1_1
 
 ### 运行测试
 
+项目使用 **pytest** 作为测试框架，支持以下运行方式：
+
 ```bash
+# 方式1：直接调用 pytest（推荐）
+python -m pytest tests/ -v
+
+# 方式2：通过兼容性入口运行
 python tests/run_tests.py
 ```
 
-> 覆盖全部 836 个测试（基础测试 212 + AI 测试 624）
+> 覆盖全部 1076 个测试（自动发现，无需手工维护测试列表）
+>
+> 附加参数示例：
+> - `python -m pytest tests/ -q` —— 静默模式
+> - `python -m pytest tests/ai/ -v` —— 仅运行 AI 模块测试
+> - `python -m pytest tests/ --tb=short` —— 简短错误追溯
 
 ---
 
