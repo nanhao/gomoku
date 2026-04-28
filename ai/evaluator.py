@@ -376,11 +376,7 @@ class Evaluator:
 
         # 如果进程池崩溃，回退到串行模式重试剩余文件
         if broken_pool:
-            remaining_files = [
-                f for f in record_files
-                if f not in {sf.rsplit(os.sep, 1)[0] + os.sep + "record.json" for sf in sample_files}
-            ]
-            # 简化：用未成功的 record_files 减去已成功的
+            # 用未成功的 record_files 减去已成功的
             successful_record_files = set()
             for sf in sample_files:
                 # sample_file 路径推导出 record_file

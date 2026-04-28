@@ -231,10 +231,10 @@ class TestSelfPlayGeneratorKeyboardInterrupt(unittest.TestCase):
     @patch('ai.self_play_generator.DataRecorder')
     @patch('ai.self_play_generator.Evaluator')
     @patch('ai.self_play_generator.AIEngine')
-    def test_generate_with_keyboard_interrupt(
+    def test_generate_with_keyboard_interrupt_after_recorder_created(
         self, mock_engine, mock_evaluator_cls, mock_recorder_cls, mock_start
     ):
-        """Ctrl+C 时应优雅退出，返回已有结果"""
+        """Ctrl+C 在 recorder 创建后触发时应优雅退出，返回已有结果"""
         model = _create_mock_model()
         generator = SelfPlayGenerator(model)
         _mock_generator_dependencies(mock_engine, mock_evaluator_cls, mock_recorder_cls, mock_start)
@@ -249,6 +249,41 @@ class TestSelfPlayGeneratorKeyboardInterrupt(unittest.TestCase):
         self.assertIn("round_dir", result)
         # 中断时 results 应为空（还没执行完对弈）
         self.assertEqual(result["results"], [])
+
+    @patch('ai.self_play_generator.AIGameManager.start_ai_vs_ai')
+    @patch('ai.self_play_generator.DataRecorder')
+    @patch('ai.self_play_generator.Evaluator')
+    @patch('ai.self_play_generator.AIEngine')
+    def test_generate_with_keyboard_interrupt_before_recorder_created(
+        self, mock_engine, mock_evaluator_cls, mock_recorder_cls, mock_start
+    ):
+        """Ctrl+C 在 recorder 创建前触发时，不应抛出 NameError，应优雅退出"""
+        model = _create_mock_model()
+        generator = SelfPlayGenerator(model)
+
+        # 模拟 AIEngine 初始化阶段抛出 KeyboardInterrupt
+        # 此时 recorder 尚未创建
+        mock_engine.side_effect = KeyboardInterrupt()
+
+        # 调用 generate 不应抛出 NameError 或其他异常
+        result = generator.generate(games=10)
+
+        # 验证返回了结果字典
+        self.assertIn("round_dir", result)
+        self.assertIn("train_data_dir", result)
+        self.assertIn("sample_dirs", result)
+        self.assertIn("sample_count", result)
+        self.assertIn("results", result)
+
+        # recorder 未创建，round_dir 应为空字符串
+        self.assertEqual(result["round_dir"], "")
+        self.assertEqual(result["train_data_dir"], "")
+        self.assertEqual(result["results"], [])
+        self.assertEqual(result["sample_count"], 0)
+        self.assertEqual(result["sample_dirs"], [])
+
+        # 验证 DataRecorder 从未被创建
+        mock_recorder_cls.assert_not_called()
 
 
 if __name__ == '__main__':

@@ -14,6 +14,7 @@ if project_root not in sys.path:
 
 from ai.engine import AIEngine, create_engine
 from ai.models.random.model import RandomModel
+from ai.models.cnn_v2.model import CNNV2Model
 
 
 class TestAIEngine(unittest.TestCase):
@@ -240,11 +241,25 @@ class TestCreateEngine(unittest.TestCase):
         self.assertIsNotNone(engine)
         self.assertEqual(engine.model.name, "cnn_v1")
 
+    def test_create_engine_cnn_v2(self):
+        """测试创建 cnn_v2 引擎"""
+        engine = create_engine("cnn_v2")
+        self.assertIsNotNone(engine)
+        self.assertIsInstance(engine.model, CNNV2Model,
+                             "cnn_v2 应映射到 CNNV2Model，而非回退到 RandomModel")
+        self.assertEqual(engine.model.name, "cnn_v2")
+
     def test_create_engine_unknown_uses_random(self):
         """测试未知模型名称时使用 random 作为兜底"""
         engine = create_engine("unknown_model")
         self.assertIsNotNone(engine)
         self.assertEqual(engine.model.name, "random")
+
+    def test_create_engine_cnn_v2_not_random(self):
+        """测试 cnn_v2 不会静默回退到 RandomModel"""
+        engine = create_engine("cnn_v2")
+        self.assertNotIsInstance(engine.model, RandomModel,
+                                 "cnn_v2 不应回退到 RandomModel")
 
 
 if __name__ == "__main__":

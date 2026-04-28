@@ -21,6 +21,7 @@ import os
 import argparse
 import json
 import tempfile
+import shutil
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -107,7 +108,7 @@ def _create_temp_sample_dir(sample_data: list) -> str:
         sample_data: 样本数据列表
 
     Returns:
-        临时目录路径（调用方负责清理）
+        临时目录路径（调用方应在 finally 块中清理）
     """
     tmp_dir = tempfile.mkdtemp()
     sample_path = os.path.join(tmp_dir, "sample.json")
@@ -375,6 +376,7 @@ def main():
     elif args.train_from_dir:
         # 从已有数据训练模式（支持目录或 .json 文件）
         train_data_path = args.train_from_dir
+        tmp_dir = None  # 跟踪临时目录，确保 finally 中清理
 
         # 检查路径是否存在
         if not os.path.exists(train_data_path):
@@ -448,7 +450,10 @@ def main():
         except Exception as e:
             print(f"训练失败: {e}")
             sys.exit(1)
-
+        finally:
+            if tmp_dir:
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+    
     elif args.cycle:
         # 训练周期
         print(f"开始 {args.model} 训练周期...")

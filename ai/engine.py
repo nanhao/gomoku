@@ -30,11 +30,13 @@ def create_engine(ai_name: str) -> "AIEngine":
     from ai.models.random import RandomModel
     from ai.models.fc_v1 import FCv1Model
     from ai.models.cnn_v1 import CNNV1Model
+    from ai.models.cnn_v2 import CNNV2Model
 
     model_map = {
         "random": RandomModel,
         "fc_v1": FCv1Model,
         "cnn_v1": CNNV1Model,
+        "cnn_v2": CNNV2Model,
     }
     model_cls = model_map.get(ai_name)
     if model_cls is None:

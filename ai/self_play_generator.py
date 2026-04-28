@@ -75,6 +75,7 @@ class SelfPlayGenerator:
 
         # 初始化结果变量（用于 KeyboardInterrupt 时返回部分结果）
         results = []
+        recorder = None
 
         try:
             # 1. 创建 AI 引擎（使用传入的 model）
@@ -143,12 +144,12 @@ class SelfPlayGenerator:
             # Ctrl+C 时优雅退出，打印已有结果
             print("\n[中断] 检测到 Ctrl+C，正在整理已有数据...")
 
-            # 尝试获取 round_dir（recorder 可能已创建）
-            try:
+            # 尝试获取 round_dir（recorder 可能尚未创建）
+            if recorder is not None:
                 round_dir = recorder.get_round_dir()
                 round_dir_name = os.path.basename(round_dir)
                 mapped_train_data_dir = os.path.join(train_data_dir, round_dir_name)
-            except (NameError, AttributeError):
+            else:
                 round_dir = ""
                 mapped_train_data_dir = ""
 
