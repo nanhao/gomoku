@@ -76,28 +76,28 @@ class TestLoadModel(unittest.TestCase):
 class TestGetInputConverter(unittest.TestCase):
     """测试 _get_input_converter 函数"""
 
-    def test_returns_converter_for_cnn_model(self):
-        """有 _vector_to_tensor 方法时返回 converter 函数"""
+    def test_returns_converter_for_neural_model(self):
+        """有 _prepare_input 方法时返回 converter 函数"""
         mock_model = MagicMock()
-        mock_model._vector_to_tensor = MagicMock(
-            side_effect=lambda v: torch.tensor([[[v]]])
+        mock_model._prepare_input = MagicMock(
+            side_effect=lambda v, d: torch.tensor([[v]])
         )
 
-        converter = _get_input_converter(mock_model)
+        device = torch.device('cpu')
+        converter = _get_input_converter(mock_model, device)
         self.assertIsNotNone(converter)
 
         # 验证 converter 工作正常
         result = converter([1.0, 2.0])
         self.assertIsInstance(result, torch.Tensor)
+        self.assertEqual(result.shape[0], 2)
 
-    def test_returns_none_for_fc_model(self):
-        """没有 _vector_to_tensor 方法时返回 None"""
-        mock_model = MagicMock()
-        # 显式移除属性
-        if hasattr(mock_model, '_vector_to_tensor'):
-            del mock_model._vector_to_tensor
+    def test_returns_none_for_non_neural_model(self):
+        """没有 _prepare_input 方法时返回 None（如 RandomModel）"""
+        mock_model = MagicMock(spec=[])  # 空 spec，无任何属性
 
-        converter = _get_input_converter(mock_model)
+        device = torch.device('cpu')
+        converter = _get_input_converter(mock_model, device)
         self.assertIsNone(converter)
 
 
@@ -169,10 +169,11 @@ class TestLoadData(unittest.TestCase):
 class TestRunLRRangeTest(unittest.TestCase):
     """测试 run_lr_range_test 函数"""
 
+    @patch('ai.lr_range_test._get_input_converter')
     @patch('ai.lr_range_test.load_data')
     @patch('ai.lr_range_test.load_model')
     @patch('ai.lr_range_test.get_device')
-    def test_returns_correct_length(self, mock_get_device, mock_load_model, mock_load_data):
+    def test_returns_correct_length(self, mock_get_device, mock_load_model, mock_load_data, mock_get_converter):
         """返回值长度应等于 rounds"""
         device = torch.device('cpu')
         mock_get_device.return_value = device
@@ -187,6 +188,7 @@ class TestRunLRRangeTest(unittest.TestCase):
         mock_model = MagicMock()
         mock_model.network = mock_network
         mock_load_model.return_value = mock_model
+        mock_get_converter.return_value = None  # FC 模型无需转换
 
         # Mock data
         mock_load_data.return_value = (
@@ -209,10 +211,11 @@ class TestRunLRRangeTest(unittest.TestCase):
         self.assertEqual(len(losses), 5)
         self.assertEqual(mock_load_model.call_count, 1)
 
+    @patch('ai.lr_range_test._get_input_converter')
     @patch('ai.lr_range_test.load_data')
     @patch('ai.lr_range_test.load_model')
     @patch('ai.lr_range_test.get_device')
-    def test_lr_increases_linearly(self, mock_get_device, mock_load_model, mock_load_data):
+    def test_lr_increases_linearly(self, mock_get_device, mock_load_model, mock_load_data, mock_get_converter):
         """lr 应线性递增"""
         device = torch.device('cpu')
         mock_get_device.return_value = device
@@ -226,6 +229,7 @@ class TestRunLRRangeTest(unittest.TestCase):
         mock_model = MagicMock()
         mock_model.network = mock_network
         mock_load_model.return_value = mock_model
+        mock_get_converter.return_value = None  # FC 模型无需转换
 
         mock_load_data.return_value = (
             torch.tensor([[1.0] * 226]),
@@ -249,10 +253,11 @@ class TestRunLRRangeTest(unittest.TestCase):
         for i in range(1, len(lrs)):
             self.assertGreater(lrs[i], lrs[i - 1])
 
+    @patch('ai.lr_range_test._get_input_converter')
     @patch('ai.lr_range_test.load_data')
     @patch('ai.lr_range_test.load_model')
     @patch('ai.lr_range_test.get_device')
-    def test_model_reset_each_round(self, mock_get_device, mock_load_model, mock_load_data):
+    def test_model_reset_each_round(self, mock_get_device, mock_load_model, mock_load_data, mock_get_converter):
         """每个 round 开始前应重置模型状态"""
         device = torch.device('cpu')
         mock_get_device.return_value = device
@@ -266,6 +271,7 @@ class TestRunLRRangeTest(unittest.TestCase):
         mock_model = MagicMock()
         mock_model.network = mock_network
         mock_load_model.return_value = mock_model
+        mock_get_converter.return_value = None  # FC 模型无需转换
 
         mock_load_data.return_value = (
             torch.tensor([[1.0] * 226]),
@@ -284,10 +290,11 @@ class TestRunLRRangeTest(unittest.TestCase):
         # load_state_dict 应在每个 round 开始时调用（rounds=3 次）
         self.assertEqual(mock_network.load_state_dict.call_count, 3)
 
+    @patch('ai.lr_range_test._get_input_converter')
     @patch('ai.lr_range_test.load_data')
     @patch('ai.lr_range_test.load_model')
     @patch('ai.lr_range_test.get_device')
-    def test_uses_provided_device(self, mock_get_device, mock_load_model, mock_load_data):
+    def test_uses_provided_device(self, mock_get_device, mock_load_model, mock_load_data, mock_get_converter):
         """显式传入 device 时不应调用 get_device"""
         param = torch.tensor([1.0], requires_grad=True)
         mock_network = MagicMock()
@@ -298,6 +305,7 @@ class TestRunLRRangeTest(unittest.TestCase):
         mock_model = MagicMock()
         mock_model.network = mock_network
         mock_load_model.return_value = mock_model
+        mock_get_converter.return_value = None  # FC 模型无需转换
 
         mock_load_data.return_value = (
             torch.tensor([[1.0] * 226]),

@@ -188,14 +188,26 @@ def run_all_tests():
     ai_failures = len(ai_result.failures) + len(ai_result.errors)
     ai_passed = ai_tests_run - ai_failures
 
+    # 运行集成测试（tests/integration/ 目录）
+    print("\n集成测试")
+    print("-" * 60)
+    int_loader = unittest.TestLoader()
+    int_suite = int_loader.discover('tests/integration', pattern='test_*.py')
+    int_runner = unittest.TextTestRunner(verbosity=1, stream=sys.stdout)
+    int_result = int_runner.run(int_suite)
+    int_tests_run = int_result.testsRun
+    int_failures = len(int_result.failures) + len(int_result.errors)
+    int_passed = int_tests_run - int_failures
+
     # 汇总
-    grand_total = total_tests + ai_tests_run
-    grand_passed = passed_tests + ai_passed
+    grand_total = total_tests + ai_tests_run + int_tests_run
+    grand_passed = passed_tests + ai_passed + int_passed
 
     print("\n" + "=" * 60)
     print(f"汇总结果: {grand_passed}/{grand_total} 通过")
     print(f"  - 基础测试: {passed_tests}/{total_tests}")
     print(f"  - AI 测试:  {ai_passed}/{ai_tests_run}")
+    print(f"  - 集成测试: {int_passed}/{int_tests_run}")
     print("=" * 60)
 
     if grand_passed == grand_total:

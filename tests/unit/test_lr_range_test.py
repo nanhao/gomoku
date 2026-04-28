@@ -18,7 +18,7 @@ import torch
 from ai.models.cnn_v2 import CNNV2Model
 from ai.sample_loader import SampleLoader
 from tests.ai.helpers import create_sample_dir
-from temp.lr_range_test import (
+from ai.lr_range_test import (
     load_model,
     load_data,
     plot_lr_loss_curve,

@@ -16,7 +16,7 @@ import torch
 
 from ai.models.cnn_v2 import CNNV2Model
 from tests.ai.helpers import create_sample_dir
-from temp.lr_range_test import run_lr_range_test, plot_lr_loss_curve, load_model
+from ai.lr_range_test import run_lr_range_test, plot_lr_loss_curve, load_model
 
 
 def _create_merge_file(tmp_dir: str, name: str = "merge_test.json",

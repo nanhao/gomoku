@@ -65,20 +65,28 @@ def load_model(model_name: str, device: torch.device) -> BaseModel:
     return model
 
 
-def _get_input_converter(model: BaseModel):
+def _get_input_converter(model: BaseModel, device: torch.device):
     """获取模型对应的输入转换函数
+
+    所有 NeuralNetworkModel 子类都有 _prepare_input 方法，
+    可将 226 维向量转换为模型所需的输入格式：
+    - CNN 模型：(1, 3, 15, 15) 4D 张量
+    - FC 模型：(1, 226) 2D 张量
+    非 NeuralNetworkModel 子类（如 RandomModel）无此方法，返回 None。
 
     Args:
         model: 模型实例
+        device: 目标设备
 
     Returns:
-        输入转换函数，或 None（FC 模型无需转换）
+        输入转换函数，或 None（非神经网络模型无需转换）
     """
-    # CNN 模型有 _vector_to_tensor 方法
-    if hasattr(model, '_vector_to_tensor'):
+    # NeuralNetworkModel 子类有 _prepare_input 方法
+    _prepare_input = getattr(model, '_prepare_input', None)
+    if callable(_prepare_input):
         def convert_inputs(inputs: list) -> torch.Tensor:
-            """将批量 226 维向量转换为 CNN 输入张量 (N, 3, 15, 15)"""
-            batch = [model._vector_to_tensor(v) for v in inputs]
+            """将批量 226 维向量转换为模型输入张量"""
+            batch = [_prepare_input(v, device) for v in inputs]
             return torch.cat(batch, dim=0)
         return convert_inputs
     return None
@@ -149,7 +157,7 @@ def run_lr_range_test(
     # 加载数据
     sample_loader = SampleLoader(
         device=device,
-        input_converter=_get_input_converter(model)
+        input_converter=_get_input_converter(model, device)
     )
     inputs, targets, masks = load_data(data_path, sample_loader)
 
