@@ -119,6 +119,88 @@ class AIGameManager:
         return self.controller.make_move(x, y)
     
     @staticmethod
+    def _play_single_game(
+        engine_black: AIEngine,
+        engine_white: AIEngine,
+        recorder: DataRecorder,
+        game_num: int,
+        name_prefix: str = "ai_vs_ai",
+        on_progress=None,
+    ) -> int:
+        """执行单局 AI 内战
+
+        封装完整的单局流程：创建 controller、new_game、落子循环、
+        记录每步数据、保存游戏结果。
+
+        Args:
+            engine_black: 执黑 AI 引擎
+            engine_white: 执白 AI 引擎
+            recorder: 数据记录器
+            game_num: 当前局号（用于存档命名和日志）
+            name_prefix: 存档名称前缀（"ai_vs_ai" 或 "ai_vs_ai_rnd"）
+            on_progress: 可选进度回调，参数为 (current: int, total: int)
+
+        Returns:
+            winner: 获胜方（1=黑, 2=白, 3=平局）
+        """
+        import time
+
+        controller = GomokuController()
+
+        # 新建游戏，使用唯一名称避免冲突（毫秒时间戳保证唯一性）
+        timestamp = int(time.time() * 1000)
+        unique_name = f"{name_prefix}_{game_num}_{timestamp}"
+        result = controller.new_game(unique_name)
+
+        # 检查游戏是否创建成功
+        if result.get("error"):
+            raise RuntimeError(f"创建游戏失败: {result['error']}")
+
+        # 开始记录，获取当前 game_id
+        recorder.new_game()
+        current_game_id = recorder.current_game_id
+
+        # 游戏循环：交替落子直到游戏结束
+        while not controller.is_over():
+            state = controller.get_state()
+            board = state["board"]
+            player = state["current_player"]
+
+            # 根据当前落子方选择对应引擎
+            engine = engine_black if player == 1 else engine_white
+
+            # 获取 AI 输入输出（用于记录和落子）
+            # 性能优化：只调用一次 model.predict，结果同时用于记录和落子
+            board_vector = AIEngine.board_to_vector(board, player)
+            probs = engine.model.predict(board_vector)
+
+            try:
+                # AI 落子（传入预计算的 probs，避免重复调用 model.predict）
+                x, y = engine.get_move(board, player, probs=probs)
+            except ValueError as e:
+                # 棋盘已满，无法落子，结束当前对局
+                print(f"AI对局 {game_num} 棋盘已满: {e}")
+                break
+
+            # 记录数据
+            recorder.record_move(current_game_id, board_vector, probs, (x, y))
+
+            # 执行落子
+            controller.make_move(x, y)
+
+        # 保存结果：获取获胜方和终局棋盘
+        winner = controller.get_winner()
+        end_state = controller.get_state()
+        end_board = AIEngine.board_to_vector(end_state["board"], 0)
+        recorder.save_game_result(current_game_id, winner, end_board)
+
+        # 进度回调
+        if on_progress is not None:
+            on_progress(game_num, game_num)
+
+        return winner
+
+    @staticmethod
     def start_ai_vs_ai(
         engine1: AIEngine,
         engine2: AIEngine,
@@ -127,85 +209,36 @@ class AIGameManager:
         project_root: str = None,
         on_progress=None,
     ) -> List[dict]:
-        """
-        执行 AI 内战
-        
+        """执行 AI 内战
+
         engine1 执黑，engine2 执白。
         每局游戏独立创建 controller，数据通过 recorder 记录。
-        
+
         Args:
             engine1: 执黑 AI 引擎
             engine2: 执白 AI 引擎
             num_games: 对战局数
             recorder: 数据记录器
-            project_root: 项目根目录，用于创建 controller
+            project_root: 项目根目录（保留兼容，内部不使用）
             on_progress: 可选进度回调，每局完成后调用，参数为 (current: int, total: int)
-            
+
         Returns:
             对战结果列表，每项为 {"game": 局数, "winner": 获胜方}
         """
-        import os
-        import time
         results = []
-        
-        for game_num in range(1, num_games + 1):
-            controller = GomokuController()
-            
-            # 新建游戏，使用唯一名称避免冲突（使用毫秒时间戳保证唯一性）
-            timestamp = int(time.time() * 1000)
-            unique_name = f"ai_vs_ai_{game_num}_{timestamp}"
-            result = controller.new_game(unique_name)
-            
-            # 检查游戏是否创建成功
-            if result.get("error"):
-                raise RuntimeError(f"创建游戏失败: {result['error']}")
-            
-            # 开始记录
-            recorder.new_game()
-            current_game_id = recorder.current_game_id
-            
-            # 游戏循环
-            while not controller.is_over():
-                state = controller.get_state()
-                board = state["board"]
-                player = state["current_player"]
-                
-                # 选择当前 AI
-                engine = engine1 if player == 1 else engine2
-                
-                # 获取 AI 输入输出（用于记录和落子）
-                # 性能优化：只调用一次 model.predict，结果同时用于记录和落子
-                board_vector = AIEngine.board_to_vector(board, player)
-                probs = engine.model.predict(board_vector)
-                
-                try:
-                    # AI 落子（传入预计算的 probs，避免重复调用 model.predict）
-                    x, y = engine.get_move(board, player, probs=probs)
-                except ValueError as e:
-                    # 棋盘已满，无法落子，结束当前对局
-                    print(f"AI对局 {game_num} 棋盘已满: {e}")
-                    break
-                
-                # 记录数据
-                recorder.record_move(current_game_id, board_vector, probs, (x, y))
-                
-                # 执行落子
-                controller.make_move(x, y)
-            
-            # 保存结果
-            winner = controller.get_winner()
-            end_state = controller.get_state()
-            end_board = AIEngine.board_to_vector(end_state["board"], 0)
-            recorder.save_game_result(current_game_id, winner, end_board)
-            
-            results.append({
-                "game": game_num,
-                "winner": winner
-            })
 
+        for game_num in range(1, num_games + 1):
+            # 固定执方：engine1 执黑，engine2 执白
+            winner = AIGameManager._play_single_game(
+                engine1, engine2, recorder, game_num,
+                name_prefix="ai_vs_ai",
+            )
+            results.append({"game": game_num, "winner": winner})
+
+            # 多局进度回调
             if on_progress is not None:
                 on_progress(game_num, num_games)
-        
+
         return results
 
     @staticmethod
@@ -215,18 +248,17 @@ class AIGameManager:
         num_games: int,
         recorder: DataRecorder
     ) -> List[dict]:
-        """
-        执行 AI 内战（每局执方随机）
-        
+        """执行 AI 内战（每局执方随机）
+
         每局随机决定 engine1/engine2 各执黑棋还是白棋。
         数据通过 recorder 记录。
-        
+
         Args:
             engine1: AI 引擎 1
             engine2: AI 引擎 2
             num_games: 对战局数
             recorder: 数据记录器
-            
+
         Returns:
             对战结果列表，每项格式：
             {
@@ -239,77 +271,33 @@ class AIGameManager:
             }
         """
         import random as _random
-        import time
         results = []
-        
+
         for game_num in range(1, num_games + 1):
             # 随机决定 engine1 执黑还是白
             ai1_color = _random.choice([1, 2])
             ai2_color = 3 - ai1_color  # 互为黑白
-            
+
             # 根据颜色分配引擎：黑方先手
             engine_black = engine1 if ai1_color == 1 else engine2
             engine_white = engine2 if ai1_color == 1 else engine1
-            
-            controller = GomokuController()
-            
-            # 新建游戏，使用唯一名称
-            timestamp = int(time.time() * 1000)
-            unique_name = f"ai_vs_ai_rnd_{game_num}_{timestamp}"
-            result = controller.new_game(unique_name)
-            
-            if result.get("error"):
-                raise RuntimeError(f"创建游戏失败: {result['error']}")
-            
-            # 开始记录
-            recorder.new_game()
-            current_game_id = recorder.current_game_id
-            
-            # 游戏循环
-            while not controller.is_over():
-                state = controller.get_state()
-                board = state["board"]
-                player = state["current_player"]
-                
-                # 根据当前落子方选择对应引擎
-                engine = engine_black if player == 1 else engine_white
-                
-                # 获取 AI 输入输出（用于记录和落子）
-                # 性能优化：只调用一次 model.predict，结果同时用于记录和落子
-                board_vector = AIEngine.board_to_vector(board, player)
-                probs = engine.model.predict(board_vector)
-                
-                try:
-                    # AI 落子（传入预计算的 probs，避免重复调用 model.predict）
-                    x, y = engine.get_move(board, player, probs=probs)
-                except ValueError as e:
-                    # 棋盘已满，无法落子，结束当前对局
-                    print(f"AI对局 {game_num} 棋盘已满: {e}")
-                    break
-                
-                # 记录数据
-                recorder.record_move(current_game_id, board_vector, probs, (x, y))
-                
-                # 执行落子
-                controller.make_move(x, y)
-            
-            # 保存结果
-            winner = controller.get_winner()
-            end_state = controller.get_state()
-            end_board = AIEngine.board_to_vector(end_state["board"], 0)
-            recorder.save_game_result(current_game_id, winner, end_board)
-            
+
+            winner = AIGameManager._play_single_game(
+                engine_black, engine_white, recorder, game_num,
+                name_prefix="ai_vs_ai_rnd",
+            )
+
             # 判断各方是否获胜（平局时两方都不算赢）
             ai1_won = (winner == ai1_color)
             ai2_won = (winner == ai2_color)
-            
+
             results.append({
                 "game": game_num,
                 "winner": winner,
                 "ai1_color": ai1_color,
                 "ai2_color": ai2_color,
                 "ai1_won": ai1_won,
-                "ai2_won": ai2_won
+                "ai2_won": ai2_won,
             })
-        
+
         return results
