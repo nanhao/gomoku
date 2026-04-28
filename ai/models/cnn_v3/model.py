@@ -1,12 +1,12 @@
 """CNN v3 极简卷积神经网络模型实现
 
 CNN v3 追求结构最简化：
-- 三层卷积统一 32 通道，无 BatchNorm，无 Dropout
-- FC 层先压缩到 64 维瓶颈，再映射到 225 维输出
-- Conv → ReLU 直接堆叠，FC → Softmax 输出
+- 纯卷积网络，无 FC 层、无 BatchNorm、无 Dropout
+- 用 1×1 卷积替代 FC 层，直接输出 15×15 空间概率图
+- 全程保持空间结构，Conv → ReLU → 1×1 Conv → Softmax
 
 网络结构：
-输入层(15x15x3) -> 卷积层(3层32通道) -> FC1(7200->64) -> FC_output(64->225) -> Softmax
+输入层(15x15x3) -> Conv(3→32) -> Conv(32→32) -> Conv(32→32) -> Conv1x1(32→1) -> Softmax
 
 输入编码：
 - 通道1：黑棋位置（1表示黑棋，0表示其他）
@@ -29,19 +29,19 @@ from ai.base_model import NeuralNetworkModel, board_vector_to_cnn_tensor
 
 
 class CNNV3Network(nn.Module):
-    """CNN v3 极简神经网络结构
+    """CNN v3 纯卷积神经网络结构
 
-    三层 32 通道卷积（无 BN、无 Dropout），FC 瓶颈压缩后输出 225 维。
-    结构最简化，探索极简网络在五子棋任务上的学习能力。
+    纯卷积设计，无 FC 层。用 1×1 卷积将 32 通道压缩为 1 通道，
+    直接输出 15×15 的空间概率图，展平后 Softmax 得到 225 维概率分布。
 
     输入：15x15x3 的棋盘状态
     输出：225 维的 Softmax 概率分布
 
     网络结构：
-    - 3 层卷积：3→32→32→32（统一 32 通道，无 BN）
-    - 2 层全连接：7200→64→225（64 维瓶颈压缩）
-    - Softmax 输出
-    - 参数量：约 49.5 万
+    - 3 层 3×3 卷积：3→32→32→32（统一 32 通道，无 BN）
+    - 1 层 1×1 卷积：32→1（替代 FC 层，仅 33 个参数）
+    - Flatten + Softmax 输出
+    - 参数量：约 1.9 万
     """
 
     def __init__(self):
@@ -59,13 +59,10 @@ class CNNV3Network(nn.Module):
         self.conv3 = nn.Conv2d(32, 32, kernel_size=3, padding=1)
         self.relu3 = nn.ReLU()
 
-        # 全连接层部分（64 维瓶颈压缩，与 CNN v2 结构一致）
-        # 32通道 * 15 * 15 = 7200
-        self.fc1 = nn.Linear(32 * 15 * 15, 64)
-        self.relu_fc1 = nn.ReLU()
-
-        # 输出层: 225个位置
-        self.fc_output = nn.Linear(64, 225)
+        # 1×1 卷积替代 FC 层：将 32 通道压缩为 1 通道
+        # 输出形状 (batch, 1, 15, 15)，展平后即为 225 维
+        self.conv_out = nn.Conv2d(32, 1, kernel_size=1)
+        self.relu_out = nn.ReLU()
 
         # Softmax 激活函数
         self.softmax = nn.Softmax(dim=1)
@@ -84,15 +81,11 @@ class CNNV3Network(nn.Module):
         x = self.relu2(self.conv2(x))
         x = self.relu3(self.conv3(x))
 
-        # 展平: (batch, 32, 15, 15) -> (batch, 7200)
+        # 1×1 卷积：32通道 → 1通道，保持空间结构 15x15
+        x = self.relu_out(self.conv_out(x))
+
+        # 展平: (batch, 1, 15, 15) -> (batch, 225)
         x = x.view(x.size(0), -1)
-
-        # 全连接层：瓶颈压缩 → 输出
-        x = self.fc1(x)
-        x = self.relu_fc1(x)
-
-        # 输出层
-        x = self.fc_output(x)
 
         # Softmax 激活，输出概率分布
         x = self.softmax(x)
@@ -101,10 +94,10 @@ class CNNV3Network(nn.Module):
 
 
 class CNNV3Model(NeuralNetworkModel):
-    """CNN v3 极简模型
+    """CNN v3 纯卷积极简模型
 
-    极简卷积神经网络模型，用于预测五子棋落子位置的概率。
-    三层 32 通道卷积 + 64 维瓶颈 FC，无 BN、无 Dropout。
+    纯卷积神经网络模型，用于预测五子棋落子位置的概率。
+    三层 3×3 卷积 + 一层 1×1 卷积，无 FC、无 BN、无 Dropout。
     继承 NeuralNetworkModel，通用逻辑由基类提供。
 
     默认行为：

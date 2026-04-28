@@ -303,11 +303,11 @@ python tests/run_tests.py
 - **训练方式**：与 CNN v1 相同
 - **模型文件**：`ai/models/cnn_v2/cnn_v2.pth`
 
-### CNN v3 模型（极简）
+### CNN v3 模型（纯卷积极简）
 
-- **网络结构**：卷积层(3→32→32→32, 无BN) → 全连接层(7200→64→225) → Softmax
-- **参数量**：约 49.5 万（CNN v2 的一半）
-- **特点**：无 BN、无 Dropout，64 维瓶颈 FC 压缩，结构最简
+- **网络结构**：卷积层(3→32→32→32, 无BN) → 1×1卷积(32→1) → Softmax
+- **参数量**：约 1.9 万（CNN v2 的 1.9%）
+- **特点**：纯卷积，无 FC、无 BN、无 Dropout，1×1 Conv 替代 FC 层
 - **训练方式**：与 CNN v1 相同
 - **模型文件**：`ai/models/cnn_v3/cnn_v3.pth`
 

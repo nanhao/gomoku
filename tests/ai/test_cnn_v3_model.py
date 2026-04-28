@@ -1,7 +1,7 @@
-"""CNN v3 极简模型测试
+"""CNN v3 纯卷积极简模型测试
 
-测试 CNN v3 极简卷积神经网络模型的功能。
-结构：3层卷积(32通道, 无BN) + FC(7200→225) + Softmax
+测试 CNN v3 纯卷积神经网络模型的功能。
+结构：3层3×3卷积(32通道, 无BN) + 1×1卷积(32→1) + Softmax
 """
 
 import os
@@ -93,15 +93,15 @@ class TestCNNv3Network(unittest.TestCase):
                                    f"网络中不应包含 Dropout 层，但发现 {type(module).__name__}")
 
     def test_network_param_count(self):
-        """CNN v3 参数量应约为 49.5 万（3层32通道，无BN，64维瓶颈FC）"""
+        """CNN v3 参数量应约为 1.9 万（纯卷积，1×1 Conv替代FC）"""
         network = CNNV3Network()
         total = sum(p.numel() for p in network.parameters())
 
-        # 3层32通道 + FC1(7200→64) + FC_output(64→225): 参数量约 49.5 万
-        self.assertGreaterEqual(total, 490_000,
-                               f"参数量 {total} 应 >= 49 万")
-        self.assertLessEqual(total, 500_000,
-                            f"参数量 {total} 应 <= 50 万")
+        # 3层3×3卷积(32通道) + 1×1卷积(32→1): 参数量约 1.9 万
+        self.assertGreaterEqual(total, 19_000,
+                               f"参数量 {total} 应 >= 1.9 万")
+        self.assertLessEqual(total, 20_000,
+                            f"参数量 {total} 应 <= 2 万")
 
     def test_network_conv_channels(self):
         """验证卷积层通道数为 32"""
@@ -120,16 +120,18 @@ class TestCNNv3Network(unittest.TestCase):
         self.assertEqual(network.conv3.out_channels, 32)
 
     def test_network_fc_direct_output(self):
-        """验证 FC 层为 64 维瓶颈结构：7200→64→225"""
+        """验证网络无 FC 层，输出层为 1×1 卷积(32→1)"""
         network = CNNV3Network()
 
-        # FC1 层输入应为 32*15*15=7200，输出为 64（瓶颈）
-        self.assertEqual(network.fc1.in_features, 32 * 15 * 15)
-        self.assertEqual(network.fc1.out_features, 64)
+        # 网络中不应包含任何 Linear 层
+        for module in network.modules():
+            self.assertNotIsInstance(module, nn.Linear,
+                                   f"纯卷积网络不应包含 Linear 层，但发现 {type(module).__name__}")
 
-        # FC_output 层输入为 64，输出为 225
-        self.assertEqual(network.fc_output.in_features, 64)
-        self.assertEqual(network.fc_output.out_features, 225)
+        # 输出层为 1×1 卷积：32→1
+        self.assertEqual(network.conv_out.in_channels, 32)
+        self.assertEqual(network.conv_out.out_channels, 1)
+        self.assertEqual(network.conv_out.kernel_size, (1, 1))
 
 
 class TestCNNv3Model(unittest.TestCase):
