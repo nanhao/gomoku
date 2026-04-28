@@ -9,6 +9,7 @@
     - FCv1Model                  —— 全连接模型
     - CNNV1Model                 —— 卷积模型 v1
     - CNNV2Model                 —— 卷积模型 v2（轻量化）
+    - CNNV3Model                 —— 卷积模型 v3（极简）
   - RandomModel                 —— 随机模型（不使用神经网络）
 """
 

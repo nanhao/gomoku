@@ -49,6 +49,13 @@ class TestGetModel(unittest.TestCase):
         self.assertIsInstance(model, BaseModel)
         self.assertEqual(model.name, "cnn_v2")
 
+    def test_get_model_cnn_v3(self):
+        """加载 cnn_v3 模型"""
+        model = get_model("cnn_v3")
+        self.assertIsNotNone(model)
+        self.assertIsInstance(model, BaseModel)
+        self.assertEqual(model.name, "cnn_v3")
+
     def test_get_model_unknown_raises(self):
         """未知模型名称应抛出 ValueError，消息包含模型名"""
         with self.assertRaises(ValueError) as ctx:
@@ -83,6 +90,12 @@ class TestGetTrainer(unittest.TestCase):
         from ai.models.cnn_v2.trainer import CNNV2Trainer
         trainer = get_trainer("cnn_v2", fresh=True)
         self.assertIsInstance(trainer, CNNV2Trainer)
+
+    def test_get_trainer_cnn_v3(self):
+        """cnn_v3 返回 CNNV3Trainer 实例"""
+        from ai.models.cnn_v3.trainer import CNNV3Trainer
+        trainer = get_trainer("cnn_v3", fresh=True)
+        self.assertIsInstance(trainer, CNNV3Trainer)
 
     def test_get_trainer_random_raises(self):
         """random 没有 trainer，应抛出 ValueError"""
@@ -150,6 +163,11 @@ class TestListModels(unittest.TestCase):
         models = list_models()
         self.assertIn("cnn_v2", models)
 
+    def test_list_models_contains_cnn_v3(self):
+        """list_models 应包含 cnn_v3"""
+        models = list_models()
+        self.assertIn("cnn_v3", models)
+
 
 class TestLazyLoading(unittest.TestCase):
     """测试懒加载：首次调用前不应导入模型模块"""
@@ -189,9 +207,9 @@ class TestLazyLoading(unittest.TestCase):
 class TestModelRegistryData(unittest.TestCase):
     """测试 MODEL_REGISTRY 数据完整性"""
 
-    def test_registry_has_four_models(self):
-        """MODEL_REGISTRY 应包含 4 个模型"""
-        self.assertEqual(len(MODEL_REGISTRY), 4)
+    def test_registry_has_five_models(self):
+        """MODEL_REGISTRY 应包含 5 个模型"""
+        self.assertEqual(len(MODEL_REGISTRY), 5)
 
     def test_registry_entry_format(self):
         """每个注册项格式为 (model_path, trainer_path_or_None)"""
@@ -213,8 +231,8 @@ class TestModelRegistryData(unittest.TestCase):
         self.assertIsNone(trainer_path)
 
     def test_trainable_models_have_trainers(self):
-        """fc_v1、cnn_v1、cnn_v2 应有 trainer"""
-        for name in ["fc_v1", "cnn_v1", "cnn_v2"]:
+        """fc_v1、cnn_v1、cnn_v2、cnn_v3 应有 trainer"""
+        for name in ["fc_v1", "cnn_v1", "cnn_v2", "cnn_v3"]:
             _, trainer_path = MODEL_REGISTRY[name]
             self.assertIsNotNone(trainer_path,
                                 f"{name} 应有 trainer_path")

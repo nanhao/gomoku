@@ -63,7 +63,7 @@ python ai/battle.py --ai1 <AI名称> --ai2 <AI名称> [--games <局数>]
 | `--ai2` | 第二方 AI 名称 | 必填 |
 | `--games` | 对战局数 | 10 |
 
-**可用 AI：** `random` / `fc_v1` / `cnn_v1` / `cnn_v2`
+**可用 AI：** `random` / `fc_v1` / `cnn_v1` / `cnn_v2` / `cnn_v3`
 
 ```bash
 # 示例
@@ -80,7 +80,7 @@ python ai/train_main.py --model <模型名称> --sample-dir <sample目录> [--ep
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `--model` | 模型名称（fc_v1/cnn_v1/cnn_v2） | `fc_v1` |
+| `--model` | 模型名称（fc_v1/cnn_v1/cnn_v2/cnn_v3） | `fc_v1` |
 | `--sample-dir` | 训练样本目录 | 必填 |
 | `--epochs` | 训练迭代数 | 1000 |
 
@@ -148,7 +148,7 @@ python ai/train_main.py --model <模型名称> --cycle [选项]
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `--model` | 模型名称（fc_v1/cnn_v1/cnn_v2） | fc_v1 |
+| `--model` | 模型名称（fc_v1/cnn_v1/cnn_v2/cnn_v3） | fc_v1 |
 | `--cycle` | 启用训练周期模式 | - |
 | `--rounds` | 训练轮数 | 10 |
 | `--games` | 每轮对局数 | 100 |
@@ -298,10 +298,18 @@ python tests/run_tests.py
 
 ### CNN v2 模型（轻量化）
 
-- **网络结构**：卷积层(3→64→64→64) → 全连接层(14400→64→225) → Softmax
+- **网络结构**：卷积层(3→64→64→64) + BN → 全连接层(14400→64→225) → Softmax
 - **参数量**：约 101 万（CNN v1 的 23%，计算量 18M MACs）
 - **训练方式**：与 CNN v1 相同
 - **模型文件**：`ai/models/cnn_v2/cnn_v2.pth`
+
+### CNN v3 模型（极简）
+
+- **网络结构**：卷积层(3→32→32→32, 无BN) → 全连接层(7200→225) → Softmax
+- **参数量**：约 164 万
+- **特点**：无 BN、无 Dropout、无中间隐藏层，FC 直出，结构最简
+- **训练方式**：与 CNN v1 相同
+- **模型文件**：`ai/models/cnn_v3/cnn_v3.pth`
 
 ---
 

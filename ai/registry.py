@@ -26,6 +26,7 @@ MODEL_REGISTRY: dict[str, tuple[str, str | None]] = {
     "fc_v1": ("ai.models.fc_v1.model.FCv1Model", "ai.models.fc_v1.trainer.FCv1Trainer"),
     "cnn_v1": ("ai.models.cnn_v1.model.CNNV1Model", "ai.models.cnn_v1.trainer.CNNV1Trainer"),
     "cnn_v2": ("ai.models.cnn_v2.model.CNNV2Model", "ai.models.cnn_v2.trainer.CNNV2Trainer"),
+    "cnn_v3": ("ai.models.cnn_v3.model.CNNV3Model", "ai.models.cnn_v3.trainer.CNNV3Trainer"),
 }
 
 
