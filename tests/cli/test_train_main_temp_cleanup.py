@@ -51,7 +51,7 @@ class TestTrainFromDirTempCleanup(unittest.TestCase):
     # ---- .json 文件路径分支 ----
 
     @patch('shutil.rmtree')
-    @patch('ai.train_main._create_temp_sample_dir', return_value='/fake/tmp/sample_dir')
+    @patch('ai.runners._create_temp_sample_dir', return_value='/fake/tmp/sample_dir')
     @patch('ai.train_main.get_trainer')
     def test_json_path_cleans_temp_dir_on_success(self, mock_get_trainer, mock_create, mock_rmtree):
         """训练成功后清理临时目录（.json 文件路径）"""
@@ -64,7 +64,7 @@ class TestTrainFromDirTempCleanup(unittest.TestCase):
         mock_rmtree.assert_any_call('/fake/tmp/sample_dir', ignore_errors=True)
 
     @patch('shutil.rmtree')
-    @patch('ai.train_main._create_temp_sample_dir', return_value='/fake/tmp/sample_dir')
+    @patch('ai.runners._create_temp_sample_dir', return_value='/fake/tmp/sample_dir')
     @patch('ai.train_main.get_trainer')
     def test_json_path_cleans_temp_dir_on_failure(self, mock_get_trainer, mock_create, mock_rmtree):
         """训练失败时仍清理临时目录（.json 文件路径）"""
@@ -82,8 +82,8 @@ class TestTrainFromDirTempCleanup(unittest.TestCase):
     # ---- 目录路径分支 ----
 
     @patch('shutil.rmtree')
-    @patch('ai.train_main._create_temp_sample_dir', return_value='/fake/tmp/sample_dir')
-    @patch('ai.train_main.SampleLoader')
+    @patch('ai.runners._create_temp_sample_dir', return_value='/fake/tmp/sample_dir')
+    @patch('ai.runners.SampleLoader')
     @patch('ai.train_main.get_trainer')
     def test_directory_path_cleans_temp_dir_on_success(self, mock_get_trainer, mock_loader_cls, mock_create, mock_rmtree):
         """训练成功后清理临时目录（目录路径）"""
@@ -99,8 +99,8 @@ class TestTrainFromDirTempCleanup(unittest.TestCase):
         mock_rmtree.assert_any_call('/fake/tmp/sample_dir', ignore_errors=True)
 
     @patch('shutil.rmtree')
-    @patch('ai.train_main._create_temp_sample_dir', return_value='/fake/tmp/sample_dir')
-    @patch('ai.train_main.SampleLoader')
+    @patch('ai.runners._create_temp_sample_dir', return_value='/fake/tmp/sample_dir')
+    @patch('ai.runners.SampleLoader')
     @patch('ai.train_main.get_trainer')
     def test_directory_path_cleans_temp_dir_on_failure(self, mock_get_trainer, mock_loader_cls, mock_create, mock_rmtree):
         """训练失败时仍清理临时目录（目录路径）"""

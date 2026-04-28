@@ -1,6 +1,7 @@
 """train_main.py 测试
 
-测试 get_trainer 工厂函数的模型名称映射和参数解析。
+测试参数解析、模式路由和 runners 模块的集成行为。
+get_trainer 的单元测试由 tests/ai/unit/test_registry.py 覆盖。
 """
 
 import json
@@ -13,67 +14,7 @@ from unittest.mock import patch, MagicMock
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from ai.train_main import get_trainer, main
-
-
-class TestGetTrainer(unittest.TestCase):
-    """测试 get_trainer 函数"""
-
-    def test_get_trainer_fc_v1(self):
-        """fc_v1 返回 FCv1Trainer"""
-        from ai.models.fc_v1.trainer import FCv1Trainer
-        trainer = get_trainer("fc_v1", fresh=True)
-        self.assertIsInstance(trainer, FCv1Trainer)
-
-    def test_get_trainer_cnn_v1(self):
-        """cnn_v1 返回 CNNV1Trainer"""
-        from ai.models.cnn_v1.trainer import CNNV1Trainer
-        trainer = get_trainer("cnn_v1", fresh=True)
-        self.assertIsInstance(trainer, CNNV1Trainer)
-
-    def test_get_trainer_cnn_v2(self):
-        """cnn_v2 返回 CNNV2Trainer"""
-        from ai.models.cnn_v2.trainer import CNNV2Trainer
-        trainer = get_trainer("cnn_v2", fresh=True)
-        self.assertIsInstance(trainer, CNNV2Trainer)
-
-    def test_get_trainer_random_raises(self):
-        """random 不是有效的 trainer 模型名，应抛出 ValueError"""
-        with self.assertRaises(ValueError) as ctx:
-            get_trainer("random")
-        self.assertIn("不支持的模型", str(ctx.exception))
-        self.assertIn("random", str(ctx.exception))
-
-    def test_get_trainer_invalid_raises(self):
-        """无效模型名抛出 ValueError"""
-        with self.assertRaises(ValueError) as ctx:
-            get_trainer("invalid_model")
-        self.assertIn("不支持的模型", str(ctx.exception))
-        self.assertIn("invalid_model", str(ctx.exception))
-
-    def test_get_trainer_fc_v1_with_fresh(self):
-        """fc_v1 支持 fresh 参数"""
-        trainer = get_trainer("fc_v1", fresh=True)
-        self.assertIsNotNone(trainer)
-        self.assertIsNotNone(trainer.model)
-
-    def test_get_trainer_cnn_v1_with_fresh(self):
-        """cnn_v1 支持 fresh 参数"""
-        trainer = get_trainer("cnn_v1", fresh=True)
-        self.assertIsNotNone(trainer)
-        self.assertIsNotNone(trainer.model)
-
-    def test_get_trainer_cnn_v2_with_fresh(self):
-        """cnn_v2 支持 fresh 参数"""
-        trainer = get_trainer("cnn_v2", fresh=True)
-        self.assertIsNotNone(trainer)
-        self.assertIsNotNone(trainer.model)
-
-    def test_get_trainer_passes_kwargs(self):
-        """额外 kwargs 应传递给 Trainer 构造函数"""
-        trainer = get_trainer("fc_v1", fresh=True, lr_scheduler_type="step")
-        # 不崩溃即通过
-        self.assertIsNotNone(trainer)
+from ai.train_main import main
 
 
 class TestTrainMainArgParsing(unittest.TestCase):
@@ -175,7 +116,7 @@ class TestSelfPlayMergeOutput(unittest.TestCase):
                 mock_trainer = MagicMock()
                 mock_get.return_value = mock_trainer
 
-                with patch('ai.self_play_generator.SelfPlayGenerator') as mock_gen_cls:
+                with patch('ai.runners.SelfPlayGenerator') as mock_gen_cls:
                     mock_generator = MagicMock()
                     mock_generator.generate.return_value = {
                         "results": [{"winner": 1}],
@@ -184,7 +125,7 @@ class TestSelfPlayMergeOutput(unittest.TestCase):
                     }
                     mock_gen_cls.return_value = mock_generator
                 
-                    with patch('ai.train_main.merge_directories') as mock_merge:
+                    with patch('ai.runners.merge_directories') as mock_merge:
                         main()
                 
                         mock_generator.generate.assert_called_once()
@@ -205,7 +146,7 @@ class TestSelfPlayMergeOutput(unittest.TestCase):
                     mock_trainer = MagicMock()
                     mock_get.return_value = mock_trainer
 
-                    with patch('ai.self_play_generator.SelfPlayGenerator') as mock_gen_cls:
+                    with patch('ai.runners.SelfPlayGenerator') as mock_gen_cls:
                         mock_generator = MagicMock()
                         mock_generator.generate.return_value = {
                             "results": [{"winner": 1}],

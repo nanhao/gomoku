@@ -12,7 +12,8 @@ from unittest.mock import patch, MagicMock
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from ai.train_main import main, discover_sample_dirs
+from ai.train_main import main
+from ai.runners import discover_sample_dirs
 
 
 class TestSelfPlayExclusive(unittest.TestCase):
