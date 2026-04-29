@@ -25,8 +25,9 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  python ai/create_samples.py --model cnn_v3 --output ai/train_data/win_samples.json
-  python ai/create_samples.py --model cnn_v3 --mode winning_move --games 200 --output ai/train_data/win_samples.json
+  python ai/create_samples.py --model cnn_v3.1 --output ai/train_data/win_samples.json
+  python ai/create_samples.py --model cnn_v3.1 --mode winning_move --games 200 --output ai/train_data/win_samples.json
+  python ai/create_samples.py --model fc_v1 --output ai/train_data/fc_samples.json
         """
     )
 
@@ -34,7 +35,7 @@ def main():
         '--model',
         type=str,
         required=True,
-        help='模型名称，如 cnn_v3、fc_v1'
+        help='模型指定，如 cnn_v3.1、fc_v1'
     )
 
     parser.add_argument(
@@ -75,7 +76,7 @@ def main():
     engine = AIEngine(model)
 
     # 创建 DataRecorder
-    recorder = DataRecorder(ai_name=f"{model.name}_battle")
+    recorder = DataRecorder(ai_name=f"{model.full_name}_battle")
 
     # 执行对弈
     print(f"开始 {args.model} 自我对弈...")

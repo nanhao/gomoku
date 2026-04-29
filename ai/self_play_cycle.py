@@ -75,14 +75,14 @@ class SelfPlayCycle:
         # 生成训练会话唯一子目录名
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         short_uuid = uuid.uuid4().hex[:8]
-        session_dir = f"{self.trainer.model_name}_{timestamp}_{short_uuid}"
+        session_dir = f"{self.trainer.model_full_name}_{timestamp}_{short_uuid}"
 
         # 使用注入的 logger 或自动创建（带 session_dir 子目录隔离）
         if self.trainer.loss_logger is not None:
             loss_logger = self.trainer.loss_logger
         else:
             loss_logger = LossLogger(
-                model_name=self.trainer.model_name,
+                model_name=self.trainer.model_full_name,
                 session_dir=session_dir,
                 log_type="round_level",
                 total_rounds=rounds,
@@ -176,7 +176,7 @@ class SelfPlayCycle:
         if session_dir:
             comparison_path = LossLogger.plot_comparison(
                 session_dir=session_dir,
-                model_name=self.trainer.model_name
+                model_name=self.trainer.model_full_name
             )
             if comparison_path:
                 print(f"合并对比图已生成: {comparison_path}")

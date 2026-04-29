@@ -6,6 +6,9 @@
     # 训练周期（fc_v1 模型）
     python ai/train_main.py --model fc_v1 --cycle [--rounds 100] [--games 100]
 
+    # 训练周期（多代模型 cnn_v3.2）
+    python ai/train_main.py --model cnn_v3.2 --cycle [--rounds 100] [--games 100]
+
     # 从已有数据目录训练模型
     python ai/train_main.py --model fc_v1 --train-from-dir ai/train_data/fc_v1_self_play_1
 """
@@ -31,6 +34,9 @@ def main():
   # 训练周期 fc_v1（100轮，每轮100局）
   python ai/train_main.py --model fc_v1 --cycle
 
+  # 训练周期 cnn_v3.2（多代模型）
+  python ai/train_main.py --model cnn_v3.2 --cycle
+
   # 训练周期 fc_v1（自定义参数）
   python ai/train_main.py --model fc_v1 --cycle --rounds 50 --games 50
 
@@ -46,7 +52,7 @@ def main():
         '--model',
         type=str,
         default='fc_v1',
-        help='模型名称，如 fc_v1、cnn_v1、cnn_v2，默认 fc_v1'
+        help='模型指定，如 fc_v1、cnn_v3.2，默认 fc_v1'
     )
     
     parser.add_argument(

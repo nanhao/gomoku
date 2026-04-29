@@ -28,38 +28,45 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from ai.base_model import BaseModel
 from ai.base_trainer import get_device
+from ai.registry import _parse_model_spec, _import_class, MODEL_REGISTRY
 from ai.sample_loader import SampleLoader
 
 
-def _get_model_registry():
-    """获取模型注册表（延迟导入）"""
-    from ai.models.cnn_v2 import CNNV2Model
-    return {
-        "cnn_v2": CNNV2Model,
-    }
+def load_model(spec: str, device: torch.device) -> BaseModel:
+    """根据 spec 加载 fresh 模型实例（不加载已保存的参数）
 
-
-def load_model(model_name: str, device: torch.device) -> BaseModel:
-    """根据名称加载模型实例（fresh=True，不加载已有参数）
+    支持 spec 格式（如 "cnn_v3.2"），使用 registry 的解析和导入机制。
+    始终以 fresh=True 构造模型，确保 LR Range Test 从随机初始化开始。
 
     Args:
-        model_name: 模型名称
+        spec: 模型指定字符串，如 "cnn_v2"、"cnn_v3.1"
         device: 目标设备
 
     Returns:
         模型实例（已移至指定设备）
 
     Raises:
-        ValueError: 不支持的模型名称
+        ValueError: 不支持的模型指定
     """
-    registry = _get_model_registry()
-    if model_name not in registry:
+    parsed = _parse_model_spec(spec)
+    model_name = parsed.name
+    gen = parsed.gen
+
+    if model_name not in MODEL_REGISTRY:
         raise ValueError(
-            f"不支持的模型名称: '{model_name}'，"
-            f"可选值: {list(registry.keys())}"
+            f"不支持的模型: '{model_name}'，"
+            f"可选值: {list(MODEL_REGISTRY.keys())}"
         )
-    model_cls = registry[model_name]
-    model = model_cls(fresh=True)
+
+    model_path = MODEL_REGISTRY[model_name].model_class_path
+    model_cls = _import_class(model_path)
+
+    # 构造 fresh 模型（LR Range Test 需要从随机初始化开始）
+    if gen is not None:
+        model = model_cls(fresh=True, gen=gen)
+    else:
+        model = model_cls(fresh=True)
+
     if model.network is not None:
         model.network.to(device)
     return model
@@ -236,7 +243,7 @@ def parse_args():
     """解析命令行参数"""
     parser = argparse.ArgumentParser(description='LR Range Test')
     parser.add_argument('--model', type=str, required=True,
-                        help='模型名称 (cnn_v2)')
+                        help='模型指定，如 cnn_v2、cnn_v3.1')
     parser.add_argument('--data', type=str, required=True,
                         help='训练数据路径 (.json 文件或目录)')
     parser.add_argument('--rounds', type=int, default=50,

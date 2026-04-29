@@ -152,8 +152,8 @@ def main():
   # fc_v1 vs cnn_v2，对战 50 局
   python ai/battle.py --ai1 fc_v1 --ai2 cnn_v2 --games 50
 
-  # cnn_v2 vs cnn_v3，对战 50 局
-  python ai/battle.py --ai1 cnn_v2 --ai2 cnn_v3 --games 50
+  # cnn_v3.1 vs cnn_v3.2（多代模型），对战 50 局
+  python ai/battle.py --ai1 cnn_v3.1 --ai2 cnn_v3.2 --games 50
         """
     )
     
@@ -161,14 +161,14 @@ def main():
         "--ai1",
         type=str,
         required=True,
-        help="第一方 AI 名称（如 random, fc_v1, cnn_v1, cnn_v2, cnn_v3)"
+        help="第一方 AI 指定（如 random, fc_v1, cnn_v3.1)"
     )
 
     parser.add_argument(
         "--ai2",
         type=str,
         required=True,
-        help="第二方 AI 名称（如 random, fc_v1, cnn_v1, cnn_v2, cnn_v3)"
+        help="第二方 AI 指定（如 random, fc_v1, cnn_v3.1)"
     )
     
     parser.add_argument(

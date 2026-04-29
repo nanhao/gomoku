@@ -185,9 +185,9 @@ class BaseTrainer(ABC):
         if self.loss_logger is not None:
             loss_logger = self.loss_logger
         elif kwargs:
-            loss_logger = LossLogger(model_name=self.model_name, **kwargs)
+            loss_logger = LossLogger(model_name=self.model_full_name, **kwargs)
         else:
-            loss_logger = LossLogger(model_name=self.model_name)
+            loss_logger = LossLogger(model_name=self.model_full_name)
         self.model.network.train() if self.model.network is not None else None
         return loss_logger
 
