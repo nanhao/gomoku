@@ -108,30 +108,27 @@ class TestGameModeSelector(unittest.TestCase):
         assert selector.result["mode"] == "replay"
 
     def test_get_available_ais(self):
-        """测试获取可用 AI 列表 - 动态扫描 ai/models 目录"""
+        """测试获取可用 AI 列表 - 委托给 registry.list_models_with_full_name()"""
         selector = GameModeSelector(self.root)
         ais = selector._get_available_ais()
 
         assert isinstance(ais, list)
-        assert len(ais) >= 2, "ai/models 目录下至少应有 random 和 fc_v1 两个 AI"
+        assert len(ais) >= 2, "注册表中至少应有 random 和 fc_v1 两个 AI"
         assert "random" in ais, "random AI 必须存在"
         assert "fc_v1" in ais, "fc_v1 AI 必须存在"
 
-    def test_get_available_ais_dynamic_scan(self):
-        """测试动态扫描 ai/models 目录 - 验证返回的是目录名列表"""
-        import os
+    def test_get_available_ais_delegates_to_registry(self):
+        """测试 _get_available_ais 委托给 registry.list_models_with_full_name()"""
+        from unittest.mock import patch
         selector = GameModeSelector(self.root)
-        ais = selector._get_available_ais()
 
-        # 验证每个 AI 名称都对应 ai/models 目录下的一个子目录
-        ai_dir = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            "ai", "models"
-        )
-        for ai_name in ais:
-            ai_path = os.path.join(ai_dir, ai_name)
-            assert os.path.isdir(ai_path), f"{ai_name} 应对应 ai/models 目录下的子目录"
-            assert not ai_name.startswith("__"), "不应包含 __ 开头的特殊目录"
+        # mock registry 函数，验证委托调用
+        with patch('ai.registry.list_models_with_full_name') as mock_fn:
+            mock_fn.return_value = ["random", "fc_v1", "cnn_v3.1"]
+            ais = selector._get_available_ais()
+
+        mock_fn.assert_called_once()
+        assert ais == ["random", "fc_v1", "cnn_v3.1"]
 
     def test_get_result_none(self):
         """测试获取结果 - 未选择时返回 None"""

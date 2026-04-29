@@ -8,6 +8,7 @@ import sys
 import os
 import tempfile
 import shutil
+import pytest
 from unittest.mock import MagicMock, patch, PropertyMock, call
 
 # 添加项目根目录到路径
@@ -16,6 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from game import GomokuController
 from game.save import GomokuSave
 from app import GameSession, GUIHelper
+from app.exceptions import ModelLoadError
 from gui.main import GomokuGUI
 
 
@@ -327,3 +329,81 @@ class TestSaveGame:
 
         mock_msg.showinfo.assert_called_once()
         assert "保存" in mock_msg.showinfo.call_args[0][1] or "保存" in str(mock_msg.showinfo.call_args)
+
+
+class TestModelLoadErrorHandling:
+    """测试 ModelLoadError 在 GUI 层的处理"""
+
+    def test_game_session_raises_model_load_error(self):
+        """GameSession 构造函数在 pve 模式下应能抛出 ModelLoadError"""
+        controller = GomokuController()
+        with pytest.raises(ModelLoadError):
+            GameSession(
+                mode="pve",
+                controller=controller,
+                ai_name="unknown_model",
+                ai_player=2,
+            )
+
+    def test_main_catches_model_load_error_pve(self):
+        """main() 中创建 GomokuGUI 时 ModelLoadError 应被捕获并弹窗"""
+        with patch("gui.main.tk.Tk") as MockTk, \
+             patch("gui.main.GameModeSelector") as MockSelector, \
+             patch("gui.main.messagebox") as mock_msg, \
+             patch("gui.main.create_pve_config") as mock_config:
+
+            # 模拟 Tk 窗口（selector_root 和 game root 共用此 mock）
+            mock_tk_root = MagicMock()
+            MockTk.return_value = mock_tk_root
+
+            # 模拟用户选择 pve 模式
+            mock_selector = MagicMock()
+            mock_selector.result = {
+                "mode": "pve",
+                "player_color": "black",
+                "ai": "unknown_model",
+            }
+            MockSelector.return_value = mock_selector
+
+            mock_config.return_value = {"ai_player": 2, "ai_model": "unknown_model"}
+
+            # GomokuGUI 抛出 ModelLoadError
+            with patch("gui.main.GomokuGUI", side_effect=ModelLoadError("模型加载失败：未知模型")):
+                from gui.main import main
+                main()
+
+            # 验证弹窗提示
+            mock_msg.showerror.assert_called_once_with(
+                "模型加载失败", "模型加载失败：未知模型"
+            )
+
+    def test_main_catches_model_load_error_ai_vs_ai(self):
+        """main() 中 AI 内战模式 ModelLoadError 应被捕获并弹窗"""
+        with patch("gui.main.tk.Tk") as MockTk, \
+             patch("gui.main.GameModeSelector") as MockSelector, \
+             patch("gui.main.run_ai_vs_ai_mode") as mock_run, \
+             patch("gui.main.messagebox") as mock_msg:
+
+            # 模拟 selector_root Tk 窗口
+            MockTk.return_value = MagicMock()
+
+            # 模拟用户选择 AI 内战模式
+            mock_selector = MagicMock()
+            mock_selector.result = {
+                "mode": "ai_vs_ai",
+                "num_games": 1,
+                "ai1": "unknown_model",
+                "ai2": "random",
+            }
+            MockSelector.return_value = mock_selector
+
+            # run_ai_vs_ai_mode 抛出 ModelLoadError
+            mock_run.side_effect = ModelLoadError("模型加载失败：未知模型")
+
+            from gui.main import main
+            main()
+
+            # 验证弹窗提示
+            mock_msg.showerror.assert_called_once_with(
+                "模型加载失败", "模型加载失败：未知模型"
+            )

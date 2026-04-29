@@ -17,6 +17,7 @@ from tkinter import messagebox, simpledialog
 
 from game import GomokuController
 from app import GameSession, GUIHelper, get_ai_data_dir, create_pve_config
+from app.exceptions import ModelLoadError
 
 from gui.components import GameModeSelector, GameBoard
 from gui.components import ReplayBrowser, ReplayWindow
@@ -412,7 +413,10 @@ def main():
         num_games = selector.result.get("num_games", 1)
         ai1 = selector.result.get("ai1", "random")
         ai2 = selector.result.get("ai2", "random")
-        run_ai_vs_ai_mode(num_games, ai1, ai2)
+        try:
+            run_ai_vs_ai_mode(num_games, ai1, ai2)
+        except ModelLoadError as e:
+            messagebox.showerror("模型加载失败", str(e))
         return
     
     # 回放模式
@@ -442,8 +446,14 @@ def main():
         ai_model = pve_config["ai_model"]
     
     # 创建主游戏窗口
+    # 人机对战时 GameSession 可能抛出 ModelLoadError，捕获后弹窗提示并回退
     root = tk.Tk()
-    app = GomokuGUI(root, game_mode=game_mode, ai_player=ai_player, ai_model=ai_model)
+    try:
+        app = GomokuGUI(root, game_mode=game_mode, ai_player=ai_player, ai_model=ai_model)
+    except ModelLoadError as e:
+        root.destroy()
+        messagebox.showerror("模型加载失败", str(e))
+        return
     root.mainloop()
 
 
