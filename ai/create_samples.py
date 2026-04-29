@@ -83,7 +83,14 @@ def main():
     print(f"  对局数 (games): {args.games}")
     print(f"  模式 (mode):    {args.mode}")
 
-    results = AIGameManager.start_ai_vs_ai(engine, engine, args.games, recorder)
+    def on_progress(current, total):
+        pct = current * 100 // total
+        print(f"\r进度: {current}/{total} ({pct}%)", end="", flush=True)
+
+    results = AIGameManager.start_ai_vs_ai(
+        engine, engine, args.games, recorder, on_progress=on_progress
+    )
+    print()  # 换行，避免后续输出黏在进度行上
 
     # 打印对局统计
     black_wins = sum(1 for r in results if r["winner"] == 1)
