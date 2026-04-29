@@ -382,6 +382,7 @@ class BaseTrainer(ABC):
         # 将 epochs 自动传递给 LossLogger（用于图表标题）
         setup_kwargs = dict(kwargs)
         setup_kwargs.setdefault('epochs', epochs)
+        setup_kwargs['dense_log'] = False  # train_batch 始终用 epoch-based logging
         loss_logger = self._setup_training(**setup_kwargs)
 
         # 执行训练循环

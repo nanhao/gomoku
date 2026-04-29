@@ -116,7 +116,7 @@ class SampleLoader:
     def load_and_split(
         self,
         sample_dirs: List[str],
-        val_ratio: float = 0.2,
+        val_ratio: float = 0.0,
         seed: int = 42
     ) -> Tuple[list, list]:
         """加载多个 sample.json 并按比例分割为训练集和验证集
@@ -126,7 +126,7 @@ class SampleLoader:
 
         Args:
             sample_dirs: 包含 sample.json 的目录路径列表
-            val_ratio: 验证集比例，默认 0.2（20%）
+            val_ratio: 验证集比例，默认 0.0（不分割）
             seed: 随机种子，确保分割可复现，默认 42
 
         Returns:
