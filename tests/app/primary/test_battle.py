@@ -10,6 +10,8 @@
 import sys
 import os
 import shutil
+import tempfile
+from unittest.mock import patch
 
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 if project_root not in sys.path:
@@ -35,6 +37,17 @@ class TestBattleSessionRun:
 
     def setup_method(self):
         _clean_test_root()
+        self.test_save_dir = tempfile.mkdtemp(prefix="test_battle_save_")
+        # Patch GomokuController 使其使用临时目录，避免写入 game/save/
+        self._patcher = patch(
+            'ai.game_manager.GomokuController',
+            lambda save_dir=None: __import__('game').GomokuController(save_dir=self.test_save_dir)
+        )
+        self._patcher.start()
+
+    def teardown_method(self):
+        self._patcher.stop()
+        shutil.rmtree(self.test_save_dir, ignore_errors=True)
 
     def test_run_returns_results_with_correct_length(self):
         """run() 应返回长度等于 num_games 的结果列表"""

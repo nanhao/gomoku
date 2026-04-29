@@ -7,6 +7,8 @@ import sys
 import os
 import unittest
 import shutil
+import tempfile
+from unittest.mock import patch
 
 # 添加项目根目录到路径（支持从任何目录运行）
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -153,18 +155,25 @@ class TestAIGameManagerAIvsAI(unittest.TestCase):
     
     def setUp(self):
         """测试前准备"""
-        self.test_save_dir = "test_game_save"
+        self.test_save_dir = tempfile.mkdtemp(prefix="test_game_save_")
         self.test_ai_data_dir = "test_ai_data_vs_ai"
         
-        for d in [self.test_save_dir, self.test_ai_data_dir]:
-            if os.path.exists(d):
-                shutil.rmtree(d)
+        if os.path.exists(self.test_ai_data_dir):
+            shutil.rmtree(self.test_ai_data_dir)
+        
+        # Patch GomokuController 使其使用临时目录，避免写入 game/save/
+        self._patcher = patch(
+            'ai.game_manager.GomokuController',
+            lambda save_dir=None: GomokuController(save_dir=self.test_save_dir)
+        )
+        self._patcher.start()
     
     def tearDown(self):
         """测试后清理"""
-        for d in [self.test_save_dir, self.test_ai_data_dir]:
-            if os.path.exists(d):
-                shutil.rmtree(d)
+        self._patcher.stop()
+        shutil.rmtree(self.test_save_dir, ignore_errors=True)
+        if os.path.exists(self.test_ai_data_dir):
+            shutil.rmtree(self.test_ai_data_dir)
     
     def test_start_ai_vs_ai_single_game(self):
         """测试 AI 内战，1 局"""
@@ -269,17 +278,25 @@ class TestEndBoardDimension(unittest.TestCase):
 
     def setUp(self):
         """测试前准备"""
-        self.test_save_dir = "test_game_save_end_board"
+        self.test_save_dir = tempfile.mkdtemp(prefix="test_game_save_eb_")
         self.test_ai_data_dir = "test_ai_data_end_board"
-        for d in [self.test_save_dir, self.test_ai_data_dir]:
-            if os.path.exists(d):
-                shutil.rmtree(d)
+        
+        if os.path.exists(self.test_ai_data_dir):
+            shutil.rmtree(self.test_ai_data_dir)
+        
+        # Patch GomokuController 使其使用临时目录，避免写入 game/save/
+        self._patcher = patch(
+            'ai.game_manager.GomokuController',
+            lambda save_dir=None: GomokuController(save_dir=self.test_save_dir)
+        )
+        self._patcher.start()
 
     def tearDown(self):
         """测试后清理"""
-        for d in [self.test_save_dir, self.test_ai_data_dir]:
-            if os.path.exists(d):
-                shutil.rmtree(d)
+        self._patcher.stop()
+        shutil.rmtree(self.test_save_dir, ignore_errors=True)
+        if os.path.exists(self.test_ai_data_dir):
+            shutil.rmtree(self.test_ai_data_dir)
 
     def test_start_ai_vs_ai_end_board_dimension(self):
         """Bug M1: start_ai_vs_ai 保存的 end_board 应为 226 维"""
@@ -333,17 +350,25 @@ class TestGameIdConsistency(unittest.TestCase):
 
     def setUp(self):
         """测试前准备"""
-        self.test_save_dir = "test_game_save_id"
+        self.test_save_dir = tempfile.mkdtemp(prefix="test_game_save_id_")
         self.test_ai_data_dir = "test_ai_data_id"
-        for d in [self.test_save_dir, self.test_ai_data_dir]:
-            if os.path.exists(d):
-                shutil.rmtree(d)
+        
+        if os.path.exists(self.test_ai_data_dir):
+            shutil.rmtree(self.test_ai_data_dir)
+        
+        # Patch GomokuController 使其使用临时目录，避免写入 game/save/
+        self._patcher = patch(
+            'ai.game_manager.GomokuController',
+            lambda save_dir=None: GomokuController(save_dir=self.test_save_dir)
+        )
+        self._patcher.start()
 
     def tearDown(self):
         """测试后清理"""
-        for d in [self.test_save_dir, self.test_ai_data_dir]:
-            if os.path.exists(d):
-                shutil.rmtree(d)
+        self._patcher.stop()
+        shutil.rmtree(self.test_save_dir, ignore_errors=True)
+        if os.path.exists(self.test_ai_data_dir):
+            shutil.rmtree(self.test_ai_data_dir)
 
     def test_ai_vs_ai_random_uses_recorder_game_id(self):
         """Bug L3: start_ai_vs_ai_random 使用 recorder.current_game_id 而非 game_num"""

@@ -9,6 +9,7 @@ import os
 import unittest
 import shutil
 import tempfile
+from unittest.mock import patch
 
 # 添加项目根目录到路径（支持从任何目录运行）
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -30,11 +31,21 @@ class TestPlaySingleGameMainFlow(unittest.TestCase):
         self.temp_dir = tempfile.mkdtemp(prefix="test_play_single_")
         self.test_ai_data_dir = os.path.join(self.temp_dir, "ai_data")
         os.makedirs(self.test_ai_data_dir, exist_ok=True)
+        
+        self.test_save_dir = tempfile.mkdtemp(prefix="test_save_single_")
+        # Patch GomokuController 使其使用临时目录，避免写入 game/save/
+        self._patcher = patch(
+            'ai.game_manager.GomokuController',
+            lambda save_dir=None: GomokuController(save_dir=self.test_save_dir)
+        )
+        self._patcher.start()
 
     def tearDown(self):
         """测试后清理：删除临时目录"""
+        self._patcher.stop()
         if os.path.exists(self.temp_dir):
             shutil.rmtree(self.temp_dir)
+        shutil.rmtree(self.test_save_dir, ignore_errors=True)
 
     def test_normal_game_returns_winner(self):
         """正常完成一局，返回有效的 winner 值（1=黑, 2=白, 3=平局）"""
@@ -144,11 +155,21 @@ class TestPlaySingleGameEdgeCases(unittest.TestCase):
         self.temp_dir = tempfile.mkdtemp(prefix="test_play_edge_")
         self.test_ai_data_dir = os.path.join(self.temp_dir, "ai_data")
         os.makedirs(self.test_ai_data_dir, exist_ok=True)
+        
+        self.test_save_dir = tempfile.mkdtemp(prefix="test_save_edge_")
+        # Patch GomokuController 使其使用临时目录，避免写入 game/save/
+        self._patcher = patch(
+            'ai.game_manager.GomokuController',
+            lambda save_dir=None: GomokuController(save_dir=self.test_save_dir)
+        )
+        self._patcher.start()
 
     def tearDown(self):
         """测试后清理：删除临时目录"""
+        self._patcher.stop()
         if os.path.exists(self.temp_dir):
             shutil.rmtree(self.temp_dir)
+        shutil.rmtree(self.test_save_dir, ignore_errors=True)
 
     def test_game_without_extra_params(self):
         """仅传入必需参数时，正常运行不报错"""
@@ -216,11 +237,21 @@ class TestPlaySingleGameBoardFull(unittest.TestCase):
         self.temp_dir = tempfile.mkdtemp(prefix="test_play_full_")
         self.test_ai_data_dir = os.path.join(self.temp_dir, "ai_data")
         os.makedirs(self.test_ai_data_dir, exist_ok=True)
+        
+        self.test_save_dir = tempfile.mkdtemp(prefix="test_save_full_")
+        # Patch GomokuController 使其使用临时目录，避免写入 game/save/
+        self._patcher = patch(
+            'ai.game_manager.GomokuController',
+            lambda save_dir=None: GomokuController(save_dir=self.test_save_dir)
+        )
+        self._patcher.start()
 
     def tearDown(self):
         """测试后清理：删除临时目录"""
+        self._patcher.stop()
         if os.path.exists(self.temp_dir):
             shutil.rmtree(self.temp_dir)
+        shutil.rmtree(self.test_save_dir, ignore_errors=True)
 
     def test_board_full_value_error_handled(self):
         """当引擎抛出 ValueError（棋盘已满）时，应正常结束并返回 winner"""

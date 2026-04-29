@@ -14,6 +14,8 @@ import tkinter as tk
 import unittest.mock as mock
 import time
 import unittest
+import tempfile
+import shutil
 
 # 确保项目根目录在路径中
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -27,7 +29,7 @@ from ai.models.random import RandomModel
 from gui.main import GomokuGUI
 
 
-def _make_gui(game_mode="pvp", ai_player=None, ai_model="random"):
+def _make_gui(game_mode="pvp", ai_player=None, ai_model="random", save_dir=None):
     """
     构造 GomokuGUI 实例，绕过 __init__ 中的 Tkinter 界面创建，
     只初始化核心逻辑属性（controller / session / helper）。
@@ -39,7 +41,7 @@ def _make_gui(game_mode="pvp", ai_player=None, ai_model="random"):
 
     gui = GomokuGUI.__new__(GomokuGUI)
     gui.root = root
-    gui.controller = GomokuController()
+    gui.controller = GomokuController(save_dir=save_dir)
     gui._display_update_called = False   # 用于追踪 _update_display 是否被调用
     gui._ai_move_scheduled = False     # 用于追踪 _ai_move 是否被调度
 
@@ -75,7 +77,8 @@ class TestGomokuGUIOnBoardClick:
     """测试 _on_board_click 的核心逻辑"""
 
     def setup_method(self):
-        self.gui, self.root = _make_gui(game_mode="pvp")
+        self.test_save_dir = tempfile.mkdtemp(prefix="test_gui_save_")
+        self.gui, self.root = _make_gui(game_mode="pvp", save_dir=self.test_save_dir)
         self.gui.controller.new_game(f"测试_pvp_{id(self.gui)}")  # 用对象id保证名称唯一
 
     def teardown_method(self):
@@ -83,6 +86,7 @@ class TestGomokuGUIOnBoardClick:
             self.root.destroy()
         except tk.TclError:
             pass  # 窗口可能已被销毁，忽略
+        shutil.rmtree(self.test_save_dir, ignore_errors=True)
 
     def test_on_board_click_no_game_does_not_crash(self):
         """无游戏时点击不应崩溃"""
@@ -90,7 +94,7 @@ class TestGomokuGUIOnBoardClick:
         # 新建一个无游戏的 controller 来模拟无游戏状态
         gui_no_game = GomokuGUI.__new__(GomokuGUI)
         gui_no_game.root = self.root
-        gui_no_game.controller = GomokuController()  # 无游戏状态
+        gui_no_game.controller = GomokuController(save_dir=self.test_save_dir)  # 无游戏状态
         gui_no_game._display_update_called = False
         gui_no_game._ai_move_scheduled = False
         gui_no_game.session = self.gui.session
@@ -137,7 +141,8 @@ class TestGomokuGUIPveAiPlayer2:
     """玩家执黑（ai_player=2，AI执白）的人机对战测试"""
 
     def setup_method(self):
-        self.gui, self.root = _make_gui(game_mode="pve", ai_player=2, ai_model="random")
+        self.test_save_dir = tempfile.mkdtemp(prefix="test_gui_pve2_")
+        self.gui, self.root = _make_gui(game_mode="pve", ai_player=2, ai_model="random", save_dir=self.test_save_dir)
         self.gui.controller.new_game(f"测试_pve黑_{id(self.gui)}")  # 用对象id保证名称唯一
 
     def teardown_method(self):
@@ -145,6 +150,7 @@ class TestGomokuGUIPveAiPlayer2:
             self.root.destroy()
         except tk.TclError:
             pass  # 窗口可能已被销毁，忽略
+        shutil.rmtree(self.test_save_dir, ignore_errors=True)
 
     def test_ai_player_is_2_when_human_plays_black(self):
         """玩家选黑时，AI 应执白（ai_player=2）"""
@@ -195,7 +201,8 @@ class TestGomokuGUIPveAiPlayer1:
     """玩家执白（ai_player=1，AI执黑）的人机对战测试"""
 
     def setup_method(self):
-        self.gui, self.root = _make_gui(game_mode="pve", ai_player=1, ai_model="fc_v1")
+        self.test_save_dir = tempfile.mkdtemp(prefix="test_gui_pve1_")
+        self.gui, self.root = _make_gui(game_mode="pve", ai_player=1, ai_model="fc_v1", save_dir=self.test_save_dir)
         self.gui.controller.new_game(f"测试_pve白_{id(self.gui)}")  # 用对象id保证名称唯一
 
     def teardown_method(self):
@@ -203,6 +210,7 @@ class TestGomokuGUIPveAiPlayer1:
             self.root.destroy()
         except tk.TclError:
             pass  # 窗口可能已被销毁，忽略
+        shutil.rmtree(self.test_save_dir, ignore_errors=True)
 
     def test_ai_player_is_1_when_human_plays_white(self):
         """玩家选白时，AI 应执黑（ai_player=1）"""
@@ -220,24 +228,28 @@ class TestGomokuGUIPveAiPlayer1:
 
     def test_pvp_mode_does_not_trigger_ai(self):
         """PvP 模式落子不应调度 AI"""
-        gui, root = _make_gui(game_mode="pvp")
+        pvp_save_dir = tempfile.mkdtemp(prefix="test_gui_pvp2_")
+        gui, root = _make_gui(game_mode="pvp", save_dir=pvp_save_dir)
         gui.controller.new_game(f"测试_pvp2_{id(gui)}")
         _click(gui, 7, 7)
         assert not gui._ai_move_scheduled, "PvP 模式不应调度 AI"
         root.destroy()
+        shutil.rmtree(pvp_save_dir, ignore_errors=True)
 
 
 class TestGomokuGUIPveAiFirstMove:
     """AI 先走（AI执黑，ai_player=1）的测试 - 验证 _start_game_with_ai_first"""
 
     def setup_method(self):
-        self.gui, self.root = _make_gui(game_mode="pve", ai_player=1, ai_model="random")
+        self.test_save_dir = tempfile.mkdtemp(prefix="test_gui_aifirst_")
+        self.gui, self.root = _make_gui(game_mode="pve", ai_player=1, ai_model="random", save_dir=self.test_save_dir)
 
     def teardown_method(self):
         try:
             self.root.destroy()
         except tk.TclError:
             pass  # 窗口可能已被销毁，忽略
+        shutil.rmtree(self.test_save_dir, ignore_errors=True)
 
     def test_start_game_with_ai_first_creates_game_and_moves(self):
         """AI先走时，_start_game_with_ai_first 应创建游戏并执行 AI 落子"""

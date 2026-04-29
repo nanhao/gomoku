@@ -34,11 +34,21 @@ class TestStartAiVsAiRandom(unittest.TestCase):
     def setUp(self):
         """测试前准备：创建临时目录"""
         self.test_ai_data_dir = tempfile.mkdtemp(prefix="test_battle_ai_data_")
+        self.test_save_dir = tempfile.mkdtemp(prefix="test_battle_save_")
+        # Patch GomokuController 使其使用临时存档目录，避免写入 game/save/
+        self._patcher = patch(
+            'ai.game_manager.GomokuController',
+            lambda save_dir=None: __import__('game').GomokuController(save_dir=self.test_save_dir)
+        )
+        self._patcher.start()
 
     def tearDown(self):
         """测试后清理：删除临时目录"""
+        self._patcher.stop()
         if os.path.exists(self.test_ai_data_dir):
             shutil.rmtree(self.test_ai_data_dir)
+        if os.path.exists(self.test_save_dir):
+            shutil.rmtree(self.test_save_dir)
 
     def test_returns_correct_number_of_results(self):
         """主流程：返回结果列表长度等于对战局数"""
@@ -167,11 +177,21 @@ class TestStartAiVsAiRandomEdge(unittest.TestCase):
     def setUp(self):
         """测试前准备"""
         self.test_ai_data_dir = tempfile.mkdtemp(prefix="test_battle_ai_data_edge_")
+        self.test_save_dir = tempfile.mkdtemp(prefix="test_battle_save_edge_")
+        # Patch GomokuController 使其使用临时存档目录，避免写入 game/save/
+        self._patcher = patch(
+            'ai.game_manager.GomokuController',
+            lambda save_dir=None: __import__('game').GomokuController(save_dir=self.test_save_dir)
+        )
+        self._patcher.start()
 
     def tearDown(self):
         """测试后清理"""
+        self._patcher.stop()
         if os.path.exists(self.test_ai_data_dir):
             shutil.rmtree(self.test_ai_data_dir)
+        if os.path.exists(self.test_save_dir):
+            shutil.rmtree(self.test_save_dir)
 
     def test_single_game(self):
         """边缘：只对战 1 局"""
@@ -287,15 +307,20 @@ class TestBattleModule(unittest.TestCase):
                 super().__init__(ai_name, self.test_ai_data_dir)
 
         battle_module.DataRecorder = FakeDataRecorder
-        try:
-            import io
-            from contextlib import redirect_stdout
-            f = io.StringIO()
-            with redirect_stdout(f):
-                results = battle_module.run_battle("random", "random", 2)
-        finally:
-            # 恢复原始 DataRecorder
-            battle_module.DataRecorder = original_data_recorder
+        # 同时 patch GomokuController 使其使用临时存档目录
+        test_save_dir = self.test_ai_data_dir + "_save"
+        os.makedirs(test_save_dir, exist_ok=True)
+        with patch('ai.game_manager.GomokuController',
+                   lambda _save_dir=None: __import__('game').GomokuController(save_dir=test_save_dir)):
+            try:
+                import io
+                from contextlib import redirect_stdout
+                f = io.StringIO()
+                with redirect_stdout(f):
+                    results = battle_module.run_battle("random", "random", 2)
+            finally:
+                # 恢复原始 DataRecorder
+                battle_module.DataRecorder = original_data_recorder
 
         # 验证对战完成，结果数量正确
         self.assertEqual(len(results), 2)
