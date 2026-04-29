@@ -594,3 +594,9 @@ agent 给了我一份建议书，在 design/learn_rate 下面，我准备采用�
 
 # 第二十七次追加
 增加 merge_samples.py
+
+# 第二十八次追加
+增加一个模型 cnn_v3，极致减少参数量，四层卷积层 32 -> 32 -> 32 -> 1
+
+# 第二十九次追加
+训练脚本增加 validation set 模式
