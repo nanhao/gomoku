@@ -54,20 +54,23 @@ GUI 还支持：存档加载、AI 对战回放（含热力图对比）、游戏�
 ### AI 对战
 
 ```bash
-python ai/battle.py --ai1 <AI名称> --ai2 <AI名称> [--games <局数>]
+python ai/battle.py --ai1 <AI指定> --ai2 <AI指定> [--games <局数>]
 ```
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `--ai1` | 第一方 AI 名称 | 必填 |
-| `--ai2` | 第二方 AI 名称 | 必填 |
+| `--ai1` | 第一方 AI 指定（如 random, fc_v1, cnn_v3.1） | 必填 |
+| `--ai2` | 第二方 AI 指定（如 random, fc_v1, cnn_v3.1） | 必填 |
 | `--games` | 对战局数 | 10 |
 
-**可用 AI：** `random` / `fc_v1` / `cnn_v1` / `cnn_v2` / `cnn_v3`
+**可用 AI：** `random` / `fc_v1` / `cnn_v1` / `cnn_v2` / `cnn_v3.1` / `cnn_v3.2` ...
+
+> **多代模型说明**：`cnn_v3` 支持多代模型，使用 `模型名.代数` 格式指定（如 `cnn_v3.1`、`cnn_v3.2`），不同代数的模型权重存储在 `ai/models/cnn_v3/gen{i}/` 目录下。非多代模型（如 `fc_v1`、`cnn_v1`）直接使用模型名称。
 
 ```bash
 # 示例
 python ai/battle.py --ai1 fc_v1 --ai2 random --games 50
+python ai/battle.py --ai1 cnn_v3.1 --ai2 cnn_v3.2 --games 50
 ```
 
 ### 模型训练
@@ -80,7 +83,7 @@ python ai/create_samples.py --model <模型名称> --output <输出文件路径>
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `--model` | 模型名称 | 必填 |
+| `--model` | 模型指定（如 cnn_v3.1、fc_v1） | 必填 |
 | `--output` | 输出 `.json` 文件路径 | 必填 |
 | `--mode` | sample_creator 模式 | `winning_move` |
 | `--games` | 对局数 | 100 |
@@ -88,9 +91,9 @@ python ai/create_samples.py --model <模型名称> --output <输出文件路径>
 
 ```bash
 # 示例
-python ai/create_samples.py --model cnn_v3 --output ai/train_data/win_samples.json
-python ai/create_samples.py --model cnn_v3 --games 200 --output ai/train_data/win_samples.json
-python ai/create_samples.py --model cnn_v3 --no-augment --output ai/train_data/win_samples.json
+python ai/create_samples.py --model cnn_v3.1 --output ai/train_data/win_samples.json
+python ai/create_samples.py --model cnn_v3.1 --games 200 --output ai/train_data/win_samples.json
+python ai/create_samples.py --model cnn_v3.1 --no-augment --output ai/train_data/win_samples.json
 python ai/create_samples.py --model random  --output ai/merge_samples/winning/win_samples2.json --games 5000
 ```
 
@@ -99,7 +102,7 @@ python ai/create_samples.py --model random  --output ai/merge_samples/winning/wi
 #### 从已有数据训练
 
 ```bash
-python ai/train_main.py --model <模型名称> --train-from-dir <数据目录或文件> [选项]
+python ai/train_main.py --model <模型指定> --train-from-dir <数据目录或文件> [选项]
 ```
 
 | 参数 | 说明 | 默认值 |
@@ -130,12 +133,12 @@ python ai/train_main.py --model cnn_v3 --train-from-dir ai/merge_samples/winning
 #### 训练周期（自我对弈训练）
 
 ```bash
-python ai/train_main.py --model <模型名称> --cycle [选项]
+python ai/train_main.py --model <模型指定> --cycle [选项]
 ```
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `--model` | 模型名称（fc_v1/cnn_v1/cnn_v2/cnn_v3） | fc_v1 |
+| `--model` | 模型指定（如 fc_v1、cnn_v3.2） | fc_v1 |
 | `--cycle` | 启用训练周期模式 | - |
 | `--rounds` | 训练轮数 | 10 |
 | `--games` | 每轮对局数 | 100 |
@@ -236,7 +239,7 @@ python ai/sample_visualizer.py --sample data.json --count 3 --output temp/my_viz
 学习率范围测试工具，用于确定最优学习率区间。每个 round 使用一个固定 lr，训练 `epochs` 个 step 后记录平均 loss，lr 从 `min_lr` 线性递增至 `max_lr`。每个 round 开始前重置模型到初始状态，确保 loss 只反映 lr 的影响。
 
 ```bash
-python ai/lr_range_test.py --model <模型名称> --data <数据路径> [选项]
+python ai/lr_range_test.py --model <模型指定> --data <数据路径> [选项]
 ```
 
 | 参数 | 说明 | 默认值 |
@@ -334,7 +337,8 @@ python tests/run_tests.py
 - **参数量**：约 1.9 万（CNN v2 的 1.9%）
 - **特点**：纯卷积，无 FC、无 BN、无 Dropout，1×1 Conv 替代 FC 层
 - **训练方式**：与 CNN v1 相同
-- **模型文件**：`ai/models/cnn_v3/cnn_v3.pth`
+- **模型文件**：`ai/models/cnn_v3/gen{i}/cnn_v3.pth`（多代模型，按代数存储）
+- **多代支持**：使用 `cnn_v3.代数` 格式指定（如 `cnn_v3.1`），权重按代数隔离存储在 `gen{i}/` 子目录下
 
 ---
 
