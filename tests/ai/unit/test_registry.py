@@ -13,7 +13,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(o
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from ai.registry import get_model, get_trainer, list_models, MODEL_REGISTRY
+from ai.registry import get_model, get_trainer, _list_models, MODEL_REGISTRY
 from ai.base_model import BaseModel
 from ai.base_trainer import BaseTrainer
 
@@ -50,11 +50,18 @@ class TestGetModel(unittest.TestCase):
         self.assertEqual(model.name, "cnn_v2")
 
     def test_get_model_cnn_v3(self):
-        """加载 cnn_v3 模型"""
-        model = get_model("cnn_v3")
+        """加载 cnn_v3.1 模型（多代模型必须指定代数）"""
+        model = get_model("cnn_v3.1")
         self.assertIsNotNone(model)
         self.assertIsInstance(model, BaseModel)
         self.assertEqual(model.name, "cnn_v3")
+        self.assertEqual(model.full_name, "cnn_v3.1")
+
+    def test_get_model_cnn_v3_without_gen_raises(self):
+        """cnn_v3 不指定代数应抛出 ValueError"""
+        with self.assertRaises(ValueError) as ctx:
+            get_model("cnn_v3")
+        self.assertIn("多代模型必须指定代数", str(ctx.exception))
 
     def test_get_model_unknown_raises(self):
         """未知模型名称应抛出 ValueError，消息包含模型名"""
@@ -92,10 +99,11 @@ class TestGetTrainer(unittest.TestCase):
         self.assertIsInstance(trainer, CNNV2Trainer)
 
     def test_get_trainer_cnn_v3(self):
-        """cnn_v3 返回 CNNV3Trainer 实例"""
+        """cnn_v3.1 返回 CNNV3Trainer 实例（多代模型必须指定代数）"""
         from ai.models.cnn_v3.trainer import CNNV3Trainer
-        trainer = get_trainer("cnn_v3", fresh=True)
+        trainer = get_trainer("cnn_v3.1", fresh=True)
         self.assertIsInstance(trainer, CNNV3Trainer)
+        self.assertEqual(trainer.model.full_name, "cnn_v3.1")
 
     def test_get_trainer_random_raises(self):
         """random 没有 trainer，应抛出 ValueError"""
@@ -130,42 +138,42 @@ class TestGetTrainer(unittest.TestCase):
 
 
 class TestListModels(unittest.TestCase):
-    """测试 list_models 函数"""
+    """测试 _list_models 私有函数"""
 
     def test_list_models_returns_list(self):
-        """list_models 返回列表"""
-        models = list_models()
+        """_list_models 返回列表"""
+        models = _list_models()
         self.assertIsInstance(models, list)
 
     def test_list_models_contains_all(self):
-        """list_models 应包含所有注册的模型名称"""
-        models = list_models()
+        """_list_models 应包含所有注册的模型名称"""
+        models = _list_models()
         expected = list(MODEL_REGISTRY.keys())
         self.assertEqual(sorted(models), sorted(expected))
 
     def test_list_models_contains_random(self):
-        """list_models 应包含 random"""
-        models = list_models()
+        """_list_models 应包含 random"""
+        models = _list_models()
         self.assertIn("random", models)
 
     def test_list_models_contains_fc_v1(self):
-        """list_models 应包含 fc_v1"""
-        models = list_models()
+        """_list_models 应包含 fc_v1"""
+        models = _list_models()
         self.assertIn("fc_v1", models)
 
     def test_list_models_contains_cnn_v1(self):
-        """list_models 应包含 cnn_v1"""
-        models = list_models()
+        """_list_models 应包含 cnn_v1"""
+        models = _list_models()
         self.assertIn("cnn_v1", models)
 
     def test_list_models_contains_cnn_v2(self):
-        """list_models 应包含 cnn_v2"""
-        models = list_models()
+        """_list_models 应包含 cnn_v2"""
+        models = _list_models()
         self.assertIn("cnn_v2", models)
 
     def test_list_models_contains_cnn_v3(self):
-        """list_models 应包含 cnn_v3"""
-        models = list_models()
+        """_list_models 应包含 cnn_v3"""
+        models = _list_models()
         self.assertIn("cnn_v3", models)
 
 
@@ -212,11 +220,11 @@ class TestModelRegistryData(unittest.TestCase):
         self.assertEqual(len(MODEL_REGISTRY), 5)
 
     def test_registry_entry_format(self):
-        """每个注册项格式为 (model_path, trainer_path_or_None)"""
+        """每个注册项格式为 RegistryEntry(model_path, trainer_path_or_None, supports_multi_gen)"""
         for name, entry in MODEL_REGISTRY.items():
-            self.assertEqual(len(entry), 2,
-                             f"{name} 的注册项应为 (model_path, trainer_path)")
-            model_path, trainer_path = entry
+            self.assertEqual(len(entry), 3,
+                             f"{name} 的注册项应为 RegistryEntry(model_path, trainer_path, supports_multi_gen)")
+            model_path, trainer_path, supports_multi_gen = entry
             self.assertIsInstance(model_path, str)
             self.assertTrue(model_path.startswith("ai.models."),
                            f"{name} 的 model_path 应以 'ai.models.' 开头")
@@ -224,16 +232,18 @@ class TestModelRegistryData(unittest.TestCase):
                 self.assertIsInstance(trainer_path, str)
                 self.assertTrue(trainer_path.startswith("ai.models."),
                                f"{name} 的 trainer_path 应以 'ai.models.' 开头")
+            self.assertIsInstance(supports_multi_gen, bool,
+                               f"{name} 的 supports_multi_gen 应为 bool")
 
     def test_random_has_no_trainer(self):
         """random 模型没有 trainer"""
-        _, trainer_path = MODEL_REGISTRY["random"]
+        _, trainer_path, _ = MODEL_REGISTRY["random"]
         self.assertIsNone(trainer_path)
 
     def test_trainable_models_have_trainers(self):
         """fc_v1、cnn_v1、cnn_v2、cnn_v3 应有 trainer"""
         for name in ["fc_v1", "cnn_v1", "cnn_v2", "cnn_v3"]:
-            _, trainer_path = MODEL_REGISTRY[name]
+            _, trainer_path, _ = MODEL_REGISTRY[name]
             self.assertIsNotNone(trainer_path,
                                 f"{name} 应有 trainer_path")
 

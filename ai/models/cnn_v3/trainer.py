@@ -31,7 +31,8 @@ class CNNV3Trainer(BaseTrainer):
         Returns:
             CNNV3Model 实例
         """
-        return CNNV3Model(fresh=fresh)
+        gen = getattr(self, 'gen', None)
+        return CNNV3Model(fresh=fresh, gen=gen) if gen is not None else CNNV3Model(fresh=fresh)
 
     @property
     def model_name(self) -> str:

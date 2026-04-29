@@ -50,6 +50,7 @@ class BaseTrainer(ABC):
     DEFAULT_WEIGHT_DECAY = 0.01
     
     def __init__(self, model: Optional[BaseModel] = None, fresh: bool = False,
+                 gen: Optional[int] = None,
                  device: Optional[torch.device] = None, loss_logger=None,
                  lr_scheduler_type: str = None, lr_step_size: int = 500,
                  lr_gamma: float = 0.9, lr_patience: int = 100,
@@ -59,6 +60,7 @@ class BaseTrainer(ABC):
         Args:
             model: 模型实例，如果为 None 则根据 fresh 参数创建
             fresh: 是否强制创建新模型（不加载已保存的模型）
+            gen: 代数，多代模型指定时传递给 _create_model
             device: 训练设备，如果为 None 则自动检测（优先 GPU）
             loss_logger: LossLogger 实例，None 表示由训练方法内部自动创建
             lr_scheduler_type: 学习率调度类型，可选 "step" / "plateau" / None
@@ -68,6 +70,9 @@ class BaseTrainer(ABC):
             lr_factor: ReduceLROnPlateau 衰减系数，默认 0.5
             weight_decay: AdamW 权重衰减系数，None 时使用 DEFAULT_WEIGHT_DECAY
         """
+        # 保存代数信息（在 _create_model 之前设置，以便子类访问）
+        self.gen = gen
+
         # 设置设备
         self.device = device if device is not None else get_device()
 

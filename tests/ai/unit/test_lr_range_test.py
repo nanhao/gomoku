@@ -24,14 +24,16 @@ from ai.lr_range_test import (
     parse_args,
     main,
 )
+from ai.registry import _parse_model_spec, _import_class, MODEL_REGISTRY
 from tests.ai.helpers import create_sample_dir
 
 
 class TestLoadModel(unittest.TestCase):
     """测试 load_model 函数"""
 
-    @patch('ai.lr_range_test._get_model_registry')
-    def test_load_supported_model(self, mock_registry_fn):
+    @patch('ai.lr_range_test._import_class')
+    @patch('ai.lr_range_test._parse_model_spec')
+    def test_load_supported_model(self, mock_parse, mock_import):
         """应成功加载支持的模型并移动到目标设备"""
         mock_model_cls = MagicMock()
         mock_network = MagicMock()
@@ -39,7 +41,8 @@ class TestLoadModel(unittest.TestCase):
         mock_model.network = mock_network
         mock_model_cls.return_value = mock_model
 
-        mock_registry_fn.return_value = {"cnn_v2": mock_model_cls}
+        mock_parse.return_value = _parse_model_spec("cnn_v2")
+        mock_import.return_value = mock_model_cls
 
         device = torch.device('cpu')
         model = load_model("cnn_v2", device)
@@ -48,28 +51,49 @@ class TestLoadModel(unittest.TestCase):
         mock_network.to.assert_called_once_with(device)
         self.assertEqual(model, mock_model)
 
-    @patch('ai.lr_range_test._get_model_registry')
-    def test_load_unsupported_model_raises(self, mock_registry_fn):
+    @patch('ai.lr_range_test._import_class')
+    @patch('ai.lr_range_test._parse_model_spec')
+    def test_load_unsupported_model_raises(self, mock_parse, mock_import):
         """不支持的模型名称应抛出 ValueError"""
-        mock_registry_fn.return_value = {"cnn_v2": MagicMock()}
+        mock_parse.return_value = _parse_model_spec("unknown_model")
 
         with self.assertRaises(ValueError) as ctx:
             load_model("unknown_model", torch.device('cpu'))
 
-        self.assertIn("不支持的模型名称", str(ctx.exception))
+        self.assertIn("不支持的模型", str(ctx.exception))
 
-    @patch('ai.lr_range_test._get_model_registry')
-    def test_load_model_none_network(self, mock_registry_fn):
+    @patch('ai.lr_range_test._import_class')
+    @patch('ai.lr_range_test._parse_model_spec')
+    def test_load_model_none_network(self, mock_parse, mock_import):
         """network 为 None 时不应调用 .to()"""
         mock_model_cls = MagicMock()
         mock_model = MagicMock()
         mock_model.network = None
         mock_model_cls.return_value = mock_model
 
-        mock_registry_fn.return_value = {"cnn_v2": mock_model_cls}
+        mock_parse.return_value = _parse_model_spec("cnn_v2")
+        mock_import.return_value = mock_model_cls
 
         device = torch.device('cpu')
         model = load_model("cnn_v2", device)
+        self.assertEqual(model, mock_model)
+
+    @patch('ai.lr_range_test._import_class')
+    @patch('ai.lr_range_test._parse_model_spec')
+    def test_load_multi_gen_model(self, mock_parse, mock_import):
+        """多代模型 spec 应传递 gen 参数"""
+        mock_model_cls = MagicMock()
+        mock_model = MagicMock()
+        mock_model.network = MagicMock()
+        mock_model_cls.return_value = mock_model
+
+        mock_parse.return_value = _parse_model_spec("cnn_v3.2")
+        mock_import.return_value = mock_model_cls
+
+        device = torch.device('cpu')
+        model = load_model("cnn_v3.2", device)
+
+        mock_model_cls.assert_called_once_with(fresh=True, gen=2)
         self.assertEqual(model, mock_model)
 
 
