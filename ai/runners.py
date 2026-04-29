@@ -170,7 +170,7 @@ def run_train_from_dir(args, trainer) -> None:
         sample_data = loader.discover_and_load(train_data_path)
 
         if not sample_data:
-            print(f"错误: 未找到训练数据（{train_data_path} 下没有 merge 文件或包含 sample.json 的子目录）")
+            print(f"错误: 未找到训练数据（{train_data_path} 下没有 .json 文件）")
             sys.exit(1)
 
         # 创建临时目录存放合并后的数据，兼容 trainer 接口

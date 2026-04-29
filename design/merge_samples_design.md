@@ -78,12 +78,10 @@ class SampleLoader:
         """
 
     def discover_and_load(self, data_dir: str) -> list:
-        """从目录发现并加载所有训练数据（merge 文件 + 个体 sample.json）
+        """从目录递归发现并加载所有训练数据
 
-        扫描指定目录：
-        1. 找到所有 merge_*.json 文件 → 加载
-        2. 找到所有包含 sample.json 的子目录 → 加载
-        3. 合并所有数据返回
+        递归扫描指定目录，找到所有 .json 文件并加载合并。
+        不区分文件名前缀，所有 .json 文件统一加载。
 
         Args:
             data_dir: 训练数据目录路径
@@ -91,6 +89,26 @@ class SampleLoader:
         Returns:
             合并后的 sample 数据列表
         """
+```
+
+#### `discover_all_data` 函数（2026-04-29 更新）
+
+原设计返回 `dict("merge_files", "sample_dirs")`，仅匹配 `merge_*.json` 前缀且仅扫描直接子目录。
+现已简化为递归扫描所有 `.json` 文件，返回扁平列表：
+
+```python
+def discover_all_data(data_dir: str) -> list:
+    """递归发现目录下所有训练数据文件
+
+    递归扫描 data_dir，找到所有 .json 文件并返回排序后的路径列表。
+    不区分文件名前缀（merge_、sample 等均加载），只要以 .json 结尾即视为训练数据。
+
+    Args:
+        data_dir: 训练数据目录路径
+
+    Returns:
+        排序后的 .json 文件路径列表
+    """
 ```
 
 ### 3. 修改：`ai/train_main.py`
@@ -109,25 +127,24 @@ python ai/train_main.py --model cnn_v2 --self-play --games 100 --merge-output ai
 #### `--train-from-dir` 模式
 
 - 当参数指向目录时：调用 `SampleLoader.discover_and_load` 加载
-  （自动发现 merge 文件和个体 sample.json）
-- 当参数指向 `.json` 文件时：直接加载该文件（支持直接指定 merge 文件）
+  （递归加载目录下所有 `.json` 文件，不限文件名前缀）
+- 当参数指向 `.json` 文件时：直接加载该文件
 
 #### `discover_sample_dirs` 修改
 
-新增 `discover_all_data` 函数替代原有逻辑：
+新增 `discover_all_data` 函数替代原有逻辑（2026-04-29 已简化，见上方）。
 
 ```python
-def discover_all_data(train_data_dir: str) -> dict:
-    """发现目录下所有训练数据源
+def discover_all_data(data_dir: str) -> list:
+    """递归发现目录下所有训练数据文件
+
+    递归扫描 data_dir，找到所有 .json 文件并返回排序后的路径列表。
 
     Args:
-        train_data_dir: 训练数据目录路径
+        data_dir: 训练数据目录路径
 
     Returns:
-        {
-            "merge_files": List[str],    # merge_*.json 文件路径列表
-            "sample_dirs": List[str]     # 包含 sample.json 的子目录列表
-        }
+        排序后的 .json 文件路径列表
     """
 ```
 
@@ -167,13 +184,11 @@ def discover_all_data(train_data_dir: str) -> dict:
 ### discover_and_load
 
 ```
-1. result = discover_all_data(data_dir)
+1. json_files = discover_all_data(data_dir)   # 递归扫描所有 .json 文件
 2. all_data = []
-3. for merge_file in result["merge_files"]:
-   a. all_data.extend(SampleLoader.load_merge_file(merge_file))
-4. for sample_dir in result["sample_dirs"]:
-   a. all_data.extend(SampleLoader.load(os.path.join(sample_dir, "sample.json")))
-5. return all_data
+3. for json_file in json_files:
+   a. all_data.extend(SampleLoader.load(json_file))
+4. return all_data
 ```
 
 ### --self-play 模式（修改后）
@@ -211,14 +226,14 @@ def discover_all_data(train_data_dir: str) -> dict:
 | test_merge_sample_files_creates_dir | 输出目录不存在时自动创建 |
 | test_merge_directories_multi_dir | 多目录合并样本数正确 |
 
-### SampleLoader 新方法测试
+### SampleLoader 新方法测试（2026-04-29 更新）
 
 | 用例 | 说明 |
 |------|------|
 | test_load_merge_file | 加载 merge 文件返回正确数据 |
-| test_discover_and_load_merge_only | 目录仅有 merge 文件时正确加载 |
-| test_discover_and_load_samples_only | 目录仅有个体 sample.json 时正确加载 |
-| test_discover_and_load_both | 目录同时有 merge 文件和个体 sample.json 时全部加载 |
+| test_discover_and_load_json_files | .json 文件全部被加载（不限 merge_ 前缀） |
+| test_discover_and_load_recursive | 递归加载子目录中的 json 文件 |
+| test_discover_and_load_both_prefixes | merge_ 前缀和非 merge_ 前缀文件均被加载 |
 | test_discover_and_load_empty | 空目录返回空列表 |
 
 ### CLI 集成测试

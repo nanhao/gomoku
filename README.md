@@ -108,7 +108,7 @@ python ai/train_main.py --model <模型名称> --train-from-dir <数据目录或
 | `--val-ratio` | 验证集比例，0 表示不分割，推荐 0.2 | 0.0 |
 | `--lr-scheduler` | 学习率调度：`step` / `plateau` | 无（固定学习率） |
 
-> 指定目录时自动发现 `merge_*.json` 合并文件和子目录下的 `sample.json`；指定 `.json` 文件时直接加载。
+> 指定目录时递归加载其下所有 `.json` 文件（不限文件名前缀）；指定 `.json` 文件时直接加载。
 
 ```bash
 # 示例：从目录训练

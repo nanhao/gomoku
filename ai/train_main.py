@@ -105,7 +105,7 @@ def main():
         '--train-from-dir',
         type=str,
         default=None,
-        help='训练数据目录路径（自动发现其下所有 sample.json 合并训练），或直接指定 .json 文件'
+        help='训练数据目录路径（递归加载其下所有 .json 文件），或直接指定 .json 文件'
     )
 
     parser.add_argument(

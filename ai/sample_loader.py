@@ -33,51 +33,35 @@ def compute_masked_l1_loss(estimated: List[float], sample: List[float], mask: Li
     return total_loss / mask_sum if mask_sum > 0 else 0.0
 
 
-def discover_all_data(data_dir: str) -> dict:
-    """发现目录下所有训练数据源
+def discover_all_data(data_dir: str) -> list:
+    """递归发现目录下所有训练数据文件
 
-    扫描 data_dir：
-    1. 找到所有根目录下的 merge_*.json 文件
-    2. 找到所有包含 sample.json 的直接子目录
-    3. 返回二者列表
+    递归扫描 data_dir，找到所有 .json 文件并返回排序后的路径列表。
+    不区分文件名前缀（merge_、sample 等均加载），只要以 .json 结尾即视为训练数据。
 
     Args:
         data_dir: 训练数据目录路径
 
     Returns:
-        {
-            "merge_files": List[str],    # merge_*.json 文件路径列表
-            "sample_dirs": List[str]     # 包含 sample.json 的子目录列表
-        }
+        排序后的 .json 文件路径列表
     """
-    merge_files = []
-    sample_dirs = []
+    json_files = []
 
     if not os.path.exists(data_dir):
-        return {"merge_files": [], "sample_dirs": []}
+        return []
 
     try:
-        entries = os.listdir(data_dir)
+        for root, _dirs, files in os.walk(data_dir):
+            for f in files:
+                if f.endswith(".json"):
+                    json_files.append(os.path.join(root, f))
     except OSError:
-        return {"merge_files": [], "sample_dirs": []}
+        return []
 
-    for entry in entries:
-        entry_path = os.path.join(data_dir, entry)
-        if os.path.isfile(entry_path) and entry.startswith("merge_") and entry.endswith(".json"):
-            merge_files.append(entry_path)
-        elif os.path.isdir(entry_path):
-            sample_path = os.path.join(entry_path, "sample.json")
-            if os.path.exists(sample_path):
-                sample_dirs.append(entry_path)
+    # 按文件路径排序，保证结果稳定
+    json_files.sort()
 
-    # 按文件名排序，保证结果稳定
-    merge_files.sort()
-    sample_dirs.sort(key=lambda p: os.path.basename(p))
-
-    return {
-        "merge_files": merge_files,
-        "sample_dirs": sample_dirs,
-    }
+    return json_files
 
 
 class SampleLoader:
@@ -199,12 +183,10 @@ class SampleLoader:
         return self.load(merge_path)
 
     def discover_and_load(self, data_dir: str) -> list:
-        """从目录发现并加载所有训练数据（merge 文件 + 个体 sample.json）
+        """从目录递归发现并加载所有训练数据
 
-        扫描指定目录：
-        1. 找到所有 merge_*.json 文件 → 加载
-        2. 找到所有包含 sample.json 的子目录 → 加载
-        3. 合并所有数据返回
+        递归扫描指定目录，找到所有 .json 文件并加载合并。
+        不区分文件名前缀，所有 .json 文件统一加载。
 
         Args:
             data_dir: 训练数据目录路径
@@ -212,17 +194,12 @@ class SampleLoader:
         Returns:
             合并后的 sample 数据列表
         """
-        result = discover_all_data(data_dir)
+        json_files = discover_all_data(data_dir)
         all_data = []
 
-        # 加载所有 merge 文件
-        for merge_file in result["merge_files"]:
-            all_data.extend(self.load_merge_file(merge_file))
-
-        # 加载所有个体 sample.json
-        for sample_dir in result["sample_dirs"]:
-            sample_path = os.path.join(sample_dir, "sample.json")
-            all_data.extend(self.load(sample_path))
+        # 加载所有发现的 .json 文件
+        for json_file in json_files:
+            all_data.extend(self.load(json_file))
 
         return all_data
 
