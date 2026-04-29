@@ -6,9 +6,6 @@
     # 训练周期（fc_v1 模型）
     python ai/train_main.py --model fc_v1 --cycle [--rounds 100] [--games 100]
 
-    # 仅自我对弈生成数据（不训练）
-    python ai/train_main.py --model fc_v1 --self-play --games 100
-
     # 从已有数据目录训练模型
     python ai/train_main.py --model fc_v1 --train-from-dir ai/train_data/fc_v1_self_play_1
 """
@@ -21,7 +18,7 @@ import argparse
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from ai.registry import get_trainer
-from ai.runners import run_self_play, run_train_from_dir, run_cycle
+from ai.runners import run_train_from_dir, run_cycle
 
 
 def main():
@@ -39,9 +36,6 @@ def main():
 
   # 从新模型开始训练 fc_v1
   python ai/train_main.py --model fc_v1 --cycle --fresh
-
-  # 仅自我对弈生成数据（不训练）
-  python ai/train_main.py --model fc_v1 --self-play --games 100
 
   # 从已有数据目录训练模型
   python ai/train_main.py --model fc_v1 --train-from-dir ai/train_data/fc_v1_self_play_1 --epochs 1000
@@ -96,23 +90,10 @@ def main():
     )
 
     parser.add_argument(
-        '--self-play',
-        action='store_true',
-        help='仅执行自我对弈+评价，生成训练数据（不训练）'
-    )
-
-    parser.add_argument(
         '--train-from-dir',
         type=str,
         default=None,
         help='训练数据目录路径（递归加载其下所有 .json 文件），或直接指定 .json 文件'
-    )
-
-    parser.add_argument(
-        '--merge-output',
-        type=str,
-        default=None,
-        help='--self-play 模式下，对局完成后自动合并样本到指定文件'
     )
 
     parser.add_argument(
@@ -173,17 +154,15 @@ def main():
 
     args = parser.parse_args()
     
-    # 验证参数：三个模式互斥（--cycle、--self-play、--train-from-dir 三选一）
+    # 验证参数：两个模式互斥（--cycle、--train-from-dir 二选一）
     active_modes = []
     if args.cycle:
         active_modes.append('--cycle')
-    if args.self_play:
-        active_modes.append('--self-play')
     if args.train_from_dir:
         active_modes.append('--train-from-dir')
 
     if len(active_modes) == 0:
-        parser.error("请指定 --cycle、--self-play 或 --train-from-dir 参数")
+        parser.error("请指定 --cycle 或 --train-from-dir 参数")
     elif len(active_modes) > 1:
         parser.error(f"以下参数不能同时使用: {', '.join(active_modes)}")
     
@@ -205,9 +184,7 @@ def main():
         sys.exit(1)
     
     # 根据模式路由到对应的运行器
-    if args.self_play:
-        run_self_play(args, trainer)
-    elif args.train_from_dir:
+    if args.train_from_dir:
         run_train_from_dir(args, trainer)
     elif args.cycle:
         run_cycle(args, trainer)

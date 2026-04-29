@@ -1,10 +1,9 @@
 """训练运行器模块
 
-从 train_main.py 提取的三种运行模式业务逻辑，使 train_main.py 仅保留
+从 train_main.py 提取的运行模式业务逻辑，使 train_main.py 仅保留
 argparse 解析、参数校验和函数路由。
 
 提供的公共函数：
-    - run_self_play(args, trainer): 自我对弈数据生成模式
     - run_train_from_dir(args, trainer): 从已有数据训练模式
     - run_cycle(args, trainer): 训练周期模式
     - discover_sample_dirs(train_data_dir): 发现含 sample.json 的子目录
@@ -17,8 +16,6 @@ import tempfile
 import shutil
 
 from ai.sample_loader import SampleLoader
-from ai.merge_samples import merge_directories
-from ai.self_play_generator import SelfPlayGenerator
 
 
 def discover_sample_dirs(train_data_dir: str) -> list:
@@ -79,54 +76,6 @@ def _create_temp_sample_dir(sample_data: list) -> str:
     with open(sample_path, 'w', encoding='utf-8') as f:
         json.dump(sample_data, f, ensure_ascii=False)
     return tmp_dir
-
-
-def run_self_play(args, trainer) -> None:
-    """自我对弈数据生成模式
-
-    仅执行自我对弈生成训练数据，不训练模型。
-    可选 --merge-output 将生成的样本自动合并到指定文件。
-
-    Args:
-        args: 已解析的命令行参数（Namespace）
-        trainer: 训练器实例
-
-    Raises:
-        SystemExit: 自我对弈失败时退出
-    """
-    print(f"开始 {args.model} 自我对弈数据生成...")
-    print(f"参数:")
-    print(f"  对局数 (games):      {args.games}")
-    print(f"  奖励衰减率 (rate):   {args.rate}")
-
-    try:
-        generator = SelfPlayGenerator(trainer.model)
-        result = generator.generate(games=args.games, rate=args.rate)
-
-        # 打印结果统计
-        black_wins = sum(1 for r in result["results"] if r["winner"] == 1)
-        white_wins = sum(1 for r in result["results"] if r["winner"] == 2)
-        draws = sum(1 for r in result["results"] if r["winner"] == 3)
-        print(f"\n对局统计: 黑胜 {black_wins}, 白胜 {white_wins}, 平局 {draws}")
-        print(f"生成样本数: {result['sample_count']}")
-        print(f"训练数据目录: {result['train_data_dir']}")
-        print(f"（可使用 --train-from-dir {result['train_data_dir']} 训练模型）")
-
-        # 如果指定了 --merge-output，自动合并样本
-        if args.merge_output:
-            print(f"\n正在自动合并样本到: {args.merge_output}")
-            merge_result = merge_directories(
-                [result["train_data_dir"]],
-                args.merge_output
-            )
-            print(f"自动合并完成:")
-            print(f"  合并文件数: {merge_result['total_files']}")
-            print(f"  总样本数:   {merge_result['total_samples']}")
-            print(f"  输出路径:   {merge_result['output_path']}")
-
-    except Exception as e:
-        print(f"自我对弈失败: {e}")
-        sys.exit(1)
 
 
 def run_train_from_dir(args, trainer) -> None:

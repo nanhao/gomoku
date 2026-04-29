@@ -16,7 +16,7 @@ from unittest.mock import patch, MagicMock
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
 from ai.runners import (
-    run_self_play, run_train_from_dir, run_cycle,
+    run_train_from_dir, run_cycle,
     discover_sample_dirs, _create_temp_sample_dir,
 )
 
@@ -26,14 +26,12 @@ def _make_args(**overrides) -> argparse.Namespace:
     defaults = {
         'model': 'fc_v1',
         'cycle': False,
-        'self_play': False,
         'train_from_dir': None,
         'rounds': 10,
         'games': 100,
         'epochs': 1000,
         'rate': 0.9,
         'fresh': False,
-        'merge_output': None,
         'batch_size': None,
         'shuffle': False,
         'lr_scheduler': None,
@@ -73,54 +71,6 @@ class TestCreateTempSampleDir(unittest.TestCase):
             self.assertTrue(os.path.exists(sample_path))
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
-
-
-class TestRunSelfPlay(unittest.TestCase):
-    """测试 run_self_play 运行模式"""
-
-    @patch('ai.runners.merge_directories')
-    @patch('ai.runners.SelfPlayGenerator')
-    def test_generates_data_without_merge(self, mock_gen_cls, mock_merge):
-        """无 --merge-output 时只生成数据不合并"""
-        args = _make_args(self_play=True, games=50, rate=0.8, merge_output=None)
-        trainer = MagicMock()
-
-        mock_generator = MagicMock()
-        mock_generator.generate.return_value = {
-            "results": [{"winner": 1}, {"winner": 2}],
-            "sample_count": 10,
-            "train_data_dir": "/tmp/data",
-        }
-        mock_gen_cls.return_value = mock_generator
-
-        run_self_play(args, trainer)
-
-        mock_generator.generate.assert_called_once_with(games=50, rate=0.8)
-        mock_merge.assert_not_called()
-
-    @patch('ai.runners.merge_directories')
-    @patch('ai.runners.SelfPlayGenerator')
-    def test_merges_when_merge_output_set(self, mock_gen_cls, mock_merge):
-        """指定 --merge-output 时调用 merge_directories"""
-        args = _make_args(self_play=True, games=10, merge_output='/tmp/merged.json')
-        trainer = MagicMock()
-
-        mock_generator = MagicMock()
-        mock_generator.generate.return_value = {
-            "results": [],
-            "sample_count": 5,
-            "train_data_dir": "/tmp/data",
-        }
-        mock_gen_cls.return_value = mock_generator
-        mock_merge.return_value = {
-            "total_files": 1,
-            "total_samples": 5,
-            "output_path": "/tmp/merged.json",
-        }
-
-        run_self_play(args, trainer)
-
-        mock_merge.assert_called_once_with(["/tmp/data"], "/tmp/merged.json")
 
 
 class TestRunTrainFromDir(unittest.TestCase):

@@ -1,7 +1,7 @@
 """train_main CLI 参数互斥测试
 
-测试 --self-play 和 --train-from-dir 参数与其他模式参数的互斥关系。
-三个模式参数三选一：--cycle、--self-play、--train-from-dir
+测试 --train-from-dir 参数与其他模式参数的互斥关系。
+两个模式参数二选一：--cycle、--train-from-dir
 """
 
 import os
@@ -16,18 +16,18 @@ from ai.train_main import main
 from ai.runners import discover_sample_dirs
 
 
-class TestSelfPlayExclusive(unittest.TestCase):
-    """测试 --self-play 与其他模式的互斥关系"""
+class TestSelfPlayParamRemoved(unittest.TestCase):
+    """验证 --self-play 参数已移除"""
 
-    def test_self_play_exclusive_with_cycle(self):
-        """--self-play 与 --cycle 互斥"""
-        with patch('sys.argv', ['train_main.py', '--model', 'fc_v1', '--self-play', '--cycle']):
+    def test_self_play_param_removed(self):
+        """--self-play 参数已不存在，解析时报错"""
+        with patch('sys.argv', ['train_main.py', '--model', 'fc_v1', '--self-play']):
             with self.assertRaises(SystemExit):
                 main()
 
-    def test_self_play_exclusive_with_train_from_dir(self):
-        """--self-play 与 --train-from-dir 互斥"""
-        with patch('sys.argv', ['train_main.py', '--model', 'fc_v1', '--self-play', '--train-from-dir', '/tmp/train']):
+    def test_merge_output_param_removed(self):
+        """--merge-output 参数已不存在"""
+        with patch('sys.argv', ['train_main.py', '--model', 'fc_v1', '--merge-output', '/tmp/out.json']):
             with self.assertRaises(SystemExit):
                 main()
 

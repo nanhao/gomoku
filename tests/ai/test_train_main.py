@@ -98,64 +98,6 @@ class TestTrainMainArgParsing(unittest.TestCase):
                 self.assertEqual(mock_get.call_args[0][0], 'fc_v1')
 
 
-class TestSelfPlayMergeOutput(unittest.TestCase):
-    """测试 --self-play 模式的 --merge-output 功能"""
-
-    def test_self_play_without_merge_output(self):
-        """--self-play 不指定 --merge-output 时不调用合并"""
-        with patch('sys.argv', [
-            'train_main.py', '--model', 'fc_v1', '--self-play', '--games', '1'
-        ]):
-            with patch('ai.train_main.get_trainer') as mock_get:
-                mock_trainer = MagicMock()
-                mock_get.return_value = mock_trainer
-
-                with patch('ai.runners.SelfPlayGenerator') as mock_gen_cls:
-                    mock_generator = MagicMock()
-                    mock_generator.generate.return_value = {
-                        "results": [{"winner": 1}],
-                        "sample_count": 1,
-                        "train_data_dir": "/tmp/fake_data"
-                    }
-                    mock_gen_cls.return_value = mock_generator
-                
-                    with patch('ai.runners.merge_directories') as mock_merge:
-                        main()
-                
-                        mock_generator.generate.assert_called_once()
-                        mock_merge.assert_not_called()
-
-    def test_self_play_with_merge_output(self):
-        """--self-play --merge-output 自动调用合并"""
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            train_data_dir = os.path.join(tmp_dir, "train_data")
-            os.makedirs(train_data_dir)
-            merge_output = os.path.join(tmp_dir, "merged.json")
-
-            with patch('sys.argv', [
-                'train_main.py', '--model', 'fc_v1', '--self-play', '--games', '1',
-                '--merge-output', merge_output
-            ]):
-                with patch('ai.train_main.get_trainer') as mock_get:
-                    mock_trainer = MagicMock()
-                    mock_get.return_value = mock_trainer
-
-                    with patch('ai.runners.SelfPlayGenerator') as mock_gen_cls:
-                        mock_generator = MagicMock()
-                        mock_generator.generate.return_value = {
-                            "results": [{"winner": 1}],
-                            "sample_count": 2,
-                            "train_data_dir": train_data_dir
-                        }
-                        mock_gen_cls.return_value = mock_generator
-
-                        main()
-
-                        mock_generator.generate.assert_called_once()
-                        # merge 应被调用且输出文件已生成
-                        self.assertTrue(os.path.exists(merge_output))
-
-
 class TestTrainFromDirModes(unittest.TestCase):
     """测试 --train-from-dir 支持目录和 .json 文件"""
 
