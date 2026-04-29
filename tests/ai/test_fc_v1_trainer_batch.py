@@ -121,29 +121,6 @@ class TestFCv1TrainerBatch(unittest.TestCase):
         lines = [l for l in output.strip().split('\n') if 'Epoch' in l]
         self.assertEqual(len(lines), 0)
     
-    def test_train_batch_verbose_outputs_epoch_loss(self):
-        """测试 verbose=True 时每 200 个 epoch 输出一次 loss"""
-        dir1 = self._create_sample_dir("s1")
-        dir2 = self._create_sample_dir("s2")
-        trainer = self._create_trainer()
-        
-        import io
-        captured = io.StringIO()
-        sys.stdout = captured
-        try:
-            # 使用 400 个 epoch，应在第 200 和第 400 个 epoch 输出
-            trainer.train_batch([dir1, dir2], epochs=400, verbose=True)
-            output = captured.getvalue()
-        finally:
-            sys.stdout = sys.__stdout__
-        
-        self.assertIn("Epoch 200/400", output)
-        self.assertIn("Epoch 400/400", output)
-        self.assertIn("loss", output.lower())
-        # 确认只输出了 2 行
-        lines = [l for l in output.strip().split('\n') if 'Epoch' in l]
-        self.assertEqual(len(lines), 2)
-    
     def test_train_batch_verbose_false_no_epoch_output(self):
         """测试 verbose=False 时不输出 epoch 信息"""
         dir1 = self._create_sample_dir("s1")

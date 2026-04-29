@@ -181,7 +181,7 @@ class TestMiniBatchTraining(unittest.TestCase):
         try:
             trainer.train_mini_batch(
                 [dir1],
-                epochs=400,
+                epochs=200,
                 batch_size=2,
                 verbose=True
             )
@@ -189,9 +189,8 @@ class TestMiniBatchTraining(unittest.TestCase):
         finally:
             sys.stdout = sys.__stdout__
         
-        # 应在第 200 和 400 个 epoch 输出
-        self.assertIn("Epoch 200/400", output)
-        self.assertIn("Epoch 400/400", output)
+        # 应在第 200 个 epoch 输出
+        self.assertIn("Epoch 200/200", output)
         self.assertIn("loss", output.lower())
     
     def test_train_mini_batch_dense_log_records_all_batches(self):

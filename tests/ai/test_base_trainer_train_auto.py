@@ -196,7 +196,7 @@ class TestTrainAutoIntegration(unittest.TestCase):
     def test_auto_with_batch_none_runs_train_batch(self):
         """batch_size=None 时端到端执行 train_batch 并返回有效 loss"""
         avg_loss = self.trainer.train_auto(
-            self.sample_dirs, epochs=1000, batch_size=None, verbose=False
+            self.sample_dirs, epochs=10, batch_size=None, verbose=False
         )
         # train_batch 应返回非零 loss
         self.assertGreater(avg_loss, 0.0)

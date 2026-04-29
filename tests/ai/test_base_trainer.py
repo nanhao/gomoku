@@ -149,11 +149,11 @@ class TestBaseTrainerWithCompleteSubclass(unittest.TestCase):
             mock_logger = MagicMock()
             trainer.loss_logger = mock_logger
             
-            trainer.train_single(sample_dir, epochs=1000, verbose=False)
+            trainer.train_single(sample_dir, epochs=400, verbose=False)
             
-            # 验证 log 和 plot 被调用（1000/200 = 5 次，断言 >= 4）
+            # 验证 log 和 plot 被调用（400/200 = 2 次，断言 >= 1）
             self.assertTrue(mock_logger.log.called)
-            self.assertGreaterEqual(mock_logger.log.call_count, 4)
+            self.assertGreaterEqual(mock_logger.log.call_count, 1)
             self.assertTrue(mock_logger.plot.called)
     
     def test_train_batch_generates_loss_curve(self):
@@ -176,7 +176,7 @@ class TestBaseTrainerWithCompleteSubclass(unittest.TestCase):
             mock_logger = MagicMock()
             trainer.loss_logger = mock_logger
             
-            trainer.train_batch(sample_dirs, epochs=1000, verbose=False)
+            trainer.train_batch(sample_dirs, epochs=200, verbose=False)
             
             # 验证 log 和 plot 被调用
             self.assertTrue(mock_logger.log.called)

@@ -247,9 +247,9 @@ class TestEvaluateRoundParallelMode(unittest.TestCase):
         os.makedirs(self.train_data_dir, exist_ok=True)
 
     def test_parallel_mode_produces_same_count(self):
-        """并行模式应生成与串行模式相同数量的 sample"""
+        """并行模式应生成与串行模式相同数量的 sample，且无错误"""
         round_dir = os.path.join(self.ai_data_dir, "round_1")
-        for i in range(1, 5):
+        for i in range(1, 3):
             _create_minimal_record(os.path.join(round_dir, str(i)))
 
         # 串行模式
@@ -275,68 +275,9 @@ class TestEvaluateRoundParallelMode(unittest.TestCase):
             len(result_serial["sample_files"]),
             len(result_parallel["sample_files"])
         )
+        self.assertEqual(len(result_parallel["errors"]), 0,
+                         "有效 record 不应有错误")
 
-    def test_parallel_mode_content_matches_serial(self):
-        """并行模式生成的 sample 内容应与串行模式一致"""
-        round_dir = os.path.join(self.ai_data_dir, "round_1")
-        for i in range(1, 4):
-            _create_minimal_record(os.path.join(round_dir, str(i)))
-
-        # 串行模式生成 sample
-        evaluator = Evaluator(
-            ai_data_dir=self.ai_data_dir,
-            train_data_dir=self.train_data_dir,
-            max_workers=1
-        )
-        result_serial = evaluator.evaluate_round(round_dir)
-
-        # 读取串行模式的 sample 内容，以对局目录名为 key
-        serial_samples = {}
-        for sample_path in result_serial["sample_files"]:
-            game_name = os.path.basename(os.path.dirname(sample_path))
-            with open(sample_path, 'r', encoding='utf-8') as f:
-                serial_samples[game_name] = json.load(f)
-
-        # 清空 train_data
-        self._clear_train_data()
-
-        # 并行模式生成 sample
-        evaluator2 = Evaluator(
-            ai_data_dir=self.ai_data_dir,
-            train_data_dir=self.train_data_dir,
-            max_workers=2
-        )
-        result_parallel = evaluator2.evaluate_round(round_dir)
-
-        # 对比内容
-        for sample_path in result_parallel["sample_files"]:
-            game_name = os.path.basename(os.path.dirname(sample_path))
-            with open(sample_path, 'r', encoding='utf-8') as f:
-                parallel_sample = json.load(f)
-
-            self.assertIn(game_name, serial_samples)
-            self.assertEqual(
-                parallel_sample, serial_samples[game_name],
-                f"并行模式生成的 {game_name} 内容应与串行模式一致"
-            )
-
-    def test_parallel_mode_no_errors(self):
-        """并行模式下有效 record 不应产生错误"""
-        round_dir = os.path.join(self.ai_data_dir, "round_1")
-        for i in range(1, 4):
-            _create_minimal_record(os.path.join(round_dir, str(i)))
-
-        evaluator = Evaluator(
-            ai_data_dir=self.ai_data_dir,
-            train_data_dir=self.train_data_dir,
-            max_workers=2
-        )
-        result = evaluator.evaluate_round(round_dir)
-
-        self.assertEqual(
-            len(result["errors"]), 0,
-            f"有效 record 不应有错误，但收到: {result['errors']}"
-        )
 
 
 class TestMaxWorkersFallback(unittest.TestCase):

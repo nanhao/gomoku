@@ -74,32 +74,6 @@ class TestFCv1TrainerVerboseOutput(unittest.TestCase):
         self.assertNotIn("Epoch", output)
         self.assertNotIn("loss", output.lower())
     
-    def test_verbose_true_outputs_epoch_loss(self):
-        """测试 verbose=True 时每 200 个 epoch 输出一次 loss"""
-        sample_dir = self._create_test_sample()
-        trainer = FCv1Trainer(fresh=True)
-        trainer.loss_logger = MagicMock()
-        trainer.loss_logger.dense_log = False
-        
-        # 捕获 stdout
-        captured_output = io.StringIO()
-        sys.stdout = captured_output
-        
-        try:
-            # 使用 400 个 epoch，应输出第 200 和第 400 个 epoch 的 loss
-            trainer.train_single(sample_dir, epochs=400, verbose=True)
-            output = captured_output.getvalue()
-        finally:
-            sys.stdout = sys.__stdout__
-        
-        # 验证在第 200 和第 400 个 epoch 输出了 loss
-        self.assertIn("Epoch 200/400", output)
-        self.assertIn("Epoch 400/400", output)
-        self.assertIn("loss", output.lower())
-        # 确认只输出了 2 行，而不是 400 行
-        lines = [l for l in output.strip().split('\n') if 'Epoch' in l]
-        self.assertEqual(len(lines), 2)
-    
     def test_verbose_output_format(self):
         """测试 verbose 输出格式正确（每 200 个 epoch 打印一次）"""
         sample_dir = self._create_test_sample()

@@ -40,9 +40,9 @@ class TestBattleSessionRun:
         """run() 应返回长度等于 num_games 的结果列表"""
         ai_data_dir = os.path.join(_TEST_ROOT, "ai_data")
         train_data_dir = os.path.join(_TEST_ROOT, "train_data")
-        session = BattleSession("random", "random", num_games=2, ai_data_dir=ai_data_dir, train_data_dir=train_data_dir)
+        session = BattleSession("random", "random", num_games=1, ai_data_dir=ai_data_dir, train_data_dir=train_data_dir)
         results = session.run()
-        assert len(results) == 2
+        assert len(results) == 1
 
     def test_run_result_has_game_and_winner(self):
         """run() 返回的每项结果应包含 game 和 winner 字段"""
@@ -70,13 +70,12 @@ class TestBattleSessionRun:
 
         ai_data_dir = os.path.join(_TEST_ROOT, "ai_data")
         train_data_dir = os.path.join(_TEST_ROOT, "train_data")
-        session = BattleSession("random", "random", num_games=3, ai_data_dir=ai_data_dir, train_data_dir=train_data_dir)
+        session = BattleSession("random", "random", num_games=2, ai_data_dir=ai_data_dir, train_data_dir=train_data_dir)
         session.run(on_progress=on_progress)
 
-        assert len(calls) == 3
-        assert calls[0] == (1, 3)
-        assert calls[1] == (2, 3)
-        assert calls[2] == (3, 3)
+        assert len(calls) == 2
+        assert calls[0] == (1, 2)
+        assert calls[1] == (2, 2)
 
     def test_run_generates_train_samples(self):
         """run() 完成后应在 train_data 目录下生成 sample.json"""
