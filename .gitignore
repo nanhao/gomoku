@@ -1,6 +1,7 @@
 # Project-specific
 ai_data/
 train_data/
+ai/merge_samples/
 game/save/
 
 # Python
