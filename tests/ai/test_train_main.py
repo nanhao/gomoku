@@ -48,14 +48,8 @@ class TestTrainMainArgParsing(unittest.TestCase):
                 self.assertEqual(call_kwargs['batch_size'], 32)
                 self.assertTrue(call_kwargs['shuffle'])
 
-    def test_cycle_and_sample_dir_mutually_exclusive(self):
-        """--cycle 和 --sample-dir 不能同时使用"""
-        with patch('sys.argv', ['train_main.py', '--model', 'fc_v1', '--cycle', '--sample-dir', '/tmp/data']):
-            with self.assertRaises(SystemExit):
-                main()
-
-    def test_neither_cycle_nor_sample_dir_fails(self):
-        """不指定 --cycle 和 --sample-dir 应报错"""
+    def test_no_mode_fails(self):
+        """不指定任何模式参数应报错"""
         with patch('sys.argv', ['train_main.py', '--model', 'fc_v1']):
             with self.assertRaises(SystemExit):
                 main()

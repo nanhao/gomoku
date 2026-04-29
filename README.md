@@ -72,23 +72,6 @@ python ai/battle.py --ai1 fc_v1 --ai2 random --games 50
 
 ### 模型训练
 
-#### 单轮次训练（使用已有样本）
-
-```bash
-python ai/train_main.py --model <模型名称> --sample-dir <sample目录> [--epochs <轮数>]
-```
-
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `--model` | 模型名称（fc_v1/cnn_v1/cnn_v2/cnn_v3） | `fc_v1` |
-| `--sample-dir` | 训练样本目录 | 必填 |
-| `--epochs` | 训练迭代数 | 1000 |
-
-```bash
-# 示例
-python ai/train_main.py --model fc_v1 --sample-dir train_data/random_vs_random_1/1
-```
-
 #### 自我对弈生成数据（不训练）
 
 ```bash
@@ -135,10 +118,10 @@ python ai/train_main.py --model cnn_v2 --train-from-dir ai/merge_samples --epoch
 python ai/train_main.py --model cnn_v1 --train-from-dir ai/merge_samples/merge_cnn_v1.json --epochs 1000
 
 # 示例：mini-batch 训练
-python ai/train_main.py --model cnn_v1 --train-from-dir ai/train_data/cnn_v1_self_play_1 --epochs 1000 --batch-size 32 --shuffle
+python ai/train_main.py --model cnn_v3 --train-from-dir ai/merge_samples/chong4.json --epochs 200 --batch-size 4096 --shuffle 
 ```
 
-> **注意**：`--cycle`、`--self-play`、`--sample-dir`、`--train-from-dir` 四个模式互斥，只能选其一。
+> **注意**：`--cycle`、`--self-play`、`--train-from-dir` 三个模式互斥，只能选其一。
 
 #### 训练周期（自我对弈训练）
 

@@ -600,3 +600,6 @@ agent 给了我一份建议书，在 design/learn_rate 下面，我准备采用�
 
 # 第二十九次追加
 训练脚本增加 validation set 模式
+
+# 第三十次追加
+去掉单轮次训练模式

@@ -1,7 +1,7 @@
 """train_main CLI 参数互斥测试
 
-测试新增的 --self-play 和 --train-from-dir 参数与其他模式参数的互斥关系。
-四个模式参数四选一：--cycle、--self-play、--sample-dir、--train-from-dir
+测试 --self-play 和 --train-from-dir 参数与其他模式参数的互斥关系。
+三个模式参数三选一：--cycle、--self-play、--train-from-dir
 """
 
 import os
@@ -25,12 +25,6 @@ class TestSelfPlayExclusive(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 main()
 
-    def test_self_play_exclusive_with_sample_dir(self):
-        """--self-play 与 --sample-dir 互斥"""
-        with patch('sys.argv', ['train_main.py', '--model', 'fc_v1', '--self-play', '--sample-dir', '/tmp/data']):
-            with self.assertRaises(SystemExit):
-                main()
-
     def test_self_play_exclusive_with_train_from_dir(self):
         """--self-play 与 --train-from-dir 互斥"""
         with patch('sys.argv', ['train_main.py', '--model', 'fc_v1', '--self-play', '--train-from-dir', '/tmp/train']):
@@ -44,12 +38,6 @@ class TestTrainFromDirExclusive(unittest.TestCase):
     def test_train_from_dir_exclusive_with_cycle(self):
         """--train-from-dir 与 --cycle 互斥"""
         with patch('sys.argv', ['train_main.py', '--model', 'fc_v1', '--train-from-dir', '/tmp/train', '--cycle']):
-            with self.assertRaises(SystemExit):
-                main()
-
-    def test_train_from_dir_exclusive_with_sample_dir(self):
-        """--train-from-dir 与 --sample-dir 互斥"""
-        with patch('sys.argv', ['train_main.py', '--model', 'fc_v1', '--train-from-dir', '/tmp/train', '--sample-dir', '/tmp/data']):
             with self.assertRaises(SystemExit):
                 main()
 

@@ -16,7 +16,7 @@ from unittest.mock import patch, MagicMock
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
 from ai.runners import (
-    run_sample_dir, run_self_play, run_train_from_dir, run_cycle,
+    run_self_play, run_train_from_dir, run_cycle,
     discover_sample_dirs, _create_temp_sample_dir,
 )
 
@@ -25,7 +25,6 @@ def _make_args(**overrides) -> argparse.Namespace:
     """构造测试用 args Namespace，提供合理的默认值"""
     defaults = {
         'model': 'fc_v1',
-        'sample_dir': None,
         'cycle': False,
         'self_play': False,
         'train_from_dir': None,
@@ -74,42 +73,6 @@ class TestCreateTempSampleDir(unittest.TestCase):
             self.assertTrue(os.path.exists(sample_path))
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
-
-
-class TestRunSampleDir(unittest.TestCase):
-    """测试 run_sample_dir 运行模式"""
-
-    def test_nonexistent_dir_exits(self):
-        """不存在的目录应 sys.exit(1)"""
-        args = _make_args(sample_dir='/nonexistent/path/xyz')
-        trainer = MagicMock()
-        with self.assertRaises(SystemExit):
-            run_sample_dir(args, trainer)
-
-    def test_missing_sample_json_exits(self):
-        """目录存在但无 sample.json 应 sys.exit(1)"""
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = _make_args(sample_dir=tmp_dir)
-            trainer = MagicMock()
-            with self.assertRaises(SystemExit):
-                run_sample_dir(args, trainer)
-
-    def test_successful_training(self):
-        """正常训练应调用 trainer.train_single 并保存模型"""
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            # 创建 sample.json
-            sample_path = os.path.join(tmp_dir, "sample.json")
-            with open(sample_path, 'w', encoding='utf-8') as f:
-                json.dump([{"input": [1.0], "output": [0.0], "mask": [1]}], f)
-
-            args = _make_args(sample_dir=tmp_dir, epochs=5)
-            trainer = MagicMock()
-            trainer.train_single.return_value = 0.42
-
-            run_sample_dir(args, trainer)
-
-            trainer.train_single.assert_called_once_with(tmp_dir, epochs=5)
-            trainer.model.save.assert_called_once()
 
 
 class TestRunSelfPlay(unittest.TestCase):

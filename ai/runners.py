@@ -1,10 +1,9 @@
 """训练运行器模块
 
-从 train_main.py 提取的四种运行模式业务逻辑，使 train_main.py 仅保留
+从 train_main.py 提取的三种运行模式业务逻辑，使 train_main.py 仅保留
 argparse 解析、参数校验和函数路由。
 
 提供的公共函数：
-    - run_sample_dir(args, trainer): 单轮次训练模式
     - run_self_play(args, trainer): 自我对弈数据生成模式
     - run_train_from_dir(args, trainer): 从已有数据训练模式
     - run_cycle(args, trainer): 训练周期模式
@@ -80,49 +79,6 @@ def _create_temp_sample_dir(sample_data: list) -> str:
     with open(sample_path, 'w', encoding='utf-8') as f:
         json.dump(sample_data, f, ensure_ascii=False)
     return tmp_dir
-
-
-def run_sample_dir(args, trainer) -> None:
-    """单轮次训练模式
-
-    使用指定目录下的 sample.json 进行单轮训练。
-
-    Args:
-        args: 已解析的命令行参数（Namespace）
-        trainer: 训练器实例
-
-    Raises:
-        SystemExit: 目录不存在、sample.json 缺失或训练失败时退出
-    """
-    sample_dir = args.sample_dir
-
-    # 检查目录是否存在
-    if not os.path.exists(sample_dir):
-        print(f"错误: 目录不存在: {sample_dir}")
-        sys.exit(1)
-
-    # 检查 sample.json 是否存在
-    sample_path = os.path.join(sample_dir, "sample.json")
-    if not os.path.exists(sample_path):
-        print(f"错误: sample.json 不存在: {sample_path}")
-        sys.exit(1)
-
-    print(f"开始训练 {args.model} 模型...")
-    print(f"使用数据: {sample_path}")
-
-    try:
-        # 执行训练
-        loss = trainer.train_single(sample_dir, epochs=args.epochs)
-
-        print(f"训练完成！平均损失: {loss:.4f}")
-
-        # 保存模型
-        model_path = trainer.model.save()
-        print(f"模型已保存到: {model_path}")
-
-    except Exception as e:
-        print(f"训练失败: {e}")
-        sys.exit(1)
 
 
 def run_self_play(args, trainer) -> None:

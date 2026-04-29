@@ -3,15 +3,12 @@
 独立运行的训练器入口，支持多种模型。
 
 用法:
-    # 单轮次训练（fc_v1 模型）
-    python ai/train_main.py --model fc_v1 --sample-dir train_data/{轮次目录}/{局数目录}
-    
     # 训练周期（fc_v1 模型）
     python ai/train_main.py --model fc_v1 --cycle [--rounds 100] [--games 100]
-    
+
     # 仅自我对弈生成数据（不训练）
     python ai/train_main.py --model fc_v1 --self-play --games 100
-    
+
     # 从已有数据目录训练模型
     python ai/train_main.py --model fc_v1 --train-from-dir ai/train_data/fc_v1_self_play_1
 """
@@ -24,7 +21,7 @@ import argparse
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from ai.registry import get_trainer
-from ai.runners import run_sample_dir, run_self_play, run_train_from_dir, run_cycle
+from ai.runners import run_self_play, run_train_from_dir, run_cycle
 
 
 def main():
@@ -34,18 +31,12 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  # 单轮次训练 fc_v1（默认10轮）
-  python ai/train_main.py --model fc_v1 --sample-dir train_data/random_vs_random_1/1
-  
-  # 单轮次训练 fc_v1（自定义轮数）
-  python ai/train_main.py --model fc_v1 --sample-dir train_data/random_vs_random_1/1 --epochs 20
-  
   # 训练周期 fc_v1（100轮，每轮100局）
   python ai/train_main.py --model fc_v1 --cycle
-  
+
   # 训练周期 fc_v1（自定义参数）
   python ai/train_main.py --model fc_v1 --cycle --rounds 50 --games 50
-  
+
   # 从新模型开始训练 fc_v1
   python ai/train_main.py --model fc_v1 --cycle --fresh
 
@@ -62,12 +53,6 @@ def main():
         type=str,
         default='fc_v1',
         help='模型名称，如 fc_v1、cnn_v1、cnn_v2，默认 fc_v1'
-    )
-    
-    parser.add_argument(
-        '--sample-dir',
-        type=str,
-        help='sample.json 所在目录路径（单轮次训练）'
     )
     
     parser.add_argument(
@@ -94,7 +79,7 @@ def main():
         '--epochs',
         type=int,
         default=1000,
-        help='单轮次训练的训练轮数，默认 1000'
+        help='训练迭代数，默认 1000'
     )
     
     parser.add_argument(
@@ -188,19 +173,17 @@ def main():
 
     args = parser.parse_args()
     
-    # 验证参数：四个模式互斥（--cycle、--self-play、--sample-dir、--train-from-dir 四选一）
+    # 验证参数：三个模式互斥（--cycle、--self-play、--train-from-dir 三选一）
     active_modes = []
     if args.cycle:
         active_modes.append('--cycle')
     if args.self_play:
         active_modes.append('--self-play')
-    if args.sample_dir:
-        active_modes.append('--sample-dir')
     if args.train_from_dir:
         active_modes.append('--train-from-dir')
 
     if len(active_modes) == 0:
-        parser.error("请指定 --sample-dir、--cycle、--self-play 或 --train-from-dir 参数")
+        parser.error("请指定 --cycle、--self-play 或 --train-from-dir 参数")
     elif len(active_modes) > 1:
         parser.error(f"以下参数不能同时使用: {', '.join(active_modes)}")
     
@@ -222,9 +205,7 @@ def main():
         sys.exit(1)
     
     # 根据模式路由到对应的运行器
-    if args.sample_dir:
-        run_sample_dir(args, trainer)
-    elif args.self_play:
+    if args.self_play:
         run_self_play(args, trainer)
     elif args.train_from_dir:
         run_train_from_dir(args, trainer)
