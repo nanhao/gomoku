@@ -105,6 +105,7 @@ python ai/train_main.py --model <模型名称> --train-from-dir <数据目录或
 | `--epochs` | 训练迭代数 | 1000 |
 | `--batch-size` | 每批次样本数（启用 mini-batch） | 无（全量更新） |
 | `--shuffle` | 每轮打乱数据顺序（mini-batch 有效） | False |
+| `--val-ratio` | 验证集比例，0 表示不分割，推荐 0.2 | 0.0 |
 | `--lr-scheduler` | 学习率调度：`step` / `plateau` | 无（固定学习率） |
 
 > 指定目录时自动发现 `merge_*.json` 合并文件和子目录下的 `sample.json`；指定 `.json` 文件时直接加载。
@@ -140,6 +141,7 @@ python ai/train_main.py --model <模型名称> --cycle [选项]
 | `--fresh` | 从新模型开始 | - |
 | `--batch-size` | 每批次样本数（启用 mini-batch） | 无（全量更新） |
 | `--shuffle` | 每轮打乱数据顺序（mini-batch 有效） | False |
+| `--val-ratio` | 验证集比例，0 表示不分割，推荐 0.2 | 0.0 |
 | `--lr-scheduler` | 学习率调度：`step` / `plateau` | 无（固定学习率） |
 | `--lr-step-size` | StepLR 衰减间隔（epoch） | 500 |
 | `--lr-gamma` | StepLR 衰减系数 | 0.9 |
