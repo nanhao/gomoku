@@ -191,6 +191,10 @@ def run_train_from_dir(args, trainer) -> None:
         print(f"  批次大小 (batch):    N/A (全量更新)")
         print(f"  数据打乱 (shuffle):  N/A")
         print(f"  训练方法:            train_batch (全量更新)")
+    if args.val_ratio > 0:
+        print(f"  验证集比例 (val_ratio): {args.val_ratio}")
+    else:
+        print(f"  验证集比例 (val_ratio): 0.0 (不分割)")
 
     try:
         # 自动选择训练方法（提供 batch_size 时使用 mini-batch，否则全量更新）
@@ -253,6 +257,10 @@ def run_cycle(args, trainer) -> None:
             print(f"    衰减系数:          {args.lr_factor}")
     else:
         print(f"  学习率调度:          无（固定学习率）")
+    if args.val_ratio > 0:
+        print(f"  验证集比例 (val_ratio): {args.val_ratio}")
+    else:
+        print(f"  验证集比例 (val_ratio): 0.0 (不分割)")
 
     try:
         # 执行训练周期
