@@ -15,29 +15,23 @@ def create_engine(ai_name: str) -> "AIEngine":
 
     AI 名称到模型的映射由 ai.registry 统一维护，外部调用者无需了解具体模型类。
 
-    与 get_trainer 的行为差异：
-    - create_engine 面向用户交互场景，未知名称时回退到 RandomModel（容错），
-      保证 GUI 不因配置错误而崩溃，同时输出 warning 日志。
-    - get_trainer 面向开发者训练场景，未知名称时抛出 ValueError（快速失败），
-      帮助开发者尽早发现配置问题。
+    异常策略：
+    - 未知模型名称、多代模型未指定代数等场景，直接上抛 ValueError，
+      由 app 层捕获并转换为 ModelLoadError，向 GUI 层传达模型加载失败信息。
+    - 不再回退到 RandomModel，避免静默降级导致用户误以为使用了指定模型。
 
     Args:
-        ai_name: AI 名称，如 "random"、"fc_v1"、"cnn_v1"
+        ai_name: AI 名称，如 "random"、"fc_v1"、"cnn_v3.1"
 
     Returns:
-        对应的 AIEngine 实例；未知名称时回退到 AIEngine(RandomModel) 并输出 warning
-    """
-    from ai.registry import get_model, list_models
+        对应的 AIEngine 实例
 
-    try:
-        model = get_model(ai_name)
-    except ValueError:
-        import logging
-        logging.getLogger(__name__).warning(
-            f"未知 AI 名称 '{ai_name}'，回退到 RandomModel。"
-            f"可选值: {list_models()}"
-        )
-        model = get_model("random")
+    Raises:
+        ValueError: 模型名称未知、多代模型未指定代数等
+    """
+    from ai.registry import get_model
+
+    model = get_model(ai_name)
     return AIEngine(model)
 
 

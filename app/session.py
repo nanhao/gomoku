@@ -6,6 +6,7 @@ app 包是薄的代理层，不包含业务逻辑，所有逻辑委托给 game �
 
 from game import GomokuController
 from ai import AIGameManager, create_engine
+from app.exceptions import ModelLoadError
 
 
 class GameSession:
@@ -41,7 +42,12 @@ class GameSession:
         self._ai_manager = None
 
         if mode == "pve" and ai_player is not None:
-            engine = create_engine(ai_name or "random")
+            # 捕获 create_engine 的 ValueError，转换为 ModelLoadError 上抛
+            # 由 GUI 层捕获后弹窗提示用户，回退到模式选择界面
+            try:
+                engine = create_engine(ai_name or "random")
+            except ValueError as e:
+                raise ModelLoadError(f"模型加载失败：{e}") from e
             self._ai_manager = AIGameManager(controller, engine, ai_player)
 
     @property

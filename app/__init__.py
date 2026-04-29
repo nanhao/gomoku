@@ -7,6 +7,7 @@
 from .session import GameSession
 from .battle import BattleSession
 from .gui_helper import GUIHelper, get_ai_data_dir, create_pve_config
+from .exceptions import ModelLoadError
 
 __all__ = [
     "GameSession",
@@ -14,4 +15,5 @@ __all__ = [
     "GUIHelper",
     "get_ai_data_dir",
     "create_pve_config",
+    "ModelLoadError",
 ]
