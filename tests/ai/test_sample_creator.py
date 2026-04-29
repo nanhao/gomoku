@@ -39,7 +39,7 @@ class TestWinningMoveBasic(unittest.TestCase):
             with open(path, 'w', encoding='utf-8') as f:
                 json.dump(record, f)
 
-            creator = SampleCreator(mode="winning_move")
+            creator = SampleCreator(mode="winning_move", augment=False)
             samples = creator.create([path])
 
             self.assertEqual(len(samples), 1)
@@ -70,7 +70,7 @@ class TestWinningMoveSkipDraw(unittest.TestCase):
             with open(path, 'w', encoding='utf-8') as f:
                 json.dump(record, f)
 
-            creator = SampleCreator(mode="winning_move")
+            creator = SampleCreator(mode="winning_move", augment=False)
             samples = creator.create([path])
 
             self.assertEqual(len(samples), 0)
@@ -93,7 +93,7 @@ class TestWinningMoveSkipNoWinner(unittest.TestCase):
             with open(path, 'w', encoding='utf-8') as f:
                 json.dump(record, f)
 
-            creator = SampleCreator(mode="winning_move")
+            creator = SampleCreator(mode="winning_move", augment=False)
             samples = creator.create([path])
 
             self.assertEqual(len(samples), 0)
@@ -114,7 +114,7 @@ class TestWinningMoveEmptyHistory(unittest.TestCase):
             with open(path, 'w', encoding='utf-8') as f:
                 json.dump(record, f)
 
-            creator = SampleCreator(mode="winning_move")
+            creator = SampleCreator(mode="winning_move", augment=False)
             samples = creator.create([path])
 
             self.assertEqual(len(samples), 0)
@@ -152,7 +152,7 @@ class TestWinningMoveMultipleFiles(unittest.TestCase):
             with open(path2, 'w', encoding='utf-8') as f:
                 json.dump(record2, f)
 
-            creator = SampleCreator(mode="winning_move")
+            creator = SampleCreator(mode="winning_move", augment=False)
             samples = creator.create([path1, path2])
 
             self.assertEqual(len(samples), 2)
@@ -188,7 +188,7 @@ class TestWinningMoveMultipleFiles(unittest.TestCase):
             with open(path2, 'w', encoding='utf-8') as f:
                 json.dump(record2, f)
 
-            creator = SampleCreator(mode="winning_move")
+            creator = SampleCreator(mode="winning_move", augment=False)
             samples = creator.create([path1, path2])
 
             self.assertEqual(len(samples), 1)
@@ -212,7 +212,7 @@ class TestWinningMoveInvalidPosition(unittest.TestCase):
             with open(path, 'w', encoding='utf-8') as f:
                 json.dump(record, f)
 
-            creator = SampleCreator(mode="winning_move")
+            creator = SampleCreator(mode="winning_move", augment=False)
             samples = creator.create([path])
 
             self.assertEqual(len(samples), 1)
@@ -233,7 +233,7 @@ class TestWinningMoveInvalidPosition(unittest.TestCase):
             with open(path, 'w', encoding='utf-8') as f:
                 json.dump(record, f)
 
-            creator = SampleCreator(mode="winning_move")
+            creator = SampleCreator(mode="winning_move", augment=False)
             samples = creator.create([path])
 
             self.assertEqual(len(samples), 1)
@@ -260,7 +260,7 @@ class TestCreateFromRoundDir(unittest.TestCase):
                 with open(os.path.join(game_dir, "record.json"), 'w', encoding='utf-8') as f:
                     json.dump(record, f)
 
-            creator = SampleCreator(mode="winning_move")
+            creator = SampleCreator(mode="winning_move", augment=False)
             samples = creator.create_from_round_dir(tmpdir)
 
             self.assertEqual(len(samples), 3)
@@ -285,7 +285,7 @@ class TestCreateFromRoundDir(unittest.TestCase):
             game_dir2 = os.path.join(tmpdir, "2")
             os.makedirs(game_dir2, exist_ok=True)
 
-            creator = SampleCreator(mode="winning_move")
+            creator = SampleCreator(mode="winning_move", augment=False)
             samples = creator.create_from_round_dir(tmpdir)
 
             self.assertEqual(len(samples), 1)
@@ -293,7 +293,7 @@ class TestCreateFromRoundDir(unittest.TestCase):
     def test_empty_round_dir_returns_empty(self):
         """空轮次目录返回空列表"""
         with tempfile.TemporaryDirectory() as tmpdir:
-            creator = SampleCreator(mode="winning_move")
+            creator = SampleCreator(mode="winning_move", augment=False)
             samples = creator.create_from_round_dir(tmpdir)
             self.assertEqual(samples, [])
 
@@ -305,6 +305,144 @@ class TestUnsupportedMode(unittest.TestCase):
         """不支持的模式抛出 ValueError"""
         with self.assertRaises(ValueError):
             SampleCreator(mode="unsupported_mode")
+
+
+class TestDataAugmentation(unittest.TestCase):
+    """D4 群数据增强测试"""
+
+    def test_augment_produces_eight_samples(self):
+        """1 个原始 sample 产生 8 个变体"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            record = {
+                "winner": 1,
+                "history": [
+                    {"input": [0.0] * 226, "output": [0.0] * 225, "position": [7, 7]},
+                ],
+                "end_board": [0.0] * 226
+            }
+            path = os.path.join(tmpdir, "record.json")
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(record, f)
+
+            creator = SampleCreator(mode="winning_move", augment=True)
+            samples = creator.create([path])
+
+            self.assertEqual(len(samples), 8)
+
+    def test_augment_identity_is_first(self):
+        """第 0 个变体（恒等变换）与原始完全一致"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            record = {
+                "winner": 1,
+                "history": [
+                    {"input": [float(i) for i in range(226)], "output": [0.0] * 225, "position": [3, 4]},
+                ],
+                "end_board": [0.0] * 226
+            }
+            # 手动设置 output，让 position [3,4] 对应位置为 1
+            record["history"][0]["output"][3 * 15 + 4] = 1.0
+            path = os.path.join(tmpdir, "record.json")
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(record, f)
+
+            creator_no_aug = SampleCreator(mode="winning_move", augment=False)
+            creator_aug = SampleCreator(mode="winning_move", augment=True)
+
+            original_samples = creator_no_aug.create([path])
+            augmented_samples = creator_aug.create([path])
+
+            self.assertEqual(len(original_samples), 1)
+            self.assertEqual(len(augmented_samples), 8)
+            # 恒等变换（tid=0）应与原始完全一致
+            self.assertEqual(augmented_samples[0]["input"], original_samples[0]["input"])
+            self.assertEqual(augmented_samples[0]["output"], original_samples[0]["output"])
+            self.assertEqual(augmented_samples[0]["mask"], original_samples[0]["mask"])
+
+    def test_augment_rotation_90_position(self):
+        """验证 R90 后 output 的 1 位置正确移动"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # position [1, 2] -> idx = 1*15 + 2 = 17
+            # R90: (r, c) -> (c, 14-r) = (2, 13) -> idx2 = 2*15 + 13 = 43
+            record = {
+                "winner": 1,
+                "history": [
+                    {"input": [0.0] * 226, "output": [0.0] * 225, "position": [1, 2]},
+                ],
+                "end_board": [0.0] * 226
+            }
+            path = os.path.join(tmpdir, "record.json")
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(record, f)
+
+            creator = SampleCreator(mode="winning_move", augment=True)
+            samples = creator.create([path])
+
+            self.assertEqual(len(samples), 8)
+            # tid=1 是 R90
+            r90_output = samples[1]["output"]
+            self.assertEqual(r90_output[43], 1.0)
+            # 确认原位置不是 1
+            self.assertEqual(r90_output[17], 0.0)
+
+    def test_augment_horizontal_flip_position(self):
+        """验证左右镜像后 output 的 1 位置正确移动"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # position [3, 5] -> idx = 3*15 + 5 = 50
+            # 左右镜像: (r, c) -> (r, 14-c) = (3, 9) -> idx2 = 3*15 + 9 = 54
+            record = {
+                "winner": 1,
+                "history": [
+                    {"input": [0.0] * 226, "output": [0.0] * 225, "position": [3, 5]},
+                ],
+                "end_board": [0.0] * 226
+            }
+            path = os.path.join(tmpdir, "record.json")
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(record, f)
+
+            creator = SampleCreator(mode="winning_move", augment=True)
+            samples = creator.create([path])
+
+            self.assertEqual(len(samples), 8)
+            # tid=4 是左右镜像
+            flip_output = samples[4]["output"]
+            self.assertEqual(flip_output[54], 1.0)
+            self.assertEqual(flip_output[50], 0.0)
+
+    def test_augment_composition_r90_twice(self):
+        """对同一向量应用两次 R90 等价于 R180"""
+        creator = SampleCreator(mode="winning_move", augment=False)
+        # 构造一个 225 维向量，只有 idx=17 处为 1
+        vector = [0.0] * 225
+        vector[17] = 1.0
+
+        # 第一次 R90 (tid=1)
+        r90_once = creator._apply_transform(vector, 1)
+        # 第二次 R90 (tid=1)
+        r90_twice = creator._apply_transform(r90_once, 1)
+        # R180 (tid=2)
+        r180 = creator._apply_transform(vector, 2)
+
+        self.assertEqual(r90_twice, r180)
+
+    def test_augment_disabled_returns_one(self):
+        """augment=False 时只返回 1 个原始 sample"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            record = {
+                "winner": 1,
+                "history": [
+                    {"input": [0.0] * 226, "output": [0.0] * 225, "position": [5, 5]},
+                ],
+                "end_board": [0.0] * 226
+            }
+            path = os.path.join(tmpdir, "record.json")
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(record, f)
+
+            creator = SampleCreator(mode="winning_move", augment=False)
+            samples = creator.create([path])
+
+            self.assertEqual(len(samples), 1)
 
 
 if __name__ == '__main__':

@@ -58,6 +58,13 @@ def main():
         help='输出文件路径（.json）'
     )
 
+    parser.add_argument(
+        '--no-augment',
+        action='store_true',
+        default=False,
+        help='禁用数据增强（默认启用 D4 群 8 变换）'
+    )
+
     args = parser.parse_args()
 
     # 加载模型
@@ -88,7 +95,7 @@ def main():
     round_dir = recorder.get_round_dir()
 
     # 生成样本
-    creator = SampleCreator(mode=args.mode)
+    creator = SampleCreator(mode=args.mode, augment=not args.no_augment)
     samples = creator.create_from_round_dir(round_dir)
 
     # 确保输出目录存在
@@ -101,9 +108,10 @@ def main():
         json.dump(samples, f, ensure_ascii=False)
 
     print(f"\n样本生成完成:")
-    print(f"  对局数:   {len(results)}")
-    print(f"  样本数:   {len(samples)}")
-    print(f"  输出路径: {args.output}")
+    print(f"  对局数:     {len(results)}")
+    print(f"  数据增强:   {'禁用' if args.no_augment else '启用 (8 变换)'}")
+    print(f"  样本数:     {len(samples)}")
+    print(f"  输出路径:   {args.output}")
 
 
 if __name__ == "__main__":
