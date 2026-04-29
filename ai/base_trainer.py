@@ -283,15 +283,17 @@ class BaseTrainer(ABC):
 
                 # 记录 loss 日志（每 LOSS_LOG_INTERVAL 个 epoch）
                 if (epoch + 1) % LOSS_LOG_INTERVAL == 0:
-                    loss_logger.log(epoch + 1, loss.item(), grad_norm)
-                    if verbose:
-                        current_lr = self.optimizer.param_groups[0]['lr']
-                        print(f"Epoch {epoch + 1}/{epochs}, loss: {loss.item():.4f}, grad_norm: {grad_norm:.4f}, lr: {current_lr:.6f}")
-
-                    # val loss 评估：与 train loss 同步记录
+                    val_loss = None
                     if has_val:
                         val_loss = self._evaluate_val_loss(val_inputs, val_targets, val_masks)
                         loss_logger.log_val(epoch + 1, val_loss)
+                    loss_logger.log(epoch + 1, loss.item(), grad_norm)
+                    if verbose:
+                        current_lr = self.optimizer.param_groups[0]['lr']
+                        if val_loss is not None:
+                            print(f"Epoch {epoch + 1}/{epochs}, loss: {loss.item():.4f}, val_loss: {val_loss:.4f}, grad_norm: {grad_norm:.4f}, lr: {current_lr:.6f}")
+                        else:
+                            print(f"Epoch {epoch + 1}/{epochs}, loss: {loss.item():.4f}, grad_norm: {grad_norm:.4f}, lr: {current_lr:.6f}")
 
                 # 学习率衰减
                 self._step_lr_scheduler(loss.item())
@@ -516,6 +518,14 @@ class BaseTrainer(ABC):
                     batch_losses.clear()
                     batch_grad_norms.clear()
 
+                # epoch 结束后评估 val loss（mini-batch 模式每个 epoch 都评估）
+                val_loss = None
+                if val_inputs is not None:
+                    val_loss = self._evaluate_val_loss(val_inputs, val_targets, val_masks)
+                    # dense 模式用 step，稀疏模式用 epoch 编号
+                    x_value = global_step if dense_log else (epoch + 1)
+                    loss_logger.log_val(x_value, val_loss)
+
                 # 稀疏日志：每 LOSS_LOG_INTERVAL 个 epoch 记录该 epoch 的平均 loss
                 if (epoch + 1) % LOSS_LOG_INTERVAL == 0:
                     epoch_avg_loss = epoch_loss_sum / epoch_batches_count if epoch_batches_count > 0 else 0.0
@@ -523,14 +533,10 @@ class BaseTrainer(ABC):
                         loss_logger.log(epoch + 1, epoch_avg_loss)
                     if verbose:
                         current_lr = self.optimizer.param_groups[0]['lr']
-                        print(f"Epoch {epoch + 1}/{epochs}, avg_loss: {epoch_avg_loss:.4f}, lr: {current_lr:.6f}")
-
-                # epoch 结束后评估 val loss（mini-batch 模式每个 epoch 都评估）
-                if val_inputs is not None:
-                    val_loss = self._evaluate_val_loss(val_inputs, val_targets, val_masks)
-                    # dense 模式用 step，稀疏模式用 epoch 编号
-                    x_value = global_step if dense_log else (epoch + 1)
-                    loss_logger.log_val(x_value, val_loss)
+                        if val_loss is not None:
+                            print(f"Epoch {epoch + 1}/{epochs}, avg_loss: {epoch_avg_loss:.4f}, val_loss: {val_loss:.4f}, lr: {current_lr:.6f}")
+                        else:
+                            print(f"Epoch {epoch + 1}/{epochs}, avg_loss: {epoch_avg_loss:.4f}, lr: {current_lr:.6f}")
 
                 # 学习率衰减
                 epoch_avg_loss = epoch_loss_sum / epoch_batches_count if epoch_batches_count > 0 else 0.0
