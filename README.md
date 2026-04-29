@@ -204,6 +204,32 @@ python ai/models/fc_v1/inspect_main.py --sample <sample.json路径> [--model-pat
 | `--sample` | sample.json 文件路径 | 必填 |
 | `--model-path` | 模型文件路径 | 默认加载 `ai/models/fc_v1/fc_v1.pth` |
 
+### 样本可视化
+
+将 winning_move 模式生成的样本可视化（棋盘 + 取胜位置标记）：
+
+```bash
+python ai/sample_visualizer.py --sample <样本文件> [选项]
+```
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--sample` | 样本文件路径（.json） | 必填 |
+| `--count` | 随机抽样数量 | 6 |
+| `--indices` | 指定样本索引（逗号分隔，如 `0,5,10`），与 `--count` 互斥，优先于 `--count` | 无 |
+| `--output` | 输出图片路径 | `temp/sample_visualizer.png` |
+
+```bash
+# 示例：随机抽取 6 个样本可视化
+python ai/sample_visualizer.py --sample ai/train_data/win_samples.json
+
+# 示例：指定索引
+python ai/sample_visualizer.py --sample data.json --indices 0,5,10
+
+# 示例：自定义输出路径和抽样数量
+python ai/sample_visualizer.py --sample data.json --count 3 --output temp/my_viz.png
+```
+
 ### LR Range Test
 
 学习率范围测试工具，用于确定最优学习率区间。每个 round 使用一个固定 lr，训练 `epochs` 个 step 后记录平均 loss，lr 从 `min_lr` 线性递增至 `max_lr`。每个 round 开始前重置模型到初始状态，确保 loss 只反映 lr 的影响。
