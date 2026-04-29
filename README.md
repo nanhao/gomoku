@@ -72,26 +72,28 @@ python ai/battle.py --ai1 fc_v1 --ai2 random --games 50
 
 ### 模型训练
 
-#### 自我对弈生成数据（不训练）
+#### 生成训练样本（对弈 + sample_creator）
 
 ```bash
-python ai/train_main.py --model <模型名称> --self-play --games <对局数> [--rate <衰减率>] [--merge-output <合并文件路径>]
+python ai/create_samples.py --model <模型名称> --output <输出文件路径> [选项]
 ```
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `--self-play` | 仅生成训练数据（自我对弈+评价） | - |
+| `--model` | 模型名称 | 必填 |
+| `--output` | 输出 `.json` 文件路径 | 必填 |
+| `--mode` | sample_creator 模式 | `winning_move` |
 | `--games` | 对局数 | 100 |
-| `--rate` | 奖励衰减率 | 0.9 |
-| `--merge-output` | 对局完成后自动合并样本到指定文件 | 无（不合并） |
+| `--no-augment` | 禁用数据增强（默认启用 D4 群 8 变换） | - |
 
 ```bash
 # 示例
-python ai/train_main.py --model cnn_v1 --self-play --games 100
-python ai/train_main.py --model cnn_v1 --self-play --games 100 --merge-output ai/train_data/merge_cnn_v1.json
+python ai/create_samples.py --model cnn_v3 --output ai/train_data/win_samples.json
+python ai/create_samples.py --model cnn_v3 --games 200 --output ai/train_data/win_samples.json
+python ai/create_samples.py --model cnn_v3 --no-augment --output ai/train_data/win_samples.json
 ```
 
-> **提示**：运行结束后会输出训练数据目录路径，可用 `--train-from-dir` 继续训练。
+> **提示**：运行结束后可用 `--train-from-dir` 加载生成的 `.json` 文件继续训练。
 
 #### 从已有数据训练
 
@@ -122,7 +124,7 @@ python ai/train_main.py --model cnn_v1 --train-from-dir ai/merge_samples/merge_c
 python ai/train_main.py --model cnn_v3 --train-from-dir ai/merge_samples/chong4.json --epochs 200 --batch-size 4096 --shuffle 
 ```
 
-> **注意**：`--cycle`、`--self-play`、`--train-from-dir` 三个模式互斥，只能选其一。
+> **注意**：`--cycle` 与 `--train-from-dir` 两个模式互斥，只能选其一。
 
 #### 训练周期（自我对弈训练）
 
