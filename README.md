@@ -91,6 +91,7 @@ python ai/create_samples.py --model <模型名称> --output <输出文件路径>
 python ai/create_samples.py --model cnn_v3 --output ai/train_data/win_samples.json
 python ai/create_samples.py --model cnn_v3 --games 200 --output ai/train_data/win_samples.json
 python ai/create_samples.py --model cnn_v3 --no-augment --output ai/train_data/win_samples.json
+python ai/create_samples.py --model random  --output ai/merge_samples/winning/win_samples2.json --games 5000
 ```
 
 > **提示**：运行结束后可用 `--train-from-dir` 加载生成的 `.json` 文件继续训练。
@@ -121,7 +122,7 @@ python ai/train_main.py --model cnn_v2 --train-from-dir ai/merge_samples --epoch
 python ai/train_main.py --model cnn_v1 --train-from-dir ai/merge_samples/merge_cnn_v1.json --epochs 1000
 
 # 示例：mini-batch 训练
-python ai/train_main.py --model cnn_v3 --train-from-dir ai/merge_samples/chong4.json --epochs 200 --batch-size 4096 --shuffle 
+python ai/train_main.py --model cnn_v3 --train-from-dir ai/merge_samples/winning/win_samples.json --epochs 1000 --batch-size 4096 --shuffle --val-ratio 0.2
 ```
 
 > **注意**：`--cycle` 与 `--train-from-dir` 两个模式互斥，只能选其一。
