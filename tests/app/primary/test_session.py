@@ -12,6 +12,7 @@ import sys
 import os
 import tempfile
 import shutil
+import pytest
 
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 if project_root not in sys.path:
@@ -135,11 +136,10 @@ class TestGameSessionEdgeCases:
         assert "status" in result
         assert "game_over" in result
 
-    def test_create_engine_unknown_fallback(self):
-        """create_engine 未知名称时应兜底返回 AIEngine(RandomModel)"""
-        engine = create_engine("unknown_model_xyz")
-        assert isinstance(engine, AIEngine)
-        assert isinstance(engine.model, RandomModel)
+    def test_create_engine_unknown_raises_value_error(self):
+        """create_engine 未知名称时不再回退，直接抛出 ValueError"""
+        with pytest.raises(ValueError, match="未知的模型"):
+            create_engine("unknown_model_xyz")
 
 
 class TestGameSessionPvp:

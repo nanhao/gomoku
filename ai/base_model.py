@@ -57,6 +57,18 @@ class BaseModel(ABC):
         """模型名称"""
         pass
     
+    @property
+    def full_name(self) -> str:
+        """含代数的完整模型名称
+
+        默认实现返回 name 本身，适用于非多代模型。
+        多代模型应在子类中覆盖此属性以包含代数信息。
+
+        Returns:
+            模型完整名称，如 "fc_v1" 或 "cnn_v3.2"
+        """
+        return self.name
+    
     @abstractmethod
     def save(self, model_path: str = None) -> str:
         """保存模型参数到文件
@@ -111,15 +123,25 @@ class NeuralNetworkModel(BaseModel):
     # 子类必须覆盖此属性，指定默认模型保存路径
     DEFAULT_MODEL_PATH: str = None
     
-    def __init__(self, model_path: str = None, fresh: bool = False):
+    def __init__(self, model_path: str = None, fresh: bool = False, gen: int | None = None):
         """初始化神经网络模型
-        
+
         Args:
             model_path: 模型文件路径，如果存在则加载
             fresh: 是否强制创建新模型（不加载已保存的模型）
+            gen: 代数，指定时 DEFAULT_MODEL_PATH 指向 gen{i}/ 子目录
         """
         super().__init__()
-        
+
+        # 保存代数信息
+        self.gen = gen
+
+        # 当 gen 不为 None 时，动态覆盖实例的 DEFAULT_MODEL_PATH 为 gen 子目录
+        if gen is not None:
+            base_dir = os.path.dirname(self.DEFAULT_MODEL_PATH)
+            model_filename = os.path.basename(self.DEFAULT_MODEL_PATH)
+            self.DEFAULT_MODEL_PATH = os.path.join(base_dir, f"gen{gen}", model_filename)
+
         # 创建神经网络实例（由子类实现）
         self.network = self._create_network()
         
@@ -204,20 +226,39 @@ class NeuralNetworkModel(BaseModel):
     
     def save(self, model_path: str = None) -> str:
         """保存模型参数
-        
+
         Args:
             model_path: 保存路径，默认使用子类的 DEFAULT_MODEL_PATH
-            
+
         Returns:
             实际保存的路径
         """
         if model_path is None:
             model_path = self.DEFAULT_MODEL_PATH
-        
+
+        # 自动创建保存目录（若不存在）
+        save_dir = os.path.dirname(model_path)
+        if save_dir and not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+
         # 保存模型状态字典
         torch.save(self.network.state_dict(), model_path)
-        
+
         return model_path
+    
+    @property
+    def full_name(self) -> str:
+        """含代数的完整模型名称
+
+        多代模型返回 "模型名.代数"（如 "cnn_v3.2"），
+        非多代模型返回模型名称本身（如 "fc_v1"），与 name 相同。
+
+        Returns:
+            模型完整名称
+        """
+        if self.gen is not None:
+            return f"{self.name}.{self.gen}"
+        return self.name
     
     def load(self, model_path: str):
         """加载模型参数

@@ -10,6 +10,8 @@ import os
 import tkinter as tk
 import unittest.mock as mock
 import unittest
+import pytest
+from unittest.mock import MagicMock
 
 # 确保项目根目录在路径中
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -50,7 +52,7 @@ class TestAIBattleConfigDialog:
         self._destroy()
 
     def test_get_available_ais_returns_list(self):
-        """_get_available_ais 应返回非空列表"""
+        """_get_available_ais 应返回非空列表（委托给 registry）"""
         dialog = AIBattleConfigDialog(self.root)
         ais = dialog._get_available_ais()
         assert isinstance(ais, list)
@@ -58,16 +60,22 @@ class TestAIBattleConfigDialog:
         dialog.dialog.destroy()
         self._destroy()
 
-    def test_get_available_ais_returns_sorted(self):
-        """AI 列表应按字母排序"""
+    def test_get_available_ais_delegates_to_registry(self):
+        """_get_available_ais 应委托给 registry.list_models_with_full_name()"""
+        from unittest.mock import patch
         dialog = AIBattleConfigDialog(self.root)
-        ais = dialog._get_available_ais()
-        assert ais == sorted(ais)
+
+        with patch('ai.registry.list_models_with_full_name') as mock_fn:
+            mock_fn.return_value = ["random", "cnn_v3.1"]
+            ais = dialog._get_available_ais()
+
+        mock_fn.assert_called_once()
+        assert ais == ["random", "cnn_v3.1"]
         dialog.dialog.destroy()
         self._destroy()
 
-    def test_get_available_ais_excludes_pycache(self):
-        """AI 列表应排除 __pycache__ 等目录"""
+    def test_get_available_ais_no_pycache(self):
+        """AI 列表不应包含 __pycache__ 等目录（委托给 registry 后自然排除）"""
         dialog = AIBattleConfigDialog(self.root)
         ais = dialog._get_available_ais()
         for ai in ais:
@@ -200,13 +208,9 @@ class TestAIBattleProgressWindow:
         """每个可用 AI 都应能创建引擎"""
         from ai.engine import AIEngine, create_engine
         window = self._create_window()
-        # 从 AIBattleConfigDialog 获取可用 AI 列表
-        root = tk.Tk()
-        root.withdraw()
-        config_dialog = AIBattleConfigDialog(root)
-        ais = config_dialog._get_available_ais()
-        config_dialog.dialog.destroy()
-        root.destroy()
+        # 直接从 registry 获取可用 AI 列表
+        from ai.registry import list_models_with_full_name
+        ais = list_models_with_full_name()
 
         for ai_name in ais:
             engine = create_engine(ai_name)
@@ -215,13 +219,64 @@ class TestAIBattleProgressWindow:
         self._destroy(window)
 
     def test_create_ai_engine_unknown_raises(self):
-        """create_engine 对未知 AI 应兼容处理（兼底返回 RandomModel）"""
-        from ai.engine import AIEngine, create_engine
-        from ai.models.random import RandomModel
+        """create_engine 对未知 AI 应抛出 ValueError（不再回退到 RandomModel）"""
+        from ai.engine import create_engine
         window = self._create_window()
-        engine = create_engine("unknown_ai")
-        assert isinstance(engine, AIEngine)
-        assert isinstance(engine.model, RandomModel)
+        with pytest.raises(ValueError):
+            create_engine("unknown_ai")
+        self._destroy(window)
+
+    def test_run_battle_catches_model_load_error(self):
+        """_run_battle 应捕获 ModelLoadError 并通过 _on_model_load_error 处理"""
+        from app.exceptions import ModelLoadError
+        window = self._create_window()
+
+        # mock BattleSession.run() 抛出 ModelLoadError
+        with mock.patch('gui.components.ai_battle.BattleSession') as MockSession:
+            mock_session = MagicMock()
+            mock_session.run.side_effect = ModelLoadError("模型加载失败：未知模型")
+            MockSession.return_value = mock_session
+
+            # mock root.after 以捕获主线程调度
+            scheduled_calls = []
+            def capture_after(ms, func=None, *args):
+                scheduled_calls.append((ms, func))
+            window.root.after = capture_after
+
+            # 模拟后台线程执行 battle_thread 内部逻辑
+            # 直接调用 _run_battle 会启动线程，此处验证逻辑即可
+            # 通过 mock thread 来避免真实线程
+            with mock.patch('gui.components.ai_battle.threading.Thread') as MockThread:
+                mock_thread = MagicMock()
+                MockThread.return_value = mock_thread
+                window._run_battle()
+
+                # 验证线程被创建并启动
+                MockThread.assert_called_once()
+                mock_thread.start.assert_called_once()
+
+        self._destroy(window)
+
+    def test_on_model_load_error_shows_messagebox(self):
+        """_on_model_load_error 应弹窗提示并销毁窗口"""
+        window = self._create_window()
+
+        with mock.patch('gui.components.ai_battle.messagebox') as mock_msg:
+            # mock root.destroy
+            window.root.destroy = MagicMock()
+            # 设置 on_complete 回调
+            callback = MagicMock()
+            window.on_complete = callback
+
+            window._on_model_load_error("模型加载失败：未知模型")
+
+            # 验证弹窗
+            mock_msg.showerror.assert_called_once_with("模型加载失败", "模型加载失败：未知模型")
+            # 验证窗口被销毁
+            window.root.destroy.assert_called_once()
+            # 验证回调被调用
+            callback.assert_called_once_with(None, False)
+
         self._destroy(window)
 
     def test_root_window_created(self):

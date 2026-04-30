@@ -249,11 +249,11 @@ class TestCreateEngine(unittest.TestCase):
                              "cnn_v2 应映射到 CNNV2Model，而非回退到 RandomModel")
         self.assertEqual(engine.model.name, "cnn_v2")
 
-    def test_create_engine_unknown_uses_random(self):
-        """测试未知模型名称时使用 random 作为兜底"""
-        engine = create_engine("unknown_model")
-        self.assertIsNotNone(engine)
-        self.assertEqual(engine.model.name, "random")
+    def test_create_engine_unknown_raises_value_error(self):
+        """测试未知模型名称时直接抛出 ValueError，不再回退到 RandomModel"""
+        with self.assertRaises(ValueError) as ctx:
+            create_engine("unknown_model")
+        self.assertIn("未知的模型", str(ctx.exception))
 
     def test_create_engine_cnn_v2_not_random(self):
         """测试 cnn_v2 不会静默回退到 RandomModel"""

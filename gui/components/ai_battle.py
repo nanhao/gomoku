@@ -1,5 +1,8 @@
-"""
-AI 内战组件 - 负责 AI 对战模式的配置、执行和进度显示
+"""AI 内战组件 - 负责 AI 对战模式的配置、执行和进度显示
+
+多代模型支持：
+- _get_available_ais 委托给 registry.list_models_with_full_name()
+- _run_battle 捕获 ModelLoadError 并弹窗提示用户
 """
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -11,6 +14,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from app import BattleSession
+from app.exceptions import ModelLoadError
 
 from .constants import COLORS, DIMENSIONS, FONTS
 
@@ -135,24 +139,13 @@ class AIBattleConfigDialog:
         ).pack(pady=25)
     
     def _get_available_ais(self):
-        """获取可用的 AI 列表 - 动态扫描 ai/models/ 目录下的子目录"""
-        ai_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-        ai_dir = os.path.join(ai_dir, "ai", "models")
-        # 目录不存在时返回空列表而非崩溃
-        if not os.path.exists(ai_dir):
-            return []
-        ais = []
-        for name in os.listdir(ai_dir):
-            # 排除 __ 开头的目录（如 __pycache__）
-            if name.startswith("__"):
-                continue
-            subdir = os.path.join(ai_dir, name)
-            if os.path.isdir(subdir):
-                # 检查是否有 __init__.py 和模型导出
-                init_file = os.path.join(subdir, "__init__.py")
-                if os.path.exists(init_file):
-                    ais.append(name)
-        return sorted(ais)
+        """获取可用的 AI 列表
+
+        委托给 registry.list_models_with_full_name() 实现。
+        多代模型按代数展开为单独条目（如 cnn_v3.1、cnn_v3.2）。
+        """
+        from ai.registry import list_models_with_full_name
+        return list_models_with_full_name()
     
     def _start_battle(self):
         """验证并启动对战"""
@@ -271,7 +264,13 @@ class AIBattleProgressWindow:
                     self.progress_label.config(text=f"{idx} / {self.num_games}"),
                 ))
 
-            session.run(on_progress=on_progress)
+            try:
+                session.run(on_progress=on_progress)
+            except ModelLoadError as e:
+                # 模型加载失败 → 在主线程弹窗提示并关闭窗口
+                self.root.after(0, lambda: self._on_model_load_error(str(e)))
+                return
+
             self.recorder = session.get_recorder()
 
             # 完成对战
@@ -280,6 +279,21 @@ class AIBattleProgressWindow:
         thread = threading.Thread(target=battle_thread)
         thread.daemon = True
         thread.start()
+
+    def _on_model_load_error(self, error_msg: str):
+        """模型加载失败处理
+
+        弹窗提示用户具体错误信息，然后关闭进度窗口，回退到模式选择界面。
+
+        Args:
+            error_msg: 错误信息文本
+        """
+        messagebox.showerror("模型加载失败", error_msg)
+        self.root.destroy()
+
+        # 通知回调：对战未完成
+        if self.on_complete:
+            self.on_complete(None, False)
 
     def _on_battle_complete(self):
         """对战完成处理"""

@@ -9,6 +9,7 @@ from typing import Callable, List
 
 from ai import AIGameManager, DataRecorder, Evaluator, create_engine
 from ai.constants import AI_DATA_DIR, TRAIN_DATA_DIR
+from app.exceptions import ModelLoadError
 
 
 class BattleSession:
@@ -64,8 +65,13 @@ class BattleSession:
         Returns:
             对战结果列表，每项为 {"game": 局数, "winner": 获胜方}
         """
-        engine1 = create_engine(self._ai1_name)
-        engine2 = create_engine(self._ai2_name)
+        # 捕获 create_engine 的 ValueError，转换为 ModelLoadError 上抛
+        # 任一方的模型加载失败都会中止整个内战流程
+        try:
+            engine1 = create_engine(self._ai1_name)
+            engine2 = create_engine(self._ai2_name)
+        except ValueError as e:
+            raise ModelLoadError(f"模型加载失败：{e}") from e
 
         battle_name = f"{self._ai1_name}_vs_{self._ai2_name}"
         recorder = DataRecorder(battle_name, self._ai_data_dir)

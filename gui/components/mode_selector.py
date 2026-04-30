@@ -391,29 +391,15 @@ class GameModeSelector:
     
     def _get_available_ais(self):
         """获取可用的 AI 列表
-        
-        动态扫描 ai 目录下的所有 AI 模型子目录。
-        
+
+        委托给 registry.list_models_with_full_name() 实现。
+        多代模型按代数展开为单独条目（如 cnn_v3.1、cnn_v3.2）。
+
         Returns:
-            list: 可用 AI 模型名称列表
+            list[str]: 可用 AI 模型名称列表
         """
-        import os
-        
-        # 获取 ai/models 目录路径（相对于项目根目录）
-        ai_dir = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-            "ai", "models"
-        )
-        
-        ais = []
-        if os.path.exists(ai_dir):
-            for item in os.listdir(ai_dir):
-                item_path = os.path.join(ai_dir, item)
-                # 只包含目录，且排除 __pycache__ 等特殊目录
-                if os.path.isdir(item_path) and not item.startswith("__"):
-                    ais.append(item)
-        
-        return sorted(ais) if ais else ["random"]
+        from ai.registry import list_models_with_full_name
+        return list_models_with_full_name()
     
     def get_result(self):
         """获取选择结果
