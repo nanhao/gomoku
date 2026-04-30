@@ -627,3 +627,6 @@ agent 给了我一份建议书，在 design/learn_rate 下面，我准备采用�
 目前的目录结构是 ai/models/模型名称/pth文件。
 本次需求是要支持 ai/models/模型名称/gen{i}/pth文件
 所有的脚本，以及 gui 界面，要支持以 模型名称.gen{i} 方式加载模型
+
+# 第三十四次追加
+之前已经实现过一个临时脚本 temp/gen_chong4_samples.py，用来生成一批冲四棋型的sample。现在我想增强这个脚本，加入活四、活三、活二三种棋型。
