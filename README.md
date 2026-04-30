@@ -176,6 +176,40 @@ python ai/train_main.py --model cnn_v2 --cycle --batch-size 32 --lr-scheduler pl
 python ai/train_main.py --model cnn_v2 --cycle --batch-size 128 --shuffle --rounds 1 --games 600 --epochs 2000
 ```
 
+### 棋型样本生成
+
+按指定棋型合成训练样本：每个样本包含一个精心构造的 15×15 棋盘，以及通过 `RewardCalculator + masked_softmax` 生成的 label。生成后自动用 Hit@N 等指标做 label 质量体检。
+
+支持 6 种棋型：
+- **进攻棋型**（己方落子形成威胁）：`chong4` / `huo4` / `huo3` / `huo2`
+- **防守棋型**（对手即将形成威胁，必须抢占）：`defend_chong4` / `defend_huo3`
+
+```bash
+python -m ai.sample_generator --shape <棋型> --num-samples <数量> --output <输出路径> [选项]
+```
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--shape` | 目标棋型（见上方 6 选一） | 必填 |
+| `--num-samples` | 目标样本数 | 必填 |
+| `--output` | 输出 `.json` 文件路径 | 必填 |
+| `--seed` | 随机种子（相同 seed + 相同参数可复现一致批次） | 42 |
+| `--max-extra` | 每样本最多干扰子数 | 4 |
+| `--print-failures` | 验证未命中样本打印条数（0=不打印） | 5 |
+
+```bash
+# 示例：生成 10000 个冲四样本
+python -m ai.sample_generator --shape chong4 --num-samples 10000 --output ai/merge_samples/chong4.json
+
+# 示例：生成活三样本（干扰子更多）
+python -m ai.sample_generator --shape huo3 --num-samples 5000 --max-extra 8 --output ai/merge_samples/huo3.json
+
+# 示例：生成防守冲四样本
+python -m ai.sample_generator --shape defend_chong4 --num-samples 5000 --output ai/merge_samples/defend_chong4.json
+```
+
+> **验证报告**：运行结束会打印 Hit@N / Hit@N+1 / Hit@N+2 命中率、`attack_prob_sum`（进攻位概率和）、`prob_gap`（进攻位与其他位的区分度）等指标，方便判断 label 质量是否达标。
+
 ### 样本合并
 
 将分散的 `sample.json` 合并为单个大文件，减少训练时的 I/O 开销：
