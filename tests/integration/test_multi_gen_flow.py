@@ -100,9 +100,13 @@ class TestListModelsWithFullNameFileSystem(unittest.TestCase):
             # 为非多代模型创建空目录
             for name in ["random", "fc_v1", "cnn_v1", "cnn_v2"]:
                 os.makedirs(os.path.join(tmp, name), exist_ok=True)
-            # 为 cnn_v3 创建 gen1/gen2
+            # 为 cnn_v3 创建 gen1/gen2，并在每个 gen 目录下放一个占位 .pth
+            # （list_models_with_full_name 要求 gen 目录内至少有一个 .pth 才
+            # 识别为有效代数，避免空目录被误展示）
             for g in [1, 2]:
-                os.makedirs(os.path.join(tmp, "cnn_v3", f"gen{g}"), exist_ok=True)
+                gen_dir = os.path.join(tmp, "cnn_v3", f"gen{g}")
+                os.makedirs(gen_dir, exist_ok=True)
+                open(os.path.join(gen_dir, "cnn_v3.pth"), "w").close()
 
             with patch("ai.registry._MODELS_DIR", tmp):
                 result = list_models_with_full_name()
