@@ -122,6 +122,7 @@ def get_model(spec: str):
         ValueError: 未知的模型名称
         ValueError: 多代模型未指定代数
         ValueError: 非多代模型指定了代数
+        ValueError: 显式指定 gen 但对应权重文件不存在（禁止静默回退到随机权重）
     """
 
 def get_trainer(spec: str, **kwargs):
@@ -297,7 +298,7 @@ def _get_available_ais(self) -> list[str]:
 | `"random"` | `False` | - | RandomModel 实例 | 非多代正常 |
 | `"fc_v1"` | `False` | fc_v1.pth 存在 | FCv1Model 实例 | 非多代正常 |
 | `"cnn_v3.2"` | `True` | gen2 存在 | CNNV3Model(gen=2)，加载 gen2 权重 | 多代正常 |
-| `"cnn_v3.2"` | `True` | gen2 不存在 | CNNV3Model(gen=2)，fresh 状态 | **用户显式指定 gen 优先**，无视目录状态 |
+| `"cnn_v3.2"` | `True` | gen2 不存在 | ValueError（权重文件不存在） | **禁止静默回退到随机权重**，避免用户误以为加载了训练好的模型 |
 | `"cnn_v3.2"` | `False` | - | ValueError | 非多代不能指定代数 |
 | `"cnn_v3"` | `True` | - | ValueError | 声明为 True 即多代，必须指定代数 |
 | `"fc_v1.1"` | `False` | - | ValueError | 非多代不能指定代数 |

@@ -51,11 +51,28 @@ class TestGetModel(unittest.TestCase):
 
     def test_get_model_cnn_v3(self):
         """加载 cnn_v3.1 模型（多代模型必须指定代数）"""
-        model = get_model("cnn_v3.1")
-        self.assertIsNotNone(model)
-        self.assertIsInstance(model, BaseModel)
-        self.assertEqual(model.name, "cnn_v3")
-        self.assertEqual(model.full_name, "cnn_v3.1")
+        # 新硬校验：显式指定 gen 时必须命中 .pth，测试前临时创建占位权重
+        import torch
+        from ai.models.cnn_v3.model import CNNV3Model
+        base_dir = os.path.dirname(CNNV3Model.DEFAULT_MODEL_PATH)
+        gen_dir = os.path.join(base_dir, "gen1")
+        pth_path = os.path.join(gen_dir, "cnn_v3.pth")
+        os.makedirs(gen_dir, exist_ok=True)
+        pre_exists = os.path.exists(pth_path)
+        if not pre_exists:
+            tmp = CNNV3Model(fresh=True, gen=1)
+            torch.save(tmp.network.state_dict(), pth_path)
+        try:
+            model = get_model("cnn_v3.1")
+            self.assertIsNotNone(model)
+            self.assertIsInstance(model, BaseModel)
+            self.assertEqual(model.name, "cnn_v3")
+            self.assertEqual(model.full_name, "cnn_v3.1")
+        finally:
+            if not pre_exists and os.path.exists(pth_path):
+                os.remove(pth_path)
+                if not os.listdir(gen_dir):
+                    os.rmdir(gen_dir)
 
     def test_get_model_cnn_v3_without_gen_raises(self):
         """cnn_v3 不指定代数应抛出 ValueError"""

@@ -157,6 +157,11 @@ class NeuralNetworkModel(BaseModel):
         # 否则尝试加载默认路径的模型
         elif self.DEFAULT_MODEL_PATH and os.path.exists(self.DEFAULT_MODEL_PATH):
             self.load(self.DEFAULT_MODEL_PATH)
+        # 多代模型显式指定代数时，必须命中权重文件，否则报错
+        # 避免静默回退到随机初始化网络导致用户误以为在使用训练好的模型
+        elif gen is not None:
+            raise ValueError(
+                f"模型权重文件不存在: {self.DEFAULT_MODEL_PATH}")
     
     @abstractmethod
     def _create_network(self) -> nn.Module:

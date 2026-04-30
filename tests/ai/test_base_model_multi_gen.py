@@ -82,9 +82,24 @@ class TestGenParameterPassed(unittest.TestCase):
     def test_gen_parameter_via_registry(self):
         """通过 registry.get_model 传入 gen 参数"""
         from ai.registry import get_model
-        model = get_model("cnn_v3.2")
-        self.assertEqual(model.gen, 2)
-        self.assertEqual(model.full_name, "cnn_v3.2")
+        # get_model 不支持 fresh 透传，需确保对应 gen 的 .pth 存在
+        base_dir = os.path.dirname(CNNV3Model.DEFAULT_MODEL_PATH)
+        gen_dir = os.path.join(base_dir, "gen2")
+        pth_path = os.path.join(gen_dir, "cnn_v3.pth")
+        os.makedirs(gen_dir, exist_ok=True)
+        pre_exists = os.path.exists(pth_path)
+        if not pre_exists:
+            tmp = CNNV3Model(fresh=True, gen=2)
+            torch.save(tmp.network.state_dict(), pth_path)
+        try:
+            model = get_model("cnn_v3.2")
+            self.assertEqual(model.gen, 2)
+            self.assertEqual(model.full_name, "cnn_v3.2")
+        finally:
+            if not pre_exists and os.path.exists(pth_path):
+                os.remove(pth_path)
+                if not os.listdir(gen_dir):
+                    os.rmdir(gen_dir)
 
 
 class TestRandomModelRejectsGen(unittest.TestCase):
