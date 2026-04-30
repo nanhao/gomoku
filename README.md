@@ -244,29 +244,37 @@ python ai/models/fc_v1/inspect_main.py --sample <sample.json路径> [--model-pat
 
 ### 样本可视化
 
-将 winning_move 模式生成的样本可视化（棋盘 + 取胜位置标记）：
+将样本可视化为 PNG（棋盘 + 棋子 + attack 标记 + 热力图）。兼容新格式（`sample_generator` 输出，含 `_attack_positions`/`_shape`/`mask`）与旧 `winning_move` 格式：
 
 ```bash
-python ai/sample_visualizer.py --sample <样本文件> [选项]
+python -m ai.sample_visualizer --sample <样本文件> [选项]
 ```
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
 | `--sample` | 样本文件路径（.json） | 必填 |
 | `--count` | 随机抽样数量 | 6 |
-| `--indices` | 指定样本索引（逗号分隔，如 `0,5,10`），与 `--count` 互斥，优先于 `--count` | 无 |
+| `--indices` | 指定样本索引（逗号分隔，如 `0,5,10`），优先于 `--count` | 无 |
+| `--seed` | 抽样随机种子（相同 seed 可复现抽样） | 无（每次随机） |
 | `--output` | 输出图片路径 | `temp/sample_visualizer.png` |
+| `--no-heatmap` | 关闭热力图叠加（只画棋盘 + 棋子 + attack 标记） | 默认叠加 |
+| `--heatmap-mode` | 归一化模式 `log` / `max` / `linear`（`log` 专为 softmax 极端分布设计） | `log` |
+| `--heatmap-alpha` | 热力图透明度（0~1） | 0.75 |
+
+> `--no-heatmap` 指定时，`--heatmap-mode` 和 `--heatmap-alpha` 被忽略。
 
 ```bash
-# 示例：随机抽取 6 个样本可视化
-python ai/sample_visualizer.py --sample ai/train_data/win_samples.json
+# 示例：随机抽取 6 个样本可视化（默认叠加热力图）
+python -m ai.sample_visualizer --sample ai/merge_samples/chong4.json
 
-# 示例：指定索引
-python ai/sample_visualizer.py --sample data.json --indices 0,5,10
+# 示例：指定索引 + 自定义输出
+python -m ai.sample_visualizer --sample data.json --indices 0,5,10 --output temp/my_viz.png
 
-# 示例：自定义输出路径和抽样数量
-python ai/sample_visualizer.py --sample data.json --count 3 --output temp/my_viz.png
+# 示例：关闭热力图 + 固定种子复现
+python -m ai.sample_visualizer --sample data.json --count 3 --no-heatmap --seed 42
 ```
+
+> 热力图核心算法位于独立可复用的 `visualization/heatmap_color.py`（无 UI 依赖），供其它可视化场景 import。
 
 ### LR Range Test
 
