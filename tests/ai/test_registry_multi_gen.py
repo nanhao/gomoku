@@ -225,18 +225,28 @@ class TestGetTrainer(unittest.TestCase):
 class TestListModelsWithFullName(unittest.TestCase):
     """测试 list_models_with_full_name 含代数的完整模型列表"""
 
-    def _setup_model_dir(self, base_dir, model_name, gen_dirs=None, pth_files=None):
+    def _setup_model_dir(self, base_dir, model_name, gen_dirs=None,
+                         pth_files=None, empty_gens=None):
         """在 base_dir 下创建模型目录结构
 
         Args:
             base_dir: 基础目录
             model_name: 模型名称
-            gen_dirs: gen 子目录编号列表，如 [1, 2, 5]
-            pth_files: pth 文件名列表，如 ["model.pth"]
+            gen_dirs: gen 子目录编号列表，如 [1, 2, 5]，每个 gen 目录下
+                会创建一个占位 .pth 文件（模拟已保存的代数权重）
+            pth_files: 模型根目录下的 pth 文件名列表，如 ["model.pth"]
+            empty_gens: 空 gen 子目录编号列表（目录存在但无 .pth 文件），
+                用于模拟训练中断或尚未产生权重的场景
         """
         model_dir = os.path.join(base_dir, model_name)
         os.makedirs(model_dir, exist_ok=True)
         for g in (gen_dirs or []):
+            gen_dir = os.path.join(model_dir, f"gen{g}")
+            os.makedirs(gen_dir, exist_ok=True)
+            # 在 gen 目录下放一个占位 .pth，表示该代数已有权重
+            open(os.path.join(gen_dir, f"{model_name}.pth"), "w").close()
+        for g in (empty_gens or []):
+            # 仅创建空 gen 目录，不放任何 .pth
             os.makedirs(os.path.join(model_dir, f"gen{g}"), exist_ok=True)
         for f in (pth_files or []):
             open(os.path.join(model_dir, f), "w").close()
@@ -316,6 +326,44 @@ class TestListModelsWithFullName(unittest.TestCase):
 
             # 无有效 gen 目录 → cnn_v3 不展示
             self.assertTrue(all("cnn_v3" not in r for r in result))
+
+    def test_empty_gen_dir_not_shown(self):
+        """空 gen 目录（目录存在但无 .pth 文件）不应被展示
+
+        回归测试：防止训练中断或提前创建的空 gen{i}/ 目录被误识为
+        可用代数，避免用户在 GUI 中选择后触发 FileNotFoundError 或
+        静默回退到 RandomModel（辩论报告焦点 #4 硬性阻断项）
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            # cnn_v3/gen1/ 存在但无 .pth 文件
+            self._setup_model_dir(tmp, "cnn_v3", empty_gens=[1])
+
+            with patch("ai.registry._MODELS_DIR", tmp):
+                result = list_models_with_full_name()
+
+            # cnn_v3 不应以任何形式出现
+            self.assertTrue(
+                all("cnn_v3" not in r for r in result),
+                f"空 gen 目录不应被展示，实际结果: {result}",
+            )
+
+    def test_mixed_empty_and_non_empty_gens(self):
+        """混合：有权重的 gen 与空 gen 共存时，仅展示有权重的代数
+
+        例如 gen1/ 下有 .pth，gen2/ 为空目录 → 仅展示 cnn_v3.1
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            self._setup_model_dir(
+                tmp, "cnn_v3", gen_dirs=[1, 3], empty_gens=[2, 4]
+            )
+
+            with patch("ai.registry._MODELS_DIR", tmp):
+                result = list_models_with_full_name()
+
+            self.assertIn("cnn_v3.1", result)
+            self.assertIn("cnn_v3.3", result)
+            self.assertNotIn("cnn_v3.2", result)
+            self.assertNotIn("cnn_v3.4", result)
 
 
 # ---------------------------------------------------------------------------

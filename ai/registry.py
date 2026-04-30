@@ -238,7 +238,9 @@ def list_models_with_full_name() -> list[str]:
     """返回所有可加载的模型指定字符串列表（含代数的完整名称）
 
     - 非多代模型：返回模型名称本身
-    - 多代模型：扫描 gen{i}/ 子目录，返回每个已有代数的完整指定
+    - 多代模型：扫描 gen{i}/ 子目录，仅当该目录下存在至少一个 .pth
+      文件时才识别为一个有效代数；无 .pth 的空 gen{i}/ 目录会被跳过
+      （例如训练中断或尚未产生权重的残留目录）
     - 若多代模型无已保存代数，则不展示该模型
     - 扫描时若检测到 pth 文件与 gen{i}/ 目录共存，抛出 ValueError
 
@@ -270,7 +272,9 @@ def list_models_with_full_name() -> list[str]:
                 if gen_str:
                     try:
                         gen_num = int(gen_str)
-                        if gen_num >= 1:
+                        if gen_num >= 1 and _gen_dir_has_pth(item_path):
+                            # 仅当 gen 目录下至少存在一个 .pth 文件时
+                            # 才认为是有效代数，避免空目录被误展示
                             gen_nums.append(gen_num)
                     except ValueError:
                         pass
@@ -290,3 +294,22 @@ def list_models_with_full_name() -> list[str]:
             result.append(f"{name}.{gen}")
 
     return result
+
+
+def _gen_dir_has_pth(gen_dir: str) -> bool:
+    """判断 gen{i}/ 目录下是否至少存在一个 .pth 文件
+
+    用于在 list_models_with_full_name 中过滤掉空 gen 目录，避免将
+    训练中断或尚未产生权重的残留目录误识为可用代数，引发下游
+    FileNotFoundError 或静默回退。
+
+    Args:
+        gen_dir: gen{i}/ 目录的绝对路径（调用方保证目录存在）
+
+    Returns:
+        True 表示目录下至少有一个 .pth 文件
+    """
+    for f in os.listdir(gen_dir):
+        if f.endswith(".pth") and os.path.isfile(os.path.join(gen_dir, f)):
+            return True
+    return False
