@@ -240,5 +240,76 @@ class TestCliNoAugment(unittest.TestCase):
             self.assertEqual(len(samples), 1)
 
 
+class TestCliWinnerPathMode(unittest.TestCase):
+    """--mode winner_path 端到端贯通（第三十八次追加）"""
+
+    @patch('ai.create_samples.get_model')
+    @patch('ai.create_samples.AIEngine')
+    @patch('ai.create_samples.AIGameManager')
+    @patch('ai.create_samples.DataRecorder')
+    def test_winner_path_mode_cli(self, mock_recorder_cls, mock_manager_cls, mock_engine_cls, mock_get_model):
+        """--mode winner_path 时产物 sample 数 = 获胜方步数-1，且不做 D4 增强"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = os.path.join(tmpdir, "winner_path.json")
+
+            mock_model = MagicMock()
+            mock_model.name = "test_model"
+            mock_get_model.return_value = mock_model
+
+            mock_engine = MagicMock()
+            mock_engine_cls.return_value = mock_engine
+
+            # 1 局黑胜
+            mock_manager = MagicMock()
+            mock_manager.start_ai_vs_ai.return_value = [
+                {"game": 1, "winner": 1},
+            ]
+            mock_manager_cls.return_value = mock_manager
+
+            mock_recorder = MagicMock()
+            round_dir = os.path.join(tmpdir, "round_1")
+            os.makedirs(round_dir, exist_ok=True)
+            game_dir = os.path.join(round_dir, "1")
+            os.makedirs(game_dir, exist_ok=True)
+            # 构造 5 步黑胜局：黑方步 = [0, 2, 4]，剔首 → [2, 4] → 2 个 sample
+            history = []
+            for i in range(5):
+                history.append({
+                    "input": [float(i)] * 226,
+                    "output": [0.0] * 225,
+                    "position": [i // 15, i % 15],
+                })
+            record = {
+                "winner": 1,
+                "history": history,
+                "end_board": [0.0] * 226,
+            }
+            with open(os.path.join(game_dir, "record.json"), 'w', encoding='utf-8') as f:
+                json.dump(record, f)
+            mock_recorder.get_round_dir.return_value = round_dir
+            mock_recorder_cls.return_value = mock_recorder
+
+            with patch('sys.argv', [
+                'create_samples.py', '--model', 'test_model',
+                '--mode', 'winner_path',
+                '--games', '1', '--output', output_path,
+            ]):
+                main()
+
+            with open(output_path, 'r', encoding='utf-8') as f:
+                samples = json.load(f)
+
+            # 剔首后获胜方保留 2 步，winner_path 强制不增强 → 2 个样本
+            self.assertEqual(len(samples), 2)
+            # 每个 sample 结构齐全、mask 全 1
+            for s in samples:
+                self.assertIn("input", s)
+                self.assertIn("output", s)
+                self.assertIn("mask", s)
+                self.assertEqual(s["mask"], [1] * 225)
+                # input 应是保留步的原始 input（值为 2.0 或 4.0）
+                self.assertIn(s["input"][0], (2.0, 4.0))
+
+
 if __name__ == '__main__':
     unittest.main()

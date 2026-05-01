@@ -25,8 +25,14 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
+  # winning_move 模式（默认）：仅取每局最后一步，启用 D4 增强
   python ai/create_samples.py --model cnn_v3.1 --output ai/train_data/win_samples.json
   python ai/create_samples.py --model cnn_v3.1 --mode winning_move --games 200 --output ai/train_data/win_samples.json
+
+  # winner_path 模式：取获胜方每一步（剔除开局第 1 步），强制不做 D4 增强
+  python ai/create_samples.py --model cnn_v3.1 --mode winner_path --games 200 --output ai/train_data/winner_path_samples.json
+
+  # 其它模型
   python ai/create_samples.py --model fc_v1 --output ai/train_data/fc_samples.json
         """
     )
@@ -42,7 +48,8 @@ def main():
         '--mode',
         type=str,
         default='winning_move',
-        help='sample_creator 模式，默认 winning_move'
+        choices=['winning_move', 'winner_path'],
+        help='sample_creator 模式，默认 winning_move；winner_path 为获胜方整条路径（剔除开局，且强制不做 D4 增强）'
     )
 
     parser.add_argument(
