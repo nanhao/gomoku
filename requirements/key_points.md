@@ -630,3 +630,9 @@ agent 给了我一份建议书，在 design/learn_rate 下面，我准备采用�
 
 # 第三十四次追加
 之前已经实现过一个临时脚本 temp/gen_chong4_samples.py，用来生成一批冲四棋型的sample。现在我想增强这个脚本，加入活四、活三、活二三种棋型。
+
+# 第三十五次追加
+为了给 sample_visualizer.py 使用热力图，先设计一套新的热力图方案，不复用 gui 那套了。未来也打算把 gui 那套重构掉
+
+# 第三十六次追加
+把 gui 的热力图重构掉，复用 visualization 的那套

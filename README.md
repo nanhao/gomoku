@@ -125,7 +125,7 @@ python ai/train_main.py --model cnn_v2 --train-from-dir ai/merge_samples --epoch
 python ai/train_main.py --model cnn_v1 --train-from-dir ai/merge_samples/merge_cnn_v1.json --epochs 1000
 
 # 示例：mini-batch 训练
-python ai/train_main.py --model cnn_v3 --train-from-dir ai/merge_samples/winning/win_samples.json --epochs 1000 --batch-size 4096 --shuffle --val-ratio 0.2
+python ai/train_main.py --model cnn_v3.2 --fresh --train-from-dir ai/merge_samples/v2 --epochs 1000 --batch-size 4096 --shuffle --val-ratio 0.2
 ```
 
 > **注意**：`--cycle` 与 `--train-from-dir` 两个模式互斥，只能选其一。
@@ -274,7 +274,7 @@ python -m ai.sample_visualizer --sample data.json --indices 0,5,10 --output temp
 python -m ai.sample_visualizer --sample data.json --count 3 --no-heatmap --seed 42
 ```
 
-> 热力图核心算法位于独立可复用的 `visualization/heatmap_color.py`（无 UI 依赖），供其它可视化场景 import。
+> 热力图核心算法位于独立可复用的 `visualization/heatmap_color.py`（无 UI 依赖，默认白→黄→橙→红 4 色色板 + log 归一化），同时被 `ai/sample_visualizer.py`（matplotlib）和 `gui/components/heatmap.py`（tkinter 回放界面）共用。
 
 ### LR Range Test
 

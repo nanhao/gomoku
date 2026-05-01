@@ -24,7 +24,6 @@ COLORS = {
     "squirrel": "#CD853F",     # 松鼠褐
     
     # 热力图颜色
-    "heatmap_zero": "#F5DEB3", # 零值颜色
     "heatmap_outline": "#D2691E",  # 热力图边框
 }
 
