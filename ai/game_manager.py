@@ -5,10 +5,12 @@
 通过调用 controller 的公开接口操作游戏。
 """
 
-from typing import List, Tuple, Optional
+import random as _stdrandom
+from typing import List, Optional, Tuple
 from game import GomokuController
-from ai.engine import AIEngine
+from ai.engine import AIEngine, STRATEGY_ARGMAX, STRATEGY_SAMPLING
 from ai.data_recorder import DataRecorder
+from ai.move_sampler import TempConfig, resolve_temp_side, should_sample
 
 
 class AIGameManager:
@@ -125,6 +127,7 @@ class AIGameManager:
         recorder: DataRecorder,
         game_num: int,
         name_prefix: str = "ai_vs_ai",
+        temp_config: Optional[TempConfig] = None,
     ) -> int:
         """执行单局 AI 内战
 
@@ -137,6 +140,8 @@ class AIGameManager:
             recorder: 数据记录器
             game_num: 当前局号（用于存档命名和日志）
             name_prefix: 存档名称前缀（"ai_vs_ai" 或 "ai_vs_ai_rnd"）
+            temp_config: 可选的温度采样配置。None 表示全程 argmax；
+                非 None 时按 move_count / temp_side 规则切换到 sampling。
 
         Returns:
             winner: 获胜方（1=黑, 2=白, 3=平局）
@@ -158,7 +163,19 @@ class AIGameManager:
         recorder.new_game()
         current_game_id = recorder.current_game_id
 
+        # 温度采样编排：按局初始化 rng 和启用方
+        rng: Optional[_stdrandom.Random] = None
+        temp_side_this_game: Optional[str] = None
+        if temp_config is not None:
+            if temp_config.seed is not None:
+                # 以 seed + game_num 派生按局独立的 rng，保证可复现
+                rng = _stdrandom.Random(temp_config.seed + game_num)
+            else:
+                rng = _stdrandom.Random()
+            temp_side_this_game = resolve_temp_side(temp_config.temp_side, rng)
+
         # 游戏循环：交替落子直到游戏结束
+        move_count = 0
         while not controller.is_over():
             state = controller.get_state()
             board = state["board"]
@@ -172,9 +189,25 @@ class AIGameManager:
             board_vector = AIEngine.board_to_vector(board, player)
             probs = engine.model.predict(board_vector)
 
+            # 判定本步是否启用温度采样
+            use_temp = (
+                temp_config is not None
+                and should_sample(
+                    move_count, player, temp_config, temp_side_this_game
+                )
+            )
+
             try:
-                # AI 落子（传入预计算的 probs，避免重复调用 model.predict）
-                x, y = engine.get_move(board, player, probs=probs)
+                if use_temp:
+                    x, y = engine.get_move(
+                        board, player, probs=probs,
+                        strategy=STRATEGY_SAMPLING,
+                        temperature=temp_config.temperature,
+                        top_k=temp_config.top_k,
+                        rng=rng,
+                    )
+                else:
+                    x, y = engine.get_move(board, player, probs=probs)
             except ValueError as e:
                 # 棋盘已满，无法落子，结束当前对局
                 print(f"AI对局 {game_num} 棋盘已满: {e}")
@@ -185,6 +218,8 @@ class AIGameManager:
 
             # 执行落子
             controller.make_move(x, y)
+
+            move_count += 1
 
         # 保存结果：获取获胜方和终局棋盘
         winner = controller.get_winner()
@@ -202,12 +237,13 @@ class AIGameManager:
         recorder: DataRecorder,
         project_root: str = None,
         on_progress=None,
+        temp_config: Optional[TempConfig] = None,
     ) -> List[dict]:
         """执行 AI 内战
-
+    
         engine1 执黑，engine2 执白。
         每局游戏独立创建 controller，数据通过 recorder 记录。
-
+    
         Args:
             engine1: 执黑 AI 引擎
             engine2: 执白 AI 引擎
@@ -215,44 +251,48 @@ class AIGameManager:
             recorder: 数据记录器
             project_root: 项目根目录（保留兼容，内部不使用）
             on_progress: 可选进度回调，每局完成后调用，参数为 (current: int, total: int)
-
+            temp_config: 可选温度采样配置；None 时保持原有 argmax 行为
+    
         Returns:
             对战结果列表，每项为 {"game": 局数, "winner": 获胜方}
         """
         results = []
-
+    
         for game_num in range(1, num_games + 1):
             # 固定执方：engine1 执黑，engine2 执白
             winner = AIGameManager._play_single_game(
                 engine1, engine2, recorder, game_num,
                 name_prefix="ai_vs_ai",
+                temp_config=temp_config,
             )
             results.append({"game": game_num, "winner": winner})
-
+    
             # 跨局进度回调
             if on_progress is not None:
                 on_progress(game_num, num_games)
-
+    
         return results
-
+    
     @staticmethod
     def start_ai_vs_ai_random(
         engine1: AIEngine,
         engine2: AIEngine,
         num_games: int,
-        recorder: DataRecorder
+        recorder: DataRecorder,
+        temp_config: Optional[TempConfig] = None,
     ) -> List[dict]:
         """执行 AI 内战（每局执方随机）
-
+    
         每局随机决定 engine1/engine2 各执黑棋还是白棋。
         数据通过 recorder 记录。
-
+    
         Args:
             engine1: AI 引擎 1
             engine2: AI 引擎 2
             num_games: 对战局数
             recorder: 数据记录器
-
+            temp_config: 可选温度采样配置；None 时保持原有 argmax 行为
+    
         Returns:
             对战结果列表，每项格式：
             {
@@ -266,25 +306,26 @@ class AIGameManager:
         """
         import random as _random
         results = []
-
+    
         for game_num in range(1, num_games + 1):
             # 随机决定 engine1 执黑还是白
             ai1_color = _random.choice([1, 2])
             ai2_color = 3 - ai1_color  # 互为黑白
-
+    
             # 根据颜色分配引擎：黑方先手
             engine_black = engine1 if ai1_color == 1 else engine2
             engine_white = engine2 if ai1_color == 1 else engine1
-
+    
             winner = AIGameManager._play_single_game(
                 engine_black, engine_white, recorder, game_num,
                 name_prefix="ai_vs_ai_rnd",
+                temp_config=temp_config,
             )
-
+    
             # 判断各方是否获胜（平局时两方都不算赢）
             ai1_won = (winner == ai1_color)
             ai2_won = (winner == ai2_color)
-
+    
             results.append({
                 "game": game_num,
                 "winner": winner,
@@ -293,5 +334,5 @@ class AIGameManager:
                 "ai1_won": ai1_won,
                 "ai2_won": ai2_won,
             })
-
+    
         return results

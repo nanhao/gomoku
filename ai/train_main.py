@@ -158,6 +158,39 @@ def main():
         help='验证集比例，0 表示不分割，推荐 0.2，默认 0.0'
     )
 
+    # ---- 温度采样参数（仅在 --cycle 模式生效；默认启用）----
+    parser.add_argument(
+        '--no-temp-sampling',
+        action='store_true',
+        default=False,
+        help='[仅 --cycle 模式] 禁用开局阶段温度采样，全程走 argmax'
+    )
+    parser.add_argument(
+        '--temperature',
+        type=float,
+        default=1.0,
+        help='[仅 --cycle 模式] 温度值 T（>0），越大越随机，默认 1.0'
+    )
+    parser.add_argument(
+        '--temp-moves',
+        type=int,
+        default=12,
+        help='[仅 --cycle 模式] 前 N 个全局步启用温度采样，默认 12'
+    )
+    parser.add_argument(
+        '--temp-side',
+        type=str,
+        default='both',
+        choices=['black', 'white', 'both', 'random'],
+        help='[仅 --cycle 模式] 启用温度采样的一方，默认 both'
+    )
+    parser.add_argument(
+        '--temp-seed',
+        type=int,
+        default=None,
+        help='[仅 --cycle 模式] 温度采样随机种子'
+    )
+
     args = parser.parse_args()
     
     # 验证参数：两个模式互斥（--cycle、--train-from-dir 二选一）

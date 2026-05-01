@@ -627,7 +627,8 @@ class BaseTrainer(ABC):
         batch_size: int = None,
         shuffle: bool = False,
         project_root: str = None,
-        val_ratio: float = 0.0
+        val_ratio: float = 0.0,
+        temp_config=None,
     ) -> None:
         """训练周期
 
@@ -644,6 +645,7 @@ class BaseTrainer(ABC):
             shuffle: 每个 epoch 是否打乱数据顺序，仅 mini-batch 模式有效，默认 False
             project_root: 项目根目录，用于确定数据保存路径
             val_ratio: 验证集比例，0 表示不分割，默认 0.0
+            temp_config: 可选 ai.move_sampler.TempConfig；None 保持原有 argmax 行为
         """
         SelfPlayCycle(self).run(
             rounds=rounds,
@@ -653,7 +655,8 @@ class BaseTrainer(ABC):
             batch_size=batch_size,
             shuffle=shuffle,
             project_root=project_root,
-            val_ratio=val_ratio
+            val_ratio=val_ratio,
+            temp_config=temp_config,
         )
     
     def _convert_inputs(self, inputs: list) -> torch.Tensor:

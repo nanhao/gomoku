@@ -376,16 +376,8 @@ class TestGetMoveStrategy(unittest.TestCase):
         for _ in range(20):
             self.assertEqual(engine.get_move(board, 1), (50 // 15, 50 % 15))
 
-    # ---------- sampling 未实现 ----------
-
-    def test_sampling_strategy_raises_not_implemented(self):
-        """用例 7：sampling 策略尚未实现，应抛 NotImplementedError。"""
-        board = self._empty_board()
-        probs = [1.0 / 225] * 225
-        engine = AIEngine(StubModel(probs))
-
-        with self.assertRaises(NotImplementedError):
-            engine.get_move(board, 1, strategy="sampling")
+    # ---------- sampling 分支（已由 ai.move_sampler 实现）----------
+    # 见 TestGetMoveSamplingStrategy 的用例 17-22
 
     # ---------- 未知策略 ----------
 
@@ -425,6 +417,110 @@ class TestGetMoveStrategy(unittest.TestCase):
                          "应使用传入的 probs，而非模型自身的 predict 输出")
         self.assertEqual(stub.predict_call_count, 0,
                          "传入预计算 probs 时不应再调用 model.predict")
+
+
+class TestGetMoveSamplingStrategy(unittest.TestCase):
+    """sampling 策略测试（对应设计文档 move_sampler_design.md 用例 17-22）。
+
+    strategy="sampling" 不再抛 NotImplementedError，而是委托给
+    ai.move_sampler.temperature_sample 完成温度采样。
+    """
+
+    def _empty_board(self):
+        return [[0] * 15 for _ in range(15)]
+
+    def _make_probs(self, pairs, total=225):
+        probs = [0.0] * total
+        for idx, p in pairs:
+            probs[idx] = p
+        return probs
+
+    def test_sampling_strategy_no_longer_raises_not_implemented(self):
+        """用例 17：sampling 策略不再抛 NotImplementedError。"""
+        board = self._empty_board()
+        probs = [1.0 / 225] * 225
+        engine = AIEngine(StubModel(probs))
+
+        # 不传 temperature → 使用默认值 1.0；不抛异常即视为通过
+        x, y = engine.get_move(board, 1, strategy="sampling")
+        self.assertTrue(0 <= x < 15 and 0 <= y < 15)
+
+    def test_sampling_strategy_returns_valid_position(self):
+        """用例 18：sampling 返回的位置必须在合法空位集合中。"""
+        board = self._empty_board()
+        # 占住若干位置，确保 sampling 跳过
+        board[5][5] = 1
+        board[6][6] = 2
+        # 构造非均匀分布，测试覆盖
+        probs = self._make_probs([(0, 0.5), (1, 0.3), (2, 0.2)])
+        engine = AIEngine(StubModel(probs))
+
+        rng = random.Random(2026)
+        for _ in range(100):
+            x, y = engine.get_move(
+                board, 1, strategy="sampling", temperature=1.0, rng=rng
+            )
+            self.assertEqual(board[x][y], 0, "sampling 必须返回空位")
+
+    def test_sampling_strategy_small_T_equals_argmax(self):
+        """用例 19：strategy=sampling, T 极小 → 与 argmax 等价。"""
+        board = self._empty_board()
+        probs = self._make_probs([(50, 0.8), (51, 0.15), (52, 0.05)])
+        engine = AIEngine(StubModel(probs))
+
+        rng = random.Random(7)
+        expected = (50 // 15, 50 % 15)
+        for _ in range(50):
+            pos = engine.get_move(
+                board, 1, strategy="sampling", temperature=0.01, rng=rng
+            )
+            self.assertEqual(pos, expected)
+
+    def test_sampling_strategy_respects_rng_seed(self):
+        """用例 20：传入同 seed 的 rng → 两次调用序列一致。"""
+        board = self._empty_board()
+        probs = self._make_probs(
+            [(0, 0.25), (1, 0.20), (2, 0.20), (3, 0.20), (4, 0.15)]
+        )
+        engine = AIEngine(StubModel(probs))
+
+        rng1 = random.Random(2026)
+        rng2 = random.Random(2026)
+        seq1 = [
+            engine.get_move(board, 1, strategy="sampling",
+                            temperature=1.2, rng=rng1)
+            for _ in range(30)
+        ]
+        seq2 = [
+            engine.get_move(board, 1, strategy="sampling",
+                            temperature=1.2, rng=rng2)
+            for _ in range(30)
+        ]
+        self.assertEqual(seq1, seq2)
+
+    def test_sampling_strategy_invalid_temperature_raises(self):
+        """用例 21：T <= 0 → ValueError。"""
+        board = self._empty_board()
+        probs = [1.0 / 225] * 225
+        engine = AIEngine(StubModel(probs))
+
+        with self.assertRaises(ValueError):
+            engine.get_move(board, 1, strategy="sampling", temperature=0.0)
+        with self.assertRaises(ValueError):
+            engine.get_move(board, 1, strategy="sampling", temperature=-1.0)
+
+    def test_argmax_path_unchanged_by_new_params(self):
+        """用例 22：strategy=argmax 默认值下，新参数 temperature/top_k/rng 不影响行为。"""
+        board = self._empty_board()
+        probs = self._make_probs([(100, 0.9), (101, 0.1)])
+        engine = AIEngine(StubModel(probs))
+
+        # 既不传 strategy 也不传新参数
+        pos1 = engine.get_move(board, 1)
+        # 传默认 strategy=argmax
+        pos2 = engine.get_move(board, 1, strategy="argmax")
+        self.assertEqual(pos1, (100 // 15, 100 % 15))
+        self.assertEqual(pos2, (100 // 15, 100 % 15))
 
 
 if __name__ == "__main__":

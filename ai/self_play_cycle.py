@@ -7,10 +7,14 @@
 import os
 import uuid
 from datetime import datetime
+from typing import Optional, TYPE_CHECKING
 
 from ai.constants import AI_DATA_DIR, TRAIN_DATA_DIR, LOSS_LOG_DIR
 from ai.loss_logger import LossLogger
 from ai.self_play_generator import run_self_play_and_evaluate
+
+if TYPE_CHECKING:
+    from ai.move_sampler import TempConfig
 
 
 class SelfPlayCycle:
@@ -40,7 +44,8 @@ class SelfPlayCycle:
         batch_size: int = None,
         shuffle: bool = False,
         project_root: str = None,
-        val_ratio: float = 0.0
+        val_ratio: float = 0.0,
+        temp_config: Optional["TempConfig"] = None,
     ) -> None:
         """执行训练周期
 
@@ -57,6 +62,7 @@ class SelfPlayCycle:
             shuffle: 每个 epoch 是否打乱数据顺序，仅 mini-batch 模式有效，默认 False
             project_root: 项目根目录，用于确定数据保存路径
             val_ratio: 验证集比例，0 表示不分割，默认 0.0
+            temp_config: 可选温度采样配置；None 保持原有 argmax 行为
         """
         # 确定数据目录：默认使用常量，测试隔离时基于 project_root 拼接
         if project_root is None:
@@ -110,7 +116,8 @@ class SelfPlayCycle:
                     train_data_dir=train_data_dir,
                     max_workers=self.max_workers,
                     name_prefix=f"cycle_{round_num}",
-                    project_root=project_root
+                    project_root=project_root,
+                    temp_config=temp_config,
                 )
 
                 # 检测对弈阶段是否被中断

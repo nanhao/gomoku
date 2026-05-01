@@ -8,6 +8,7 @@ import sys
 import os
 import json
 import argparse
+import warnings
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
@@ -16,6 +17,7 @@ from ai.engine import AIEngine
 from ai.game_manager import AIGameManager
 from ai.data_recorder import DataRecorder
 from ai.sample_creator import SampleCreator
+from ai.move_sampler import TempConfig, SUPPORTED_TEMP_SIDES, TEMP_SIDE_BOTH
 
 
 def main():
@@ -73,7 +75,65 @@ def main():
         help='禁用数据增强（默认启用 D4 群 8 变换）'
     )
 
+    # ---- 温度采样参数（默认启用，用于自对弈探索）----
+    parser.add_argument(
+        '--no-temp-sampling',
+        action='store_true',
+        default=False,
+        help='禁用开局阶段温度采样，全程走 argmax'
+    )
+    parser.add_argument(
+        '--temperature',
+        type=float,
+        default=1.0,
+        help='温度值 T（>0），越大越随机，默认 1.0'
+    )
+    parser.add_argument(
+        '--temp-moves',
+        type=int,
+        default=12,
+        help='前 N 个全局步启用温度采样，之后走 argmax，默认 12'
+    )
+    parser.add_argument(
+        '--temp-side',
+        type=str,
+        default=TEMP_SIDE_BOTH,
+        choices=list(SUPPORTED_TEMP_SIDES),
+        help='启用温度采样的一方，默认 both'
+    )
+    parser.add_argument(
+        '--temp-seed',
+        type=int,
+        default=None,
+        help='温度采样随机种子（用于复现）'
+    )
+
     args = parser.parse_args()
+
+    # ---- 构造 TempConfig ----
+    if args.no_temp_sampling:
+        # 若用户显式传了温度相关参数，提示被忽略
+        user_set_temp = (
+            args.temperature != 1.0
+            or args.temp_moves != 12
+            or args.temp_side != TEMP_SIDE_BOTH
+            or args.temp_seed is not None
+        )
+        if user_set_temp:
+            warnings.warn(
+                "已启用 --no-temp-sampling，以下参数被忽略："
+                "--temperature / --temp-moves / --temp-side / --temp-seed",
+                stacklevel=2,
+            )
+        temp_config = None
+    else:
+        temp_config = TempConfig(
+            temperature=args.temperature,
+            temp_moves=args.temp_moves,
+            temp_side=args.temp_side,
+            top_k=None,
+            seed=args.temp_seed,
+        )
 
     # 加载模型
     print(f"加载模型: {args.model}")
@@ -96,7 +156,8 @@ def main():
         print(f"\r进度: {current}/{total} ({pct}%)", end="", flush=True)
 
     results = AIGameManager.start_ai_vs_ai(
-        engine, engine, args.games, recorder, on_progress=on_progress
+        engine, engine, args.games, recorder, on_progress=on_progress,
+        temp_config=temp_config,
     )
     print()  # 换行，避免后续输出黏在进度行上
 

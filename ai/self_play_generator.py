@@ -6,13 +6,16 @@
 """
 
 import os
-from typing import List
+from typing import List, Optional, TYPE_CHECKING
 
 from ai.constants import AI_DATA_DIR, TRAIN_DATA_DIR
 from ai.engine import AIEngine
 from ai.game_manager import AIGameManager
 from ai.data_recorder import DataRecorder
 from ai.evaluator import Evaluator
+
+if TYPE_CHECKING:
+    from ai.move_sampler import TempConfig
 
 
 def run_self_play_and_evaluate(
@@ -23,7 +26,8 @@ def run_self_play_and_evaluate(
     train_data_dir: str = None,
     max_workers: int = None,
     name_prefix: str = "self_play",
-    project_root: str = None
+    project_root: str = None,
+    temp_config: Optional["TempConfig"] = None,
 ) -> dict:
     """执行自我对弈 + 评价，生成训练样本
 
@@ -83,7 +87,8 @@ def run_self_play_and_evaluate(
             engine2=engine,
             num_games=games,
             recorder=recorder,
-            project_root=project_root
+            project_root=project_root,
+            temp_config=temp_config,
         )
 
         # 统计对局结果
@@ -191,7 +196,8 @@ class SelfPlayGenerator:
         self.max_workers = max_workers
 
     def generate(self, games: int = 100, rate: float = 0.9,
-                 project_root: str = None) -> dict:
+                 project_root: str = None,
+                 temp_config: Optional["TempConfig"] = None) -> dict:
         """执行自我对弈并生成训练样本
 
         让模型自己跟自己对战 games 局，然后调用 Evaluator 生成训练样本。
@@ -201,6 +207,7 @@ class SelfPlayGenerator:
             games: 对局数，默认 100
             rate: 奖励衰减率，传给 Evaluator，默认 0.9
             project_root: 项目根目录，用于确定数据保存路径
+            temp_config: 可选温度采样配置；None 保持原有 argmax 行为
 
         Returns:
             dict: {
@@ -222,7 +229,8 @@ class SelfPlayGenerator:
             rate=rate,
             max_workers=self.max_workers,
             name_prefix="self_play",
-            project_root=project_root
+            project_root=project_root,
+            temp_config=temp_config,
         )
 
         # 返回结果（去掉 interrupted 和 recorder 字段，保持原有返回结构兼容）

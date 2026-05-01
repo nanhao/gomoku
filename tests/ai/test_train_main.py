@@ -251,5 +251,101 @@ class TestTrainFromDirModes(unittest.TestCase):
                     self.assertIsNone(call_kwargs.get('batch_size'))
 
 
+# ---------------------------------------------------------------------------
+# 温度采样 CLI 参数测试（对应 move_sampler_design.md 用例 33-34）
+# ---------------------------------------------------------------------------
+
+
+class TestTrainMainTempSamplingFlags(unittest.TestCase):
+    """train_main.py cycle 模式的温度采样 CLI 参数解析 + 透传行为"""
+
+    def test_cycle_mode_accepts_temp_flags(self):
+        """用例 33：cycle 模式解析温度参数并构造 TempConfig 透传到 train_cycle。"""
+        from ai.move_sampler import TEMP_SIDE_RANDOM
+
+        argv = [
+            'train_main.py', '--model', 'fc_v1', '--cycle',
+            '--rounds', '1', '--games', '1',
+            '--temp-side', 'random',
+            '--temperature', '0.8',
+            '--temp-moves', '10',
+            '--temp-seed', '123',
+        ]
+        with patch('sys.argv', argv):
+            with patch('ai.train_main.get_trainer') as mock_get:
+                mock_trainer = MagicMock()
+                mock_trainer.train_cycle = MagicMock()
+                mock_get.return_value = mock_trainer
+                main()
+
+                mock_trainer.train_cycle.assert_called_once()
+                call_kwargs = mock_trainer.train_cycle.call_args[1]
+                temp_config = call_kwargs.get('temp_config')
+                self.assertIsNotNone(
+                    temp_config,
+                    "cycle 模式应将 CLI 参数构造成 TempConfig 并透传"
+                )
+                self.assertEqual(temp_config.temperature, 0.8)
+                self.assertEqual(temp_config.temp_moves, 10)
+                self.assertEqual(temp_config.temp_side, TEMP_SIDE_RANDOM)
+                self.assertEqual(temp_config.seed, 123)
+
+    def test_cycle_mode_no_temp_sampling_flag(self):
+        """用例 33 补充：cycle 模式传 --no-temp-sampling → temp_config=None。"""
+        argv = [
+            'train_main.py', '--model', 'fc_v1', '--cycle',
+            '--rounds', '1', '--games', '1',
+            '--no-temp-sampling',
+        ]
+        with patch('sys.argv', argv):
+            with patch('ai.train_main.get_trainer') as mock_get:
+                mock_trainer = MagicMock()
+                mock_trainer.train_cycle = MagicMock()
+                mock_get.return_value = mock_trainer
+                main()
+
+                call_kwargs = mock_trainer.train_cycle.call_args[1]
+                self.assertIsNone(
+                    call_kwargs.get('temp_config'),
+                    "--no-temp-sampling 应将 temp_config 设为 None"
+                )
+
+    def test_non_cycle_mode_ignores_temp_flags(self):
+        """用例 34：--train-from-dir 模式传温度参数 → 打印 warning，不影响训练。"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # 准备一个最小训练样本目录
+            sample_dir = os.path.join(tmpdir, "s")
+            os.makedirs(sample_dir, exist_ok=True)
+            sample_path = os.path.join(sample_dir, "sample.json")
+            with open(sample_path, "w", encoding="utf-8") as f:
+                json.dump([{
+                    "input": [0.0] * 226,
+                    "output": [0.0] * 225,
+                    "mask": [1] * 225,
+                }], f)
+
+            argv = [
+                'train_main.py', '--model', 'fc_v1',
+                '--train-from-dir', tmpdir,
+                '--temperature', '2.0',  # 非 cycle 模式下的温度参数应被忽略
+            ]
+            with patch('sys.argv', argv):
+                with patch('ai.train_main.get_trainer') as mock_get:
+                    mock_trainer = MagicMock()
+                    mock_trainer.train_auto = MagicMock(return_value=0.3)
+                    mock_get.return_value = mock_trainer
+
+                    # 关键：不应 raise。train_auto 被调用后，其 call_kwargs
+                    # 不应包含 temp_config（只 cycle 路径才传）。
+                    main()
+
+                    mock_trainer.train_auto.assert_called_once()
+                    call_kwargs = mock_trainer.train_auto.call_args[1]
+                    self.assertNotIn(
+                        "temp_config", call_kwargs,
+                        "train_auto 不应收到 temp_config 参数"
+                    )
+
+
 if __name__ == '__main__':
     unittest.main()

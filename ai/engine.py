@@ -5,7 +5,7 @@
 
 import random
 import math
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 from ai.base_model import BaseModel
 
 
@@ -49,9 +49,10 @@ class AIEngine:
     2. 调用模型获取概率分布
     3. 根据指定策略（默认 argmax）在合法位置中选择落子
 
-    落子策略（参见设计文档 design/engine_move_strategy_design.md）：
+    落子策略（参见设计文档 design/engine_move_strategy_design.md、
+    design/move_sampler_design.md）：
     - "argmax"（默认）：选择概率最大的合法位置；存在并列最大值时随机打破平局
-    - "sampling"：加权采样，**本次未实现**，调用时抛 NotImplementedError
+    - "sampling"：温度加权采样，委托给 ai.move_sampler.temperature_sample 实现
     """
 
     def __init__(self, model: BaseModel):
@@ -69,6 +70,9 @@ class AIEngine:
         current_player: int,
         probs: List[float] = None,
         strategy: str = STRATEGY_ARGMAX,
+        temperature: float = 1.0,
+        top_k: Optional[int] = None,
+        rng: Optional[random.Random] = None,
     ) -> Tuple[int, int]:
         """
         获取 AI 落子位置
@@ -84,14 +88,20 @@ class AIEngine:
             probs: 预计算的概率分布（225 维），若提供则跳过 model.predict 调用
             strategy: 落子策略，取值见模块常量 STRATEGY_*。
                 - "argmax"（默认）：选择概率最大的合法位置，并列时随机打破
-                - "sampling"：本次暂未实现，调用时抛 NotImplementedError
+                - "sampling"：温度采样（见 ai.move_sampler.temperature_sample）
+            temperature: 仅在 strategy="sampling" 时生效，温度值 T > 0。
+                默认 1.0（等价模型原始概率）。T → 0 趋近 argmax；
+                T → ∞ 趋近均匀。argmax 分支完全不使用此参数。
+            top_k: 仅在 strategy="sampling" 时生效，截断阈值；None 表示不截断。
+            rng: 仅在 strategy="sampling" 时生效，可选随机源；None 时使用
+                random 模块全局源。
 
         Returns:
             (x, y) 落子位置，0 <= x < 15, 0 <= y < 15
 
         Raises:
-            ValueError: 棋盘已满，无空位可落子；或 strategy 取值未知
-            NotImplementedError: strategy="sampling" 时（预留给未来独立实现）
+            ValueError: 棋盘已满，无空位可落子；strategy 取值未知；
+                或 strategy="sampling" 时 temperature <= 0。
         """
         # 1. 转换棋盘为向量
         board_vector = self.board_to_vector(board, current_player)
@@ -118,10 +128,14 @@ class AIEngine:
         if strategy == STRATEGY_ARGMAX:
             return self._pick_argmax(valid_positions, valid_probs)
         if strategy == STRATEGY_SAMPLING:
-            # 预留位置：未来将由独立的 sampling 模块实现
-            # （温度、top-k 等探索策略）。当前显式抛异常，避免静默退化。
-            raise NotImplementedError(
-                "strategy='sampling' 尚未实现，未来将提供独立的采样模块"
+            # 委托给 ai.move_sampler.temperature_sample（本地导入避免循环依赖）
+            from ai.move_sampler import temperature_sample
+            return temperature_sample(
+                valid_positions,
+                valid_probs,
+                temperature=temperature,
+                top_k=top_k,
+                rng=rng,
             )
         raise ValueError(
             f"未知落子策略: {strategy!r}，支持的策略为 {_SUPPORTED_STRATEGIES}"

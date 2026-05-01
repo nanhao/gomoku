@@ -40,6 +40,11 @@ def _make_args(**overrides) -> argparse.Namespace:
         'lr_patience': 100,
         'lr_factor': 0.5,
         'val_ratio': 0.0,
+        'no_temp_sampling': False,
+        'temperature': 1.0,
+        'temp_moves': 12,
+        'temp_side': 'both',
+        'temp_seed': None,
     }
     defaults.update(overrides)
     return argparse.Namespace(**defaults)
@@ -180,10 +185,33 @@ class TestRunCycle(unittest.TestCase):
 
         run_cycle(args, trainer)
 
-        trainer.train_cycle.assert_called_once_with(
-            rounds=5, games=20, epochs=100,
-            rate=0.95, batch_size=32, shuffle=True, val_ratio=0.0
-        )
+        trainer.train_cycle.assert_called_once()
+        call_kwargs = trainer.train_cycle.call_args.kwargs
+        self.assertEqual(call_kwargs['rounds'], 5)
+        self.assertEqual(call_kwargs['games'], 20)
+        self.assertEqual(call_kwargs['epochs'], 100)
+        self.assertEqual(call_kwargs['rate'], 0.95)
+        self.assertEqual(call_kwargs['batch_size'], 32)
+        self.assertTrue(call_kwargs['shuffle'])
+        self.assertEqual(call_kwargs['val_ratio'], 0.0)
+        # 默认启用温度采样，temp_config 为 TempConfig 实例
+        self.assertIn('temp_config', call_kwargs)
+        temp_config = call_kwargs['temp_config']
+        self.assertIsNotNone(temp_config)
+        self.assertEqual(temp_config.temperature, 1.0)
+        self.assertEqual(temp_config.temp_moves, 12)
+        self.assertEqual(temp_config.temp_side, 'both')
+        self.assertIsNone(temp_config.seed)
+
+    def test_no_temp_sampling_passes_none(self):
+        """--no-temp-sampling 应使 temp_config=None"""
+        args = _make_args(cycle=True, no_temp_sampling=True)
+        trainer = MagicMock()
+
+        run_cycle(args, trainer)
+
+        call_kwargs = trainer.train_cycle.call_args.kwargs
+        self.assertIsNone(call_kwargs['temp_config'])
 
     def test_not_implemented_exits(self):
         """NotImplementedError 应导致 sys.exit(1)"""

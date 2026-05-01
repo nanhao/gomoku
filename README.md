@@ -88,6 +88,11 @@ python ai/create_samples.py --model <模型名称> --output <输出文件路径>
 | `--mode` | sample_creator 模式，可选 `winning_move` / `winner_path` | `winning_move` |
 | `--games` | 对局数 | 100 |
 | `--no-augment` | 禁用数据增强（默认启用 D4 群 8 变换；`winner_path` 模式下强制不增强，该开关无作用） | - |
+| `--no-temp-sampling` | 关闭温度采样，全程 argmax 贪婪落子 | - |
+| `--temperature` | 温度采样温度 T（越大越探索） | 1.0 |
+| `--temp-moves` | 前 N 步启用温度采样，之后切回 argmax | 12 |
+| `--temp-side` | 温度采样作用方：`black` / `white` / `both` / `random` | `both` |
+| `--temp-seed` | 温度采样随机种子（便于复现） | None |
 
 **模式说明**：
 - `winning_move`：仅取每局最后一步（制胜那步）作为样本，默认启用 D4 8 变换增强。
@@ -161,6 +166,13 @@ python ai/train_main.py --model <模型指定> --cycle [选项]
 | `--lr-gamma` | StepLR 衰减系数 | 0.9 |
 | `--lr-patience` | ReduceLROnPlateau 耐心值 | 100 |
 | `--lr-factor` | ReduceLROnPlateau 衰减系数 | 0.5 |
+| `--no-temp-sampling` | 关闭温度采样，自对弈全程 argmax | - |
+| `--temperature` | 温度采样温度 T | 1.0 |
+| `--temp-moves` | 前 N 步启用温度采样 | 12 |
+| `--temp-side` | 温度采样作用方：`black` / `white` / `both` / `random` | `both` |
+| `--temp-seed` | 温度采样随机种子（便于复现） | None |
+
+> **温度采样**：`--cycle` 模式**默认启用**温度采样——前 12 步按模型 softmax 分布以 T=1.0 随机落子，之后切回 argmax。目的是让自对弈数据具有开局多样性，避免陷入固定棋谱。加 `--no-temp-sampling` 可关闭。详见 [design/move_sampler_design.md](design/move_sampler_design.md)。
 
 > **注意**：使用 `--batch-size` 启用 mini-batch 训练时，系统会自动生成**密集 loss log**，
 > 记录每个 batch 的 loss 和梯度大小，并在曲线图上以双 Y 轴形式叠加展示（Loss + Gradient Norm）。

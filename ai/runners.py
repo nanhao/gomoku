@@ -211,6 +211,26 @@ def run_cycle(args, trainer) -> None:
     else:
         print(f"  验证集比例 (val_ratio): 0.0 (不分割)")
 
+    # ---- 构造 TempConfig（cycle 模式下默认启用温度采样）----
+    from ai.move_sampler import TempConfig
+
+    if getattr(args, "no_temp_sampling", False):
+        temp_config = None
+        print(f"  温度采样:            已禁用 (--no-temp-sampling)")
+    else:
+        temp_config = TempConfig(
+            temperature=args.temperature,
+            temp_moves=args.temp_moves,
+            temp_side=args.temp_side,
+            top_k=None,
+            seed=args.temp_seed,
+        )
+        print(
+            f"  温度采样:            T={temp_config.temperature}, "
+            f"moves<{temp_config.temp_moves}, side={temp_config.temp_side}, "
+            f"seed={temp_config.seed}"
+        )
+
     try:
         # 执行训练周期
         trainer.train_cycle(
@@ -220,7 +240,8 @@ def run_cycle(args, trainer) -> None:
             rate=args.rate,
             batch_size=args.batch_size,
             shuffle=args.shuffle,
-            val_ratio=args.val_ratio
+            val_ratio=args.val_ratio,
+            temp_config=temp_config,
         )
 
         print("训练周期完成！")
