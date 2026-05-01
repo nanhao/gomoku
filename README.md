@@ -85,16 +85,24 @@ python ai/create_samples.py --model <模型名称> --output <输出文件路径>
 |------|------|--------|
 | `--model` | 模型指定（如 cnn_v3.1、fc_v1） | 必填 |
 | `--output` | 输出 `.json` 文件路径 | 必填 |
-| `--mode` | sample_creator 模式 | `winning_move` |
+| `--mode` | sample_creator 模式，可选 `winning_move` / `winner_path` | `winning_move` |
 | `--games` | 对局数 | 100 |
-| `--no-augment` | 禁用数据增强（默认启用 D4 群 8 变换） | - |
+| `--no-augment` | 禁用数据增强（默认启用 D4 群 8 变换；`winner_path` 模式下强制不增强，该开关无作用） | - |
+
+**模式说明**：
+- `winning_move`：仅取每局最后一步（制胜那步）作为样本，默认启用 D4 8 变换增强。
+- `winner_path`：取整局中**获胜方的每一步**（剔除开局第 1 步）作为样本，让模型拟合获胜方整条路径；由于每局已产出多条样本，**强制不做 D4 增强**以避免数据量失控。
 
 ```bash
 # 示例
+# winning_move 模式（默认）
 python ai/create_samples.py --model cnn_v3.1 --output ai/train_data/win_samples.json
 python ai/create_samples.py --model cnn_v3.1 --games 200 --output ai/train_data/win_samples.json
 python ai/create_samples.py --model cnn_v3.1 --no-augment --output ai/train_data/win_samples.json
 python ai/create_samples.py --model random  --output ai/merge_samples/winning/win_samples2.json --games 5000
+
+# winner_path 模式：获胜方整条路径（剔除开局）
+python ai/create_samples.py --model cnn_v3.1 --mode winner_path --games 200 --output ai/train_data/winner_path_samples.json
 ```
 
 > **提示**：运行结束后可用 `--train-from-dir` 加载生成的 `.json` 文件继续训练。

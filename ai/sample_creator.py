@@ -4,6 +4,9 @@
 目前实现模式：
     - winning_move: 取每局最后一步的 input 作为 sample input，
       最后一步 position 对应位置 output=1，其余=0，mask 全为 1
+    - winner_path:  取整局中获胜方的每一步（剔除获胜方第 1 步），
+      每一步的 input/output/mask 构造同 winning_move。此模式**强制不做**
+      D4 增强，详见 design/sample_creator_design.md 第三十八次追加。
 """
 
 import json
@@ -14,24 +17,37 @@ from typing import List, Dict
 class SampleCreator:
     """样本生成器，支持多种模式从 record.json 生成 sample"""
 
+    # 支持的模式白名单
+    SUPPORTED_MODES = ("winning_move", "winner_path")
+
     def __init__(self, mode: str = "winning_move", augment: bool = True):
         """
         初始化样本生成器
 
         Args:
-            mode: 样本生成模式，目前仅支持 "winning_move"
-            augment: 是否启用数据增强（D4 群 8 变换），默认 True
+            mode: 样本生成模式，取值范围见 ``SUPPORTED_MODES``
+            augment: 是否启用数据增强（D4 群 8 变换），默认 True。
+                     注意：当 mode="winner_path" 时会强制禁用增强，
+                     以避免数据量失控（该模式本身已每局产出多个 sample）。
 
         Raises:
-            ValueError: 不支持的模式
+            ValueError: mode 不在支持列表内
         """
-        if mode != "winning_move":
-            raise ValueError(f"不支持的样本生成模式: '{mode}'，目前仅支持 'winning_move'")
+        if mode not in self.SUPPORTED_MODES:
+            raise ValueError(
+                f"不支持的样本生成模式: '{mode}'，"
+                f"目前支持: {self.SUPPORTED_MODES}"
+            )
         self.mode = mode
-        self.augment = augment
+        # winner_path 模式强制禁用增强（设计决策，详见设计文档）
+        self.augment = augment and mode != "winner_path"
 
     def create(self, record_files: List[str]) -> List[Dict]:
         """从 record.json 文件列表生成 sample 列表
+
+        按 ``self.mode`` 分派到对应的处理路径：
+        - ``winning_move``：每局产出 1 条（取最后一步），可选 D4 增强
+        - ``winner_path``：每局产出 ``获胜方步数-1`` 条（剔除开局），不增强
 
         Args:
             record_files: record.json 文件路径列表
@@ -44,7 +60,7 @@ class SampleCreator:
             with open(file_path, 'r', encoding='utf-8') as f:
                 record = json.load(f)
 
-            # 跳过平局或未结束的对局
+            # 公共过滤：跳过平局或未结束的对局
             winner = record.get("winner", 0)
             if winner == 0 or winner == 3:
                 continue
@@ -53,32 +69,79 @@ class SampleCreator:
             if not history:
                 continue
 
-            # 取最后一步
-            last_step = history[-1]
-            input_vector = last_step["input"]
-            position = last_step["position"]
-
-            # 构建 output：全 0，最后一步位置为 1
-            output = [0.0] * 225
-            idx = position[0] * 15 + position[1]
-            if 0 <= idx < 225:
-                output[idx] = 1.0
-
-            # mask 全为 1
-            mask = [1] * 225
-
-            sample = {
-                "input": input_vector,
-                "output": output,
-                "mask": mask
-            }
-
-            if self.augment:
-                samples.extend(self._augment_sample(sample))
+            # 按 mode 分派：每种模式返回"本局待产出的 sample 原型列表"（未增强）
+            if self.mode == "winning_move":
+                raw_samples = self._build_winning_move_samples(history)
+            elif self.mode == "winner_path":
+                raw_samples = self._build_winner_path_samples(winner, history)
             else:
-                samples.append(sample)
+                # SUPPORTED_MODES 在 __init__ 已拦截；此分支理论不可达，
+                # 万一未来新增模式而忘记在此分派，立即暴露。
+                raise AssertionError(f"unreachable: mode={self.mode!r}")
+
+            # 可选 D4 增强（winner_path 已在 __init__ 中强制禁用）
+            for raw in raw_samples:
+                if self.augment:
+                    samples.extend(self._augment_sample(raw))
+                else:
+                    samples.append(raw)
 
         return samples
+
+    # ------------------------------------------------------------------
+    # 各模式的样本构造
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _build_sample(input_vector: list, position: list) -> Dict:
+        """构造单个 sample：output 落子位=1.0（行/列任一越界则保持全 0），mask 全 1
+
+        Args:
+            input_vector: 226 维棋盘+玩家向量
+            position: [x, y] 落子坐标
+
+        Returns:
+            sample 字典
+
+        Note:
+            严格按 (r, c) 双维度各自在 [0, 15) 内判断越界，
+            而不是只看一维索引 ``r*15+c`` 是否在 [0, 225) 内——
+            后者会把"行合法列越界"（如 [0, 20]）的 idx=20 误写到 (1, 5)。
+        """
+        output = [0.0] * 225
+        r, c = position[0], position[1]
+        if 0 <= r < 15 and 0 <= c < 15:
+            output[r * 15 + c] = 1.0
+        mask = [1] * 225
+        return {
+            "input": input_vector,
+            "output": output,
+            "mask": mask,
+        }
+
+    def _build_winning_move_samples(self, history: list) -> List[Dict]:
+        """winning_move 模式：仅取最后一步"""
+        last_step = history[-1]
+        return [self._build_sample(last_step["input"], last_step["position"])]
+
+    def _build_winner_path_samples(self, winner: int, history: list) -> List[Dict]:
+        """winner_path 模式：取获胜方每一步，剔除首步（开局）
+
+        - winner=1（黑胜）：获胜方在 history 中的偶数索引 [0, 2, 4, ...]
+        - winner=2（白胜）：奇数索引 [1, 3, 5, ...]
+        - 剔首后：winner=1 → [2, 4, ...]；winner=2 → [3, 5, ...]
+        """
+        start_idx = 0 if winner == 1 else 1
+        winner_indices = list(range(start_idx, len(history), 2))
+        # 剔除获胜方的第 1 步（开局）
+        kept_indices = winner_indices[1:]
+
+        samples = []
+        for i in kept_indices:
+            step = history[i]
+            samples.append(self._build_sample(step["input"], step["position"]))
+        return samples
+
 
     @staticmethod
     def _transform_index(idx: int, tid: int) -> int:
