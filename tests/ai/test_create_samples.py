@@ -12,6 +12,7 @@ import os
 import sys
 import tempfile
 import unittest
+from io import StringIO
 from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -309,6 +310,97 @@ class TestCliWinnerPathMode(unittest.TestCase):
                 self.assertEqual(s["mask"], [1] * 225)
                 # input 应是保留步的原始 input（值为 2.0 或 4.0）
                 self.assertIn(s["input"][0], (2.0, 4.0))
+
+
+class TestCliAugmentPrintReflectsRuntime(unittest.TestCase):
+    """CLI 打印的"数据增强"状态应以 creator.augment 为真相源，
+    而不是直接看 args.no_augment。winner_path 模式下即使未传 --no-augment，
+    也会被强制禁用增强，打印必须反映这一事实（第三十八次追加的一致性要求）。"""
+
+    @patch('ai.create_samples.get_model')
+    @patch('ai.create_samples.AIEngine')
+    @patch('ai.create_samples.AIGameManager')
+    @patch('ai.create_samples.DataRecorder')
+    def test_winner_path_prints_augment_disabled(self, mock_recorder_cls, mock_manager_cls, mock_engine_cls, mock_get_model):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = os.path.join(tmpdir, "wp.json")
+
+            mock_model = MagicMock()
+            mock_model.name = "test_model"
+            mock_get_model.return_value = mock_model
+
+            mock_engine_cls.return_value = MagicMock()
+
+            mock_manager = MagicMock()
+            mock_manager.start_ai_vs_ai.return_value = [{"game": 1, "winner": 1}]
+            mock_manager_cls.return_value = mock_manager
+
+            mock_recorder = MagicMock()
+            round_dir = os.path.join(tmpdir, "round_1")
+            game_dir = os.path.join(round_dir, "1")
+            os.makedirs(game_dir, exist_ok=True)
+            history = [
+                {"input": [float(i)] * 226, "output": [0.0] * 225, "position": [i // 15, i % 15]}
+                for i in range(5)
+            ]
+            with open(os.path.join(game_dir, "record.json"), 'w', encoding='utf-8') as f:
+                json.dump({"winner": 1, "history": history, "end_board": [0.0] * 226}, f)
+            mock_recorder.get_round_dir.return_value = round_dir
+            mock_recorder_cls.return_value = mock_recorder
+
+            captured = StringIO()
+            argv = ['create_samples.py', '--model', 'test_model',
+                    '--mode', 'winner_path',
+                    '--games', '1', '--output', output_path]
+            with patch('sys.argv', argv), patch('sys.stdout', captured):
+                main()
+
+            stdout = captured.getvalue()
+            # 必须打印"禁用"，不得打印"启用"
+            self.assertIn("禁用", stdout)
+            self.assertNotIn("启用 (8 变换)", stdout)
+
+    @patch('ai.create_samples.get_model')
+    @patch('ai.create_samples.AIEngine')
+    @patch('ai.create_samples.AIGameManager')
+    @patch('ai.create_samples.DataRecorder')
+    def test_winning_move_default_prints_augment_enabled(self, mock_recorder_cls, mock_manager_cls, mock_engine_cls, mock_get_model):
+        """winning_move 默认模式下应打印"启用 (8 变换)"，保证旧行为不回归"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = os.path.join(tmpdir, "wm.json")
+
+            mock_model = MagicMock()
+            mock_model.name = "test_model"
+            mock_get_model.return_value = mock_model
+
+            mock_engine_cls.return_value = MagicMock()
+
+            mock_manager = MagicMock()
+            mock_manager.start_ai_vs_ai.return_value = [{"game": 1, "winner": 1}]
+            mock_manager_cls.return_value = mock_manager
+
+            mock_recorder = MagicMock()
+            round_dir = os.path.join(tmpdir, "round_1")
+            game_dir = os.path.join(round_dir, "1")
+            os.makedirs(game_dir, exist_ok=True)
+            record = {
+                "winner": 1,
+                "history": [{"input": [0.0] * 226, "output": [0.0] * 225, "position": [0, 0]}],
+                "end_board": [0.0] * 226,
+            }
+            with open(os.path.join(game_dir, "record.json"), 'w', encoding='utf-8') as f:
+                json.dump(record, f)
+            mock_recorder.get_round_dir.return_value = round_dir
+            mock_recorder_cls.return_value = mock_recorder
+
+            captured = StringIO()
+            argv = ['create_samples.py', '--model', 'test_model',
+                    '--games', '1', '--output', output_path]
+            with patch('sys.argv', argv), patch('sys.stdout', captured):
+                main()
+
+            stdout = captured.getvalue()
+            self.assertIn("启用 (8 变换)", stdout)
 
 
 if __name__ == '__main__':

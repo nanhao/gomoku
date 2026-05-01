@@ -124,7 +124,9 @@ def main():
 
     print(f"\n样本生成完成:")
     print(f"  对局数:     {len(results)}")
-    print(f"  数据增强:   {'禁用' if args.no_augment else '启用 (8 变换)'}")
+    # 以 creator.augment 运行时属性为真相源：winner_path 模式会在 __init__ 中
+    # 强制禁用增强，即使命令行未传 --no-augment，这里也必须打印"禁用"。
+    print(f"  数据增强:   {'启用 (8 变换)' if creator.augment else '禁用'}")
     print(f"  样本数:     {len(samples)}")
     print(f"  输出路径:   {args.output}")
 

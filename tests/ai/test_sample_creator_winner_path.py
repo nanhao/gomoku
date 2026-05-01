@@ -234,6 +234,19 @@ class TestWinnerPathNoAugmentation(unittest.TestCase):
 
             # 即使启用 augment，也应只有 2 个（不是 2*8=16）
             self.assertEqual(len(samples), 2)
+            # 进一步：creator.augment 应在 __init__ 中被强制置为 False
+            self.assertFalse(creator.augment)
+            # 每个 sample 的 output 的 1 位置应落在原始保留步的 position 上
+            # _make_history 中 step i 的 position=[i//15, i%15]
+            # 保留步 = [2, 4] → 位置分别为 [0,2]、[0,4] → idx=2、idx=4
+            self.assertEqual(samples[0]["output"][2], 1.0)
+            self.assertEqual(samples[1]["output"][4], 1.0)
+            # 其余位置必须为 0（不是 D4 变换产生的副本）
+            for idx in range(225):
+                if idx != 2:
+                    self.assertEqual(samples[0]["output"][idx], 0.0)
+                if idx != 4:
+                    self.assertEqual(samples[1]["output"][idx], 0.0)
 
 
 class TestWinnerPathInvalidPosition(unittest.TestCase):
@@ -274,6 +287,27 @@ class TestWinnerPathInvalidPosition(unittest.TestCase):
 
             # 白方步 = [1, 3]，剔首 → [3]
             self.assertEqual(len(samples), 1)
+            self.assertEqual(samples[0]["output"], [0.0] * 225)
+
+    def test_single_axis_out_of_bounds_row_valid_col_invalid(self):
+        """行在界内但列越界时，idx 可能"巧合"落在 [0,225) 内，
+        严格语义要求：这种情况 output 必须保持全 0，不应把 1 打到错位上。"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # 黑胜、3 步：最后一步 position=[0, 20] → row 合法、col 越界
+            # 若按 idx = 0*15+20 = 20 直接写入，会错误地打到 (1, 5)
+            history = [
+                {"input": [0.0] * 226, "output": [0.0] * 225, "position": [0, 0]},     # 黑，剔除
+                {"input": [1.0] * 226, "output": [0.0] * 225, "position": [0, 1]},     # 白
+                {"input": [2.0] * 226, "output": [0.0] * 225, "position": [0, 20]},    # 黑，保留但列越界
+            ]
+            record = {"winner": 1, "history": history}
+            path = _write_record(tmpdir, record)
+
+            creator = SampleCreator(mode="winner_path")
+            samples = creator.create([path])
+
+            self.assertEqual(len(samples), 1)
+            # 严格越界语义：整个 output 应全 0
             self.assertEqual(samples[0]["output"], [0.0] * 225)
 
 

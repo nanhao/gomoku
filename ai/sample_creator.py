@@ -71,9 +71,13 @@ class SampleCreator:
 
             # 按 mode 分派：每种模式返回"本局待产出的 sample 原型列表"（未增强）
             if self.mode == "winning_move":
-                raw_samples = self._build_winning_move_samples(winner, history)
-            else:  # winner_path
+                raw_samples = self._build_winning_move_samples(history)
+            elif self.mode == "winner_path":
                 raw_samples = self._build_winner_path_samples(winner, history)
+            else:
+                # SUPPORTED_MODES 在 __init__ 已拦截；此分支理论不可达，
+                # 万一未来新增模式而忘记在此分派，立即暴露。
+                raise AssertionError(f"unreachable: mode={self.mode!r}")
 
             # 可选 D4 增强（winner_path 已在 __init__ 中强制禁用）
             for raw in raw_samples:
@@ -90,7 +94,7 @@ class SampleCreator:
 
     @staticmethod
     def _build_sample(input_vector: list, position: list) -> Dict:
-        """构造单个 sample：output 落子位=1.0（越界则保持 0），mask 全 1
+        """构造单个 sample：output 落子位=1.0（行/列任一越界则保持全 0），mask 全 1
 
         Args:
             input_vector: 226 维棋盘+玩家向量
@@ -98,11 +102,16 @@ class SampleCreator:
 
         Returns:
             sample 字典
+
+        Note:
+            严格按 (r, c) 双维度各自在 [0, 15) 内判断越界，
+            而不是只看一维索引 ``r*15+c`` 是否在 [0, 225) 内——
+            后者会把"行合法列越界"（如 [0, 20]）的 idx=20 误写到 (1, 5)。
         """
         output = [0.0] * 225
-        idx = position[0] * 15 + position[1]
-        if 0 <= idx < 225:
-            output[idx] = 1.0
+        r, c = position[0], position[1]
+        if 0 <= r < 15 and 0 <= c < 15:
+            output[r * 15 + c] = 1.0
         mask = [1] * 225
         return {
             "input": input_vector,
@@ -110,7 +119,7 @@ class SampleCreator:
             "mask": mask,
         }
 
-    def _build_winning_move_samples(self, winner: int, history: list) -> List[Dict]:
+    def _build_winning_move_samples(self, history: list) -> List[Dict]:
         """winning_move 模式：仅取最后一步"""
         last_step = history[-1]
         return [self._build_sample(last_step["input"], last_step["position"])]
