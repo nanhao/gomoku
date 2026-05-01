@@ -10,7 +10,50 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from game.controller import GomokuController
+from game.game import GomokuGame
 from game.save import GomokuSave
+
+
+def _build_draw_residual_state(empty_cell=(14, 14)):
+    """构造 224 格满 + 1 格空且保证无五连的平局残局 state。
+
+    染色公式: color(i, j) = 1 + ((i + j // 2) % 2)。
+    - 横向: 同一行 j 变化时，j//2 每 2 格 +1，色序 {i,i,~i,~i,i}，连续最多 2 同色。
+    - 纵向: 同一列 i 变化时，色按 (i+常数) 交替，连续最多 1 同色。
+    - 主/副对角: 逐位展开后连续最多 2 同色（运行时自检兜底）。
+
+    空位由黑方 (color=1) 落下，调用 make_move(empty_cell) 即可触发平局分支。
+    """
+    board = [[0] * 15 for _ in range(15)]
+    history = []
+    for i in range(15):
+        for j in range(15):
+            if (i, j) == empty_cell:
+                continue
+            board[i][j] = 1 + ((i + j // 2) % 2)
+            history.append({"x": i, "y": j, "player": board[i][j]})
+    # 防御性自检: 若染色公式失效, 测试必须以 AssertionError 失败而不是静默通过
+    for i in range(15):
+        for j in range(15):
+            if board[i][j] == 0:
+                continue
+            p = board[i][j]
+            for dx, dy in [(0, 1), (1, 0), (1, 1), (1, -1)]:
+                count = 1
+                for k in range(1, 5):
+                    ni, nj = i + dx * k, j + dy * k
+                    if not (0 <= ni < 15 and 0 <= nj < 15) or board[ni][nj] != p:
+                        break
+                    count += 1
+                assert count < 5, (
+                    f"平局残局构造失效: ({i},{j}) 方向 ({dx},{dy}) 出现 5 连同色 {p}"
+                )
+    return {
+        "board": board,
+        "current_player": 1,  # 空位由黑方落下触发平局
+        "winner": 0,
+        "history": history,
+    }
 
 
 class TestGomokuController:
@@ -120,40 +163,24 @@ class TestGomokuController:
     def test_draw(self):
         """测试平局
 
-        构造满盘（225步）且无胜者的局面，
+        通过预置 224 格满 + 1 格空的确定性残局，
         验证 make_move 返回 game_over=True 且 winner=3（平局）。
         """
         self.controller.new_game("测试平局")
-        
-        # 构造一个无五连的满盘棋局
-        # 使用交替模式填满棋盘，确保不形成五连
-        # 模式：黑棋放在偶数列，白棋放在奇数列，每行交替
-        # 这样同行同列不会连续5个相同颜色的棋子
-        move_count = 0
-        for i in range(15):
-            for j in range(15):
-                if self.controller.game.winner != 0:
-                    break
-                result = self.controller.make_move(i, j)
-                move_count += 1
-                if result.get("winner", 0) != 0:
-                    break
-            if self.controller.game.winner != 0:
-                break
-        
-        # 如果棋盘填满且无胜者，应为平局
-        if self.controller.game.winner == 3:
-            # 验证最后一个落子返回平局结果
-            assert result["game_over"] is True
-            assert result["winner"] == 3
-            assert result["result"] == "平局"
-        elif self.controller.game.winner == 0:
-            # 如果棋盘未满且有胜者，说明我们的落子序列意外产生了五连
-            # 在这种情况下，至少验证平局检测逻辑存在
-            assert hasattr(self.controller, 'is_draw')
-        else:
-            # 有胜者的情况，不是平局测试的目标，但也不应崩溃
-            assert result["winner"] in [1, 2]
+
+        # 注入预置残局，确保必走平局分支（原版条件断言会静默通过）
+        empty = (14, 14)
+        self.controller.game = GomokuGame(state=_build_draw_residual_state(empty))
+
+        result = self.controller.make_move(*empty)
+
+        assert result["status"] == "success"
+        assert result["winner"] == 3
+        assert result["game_over"] is True
+        assert result["result"] == "平局"
+        assert self.controller.game.winner == 3
+        assert self.controller.is_draw() is True
+        assert self.controller.is_over() is True
     
     def test_load_game(self):
         """测试加载存档
@@ -196,18 +223,17 @@ class TestGomokuController:
     def test_game_over_draw_cannot_move(self):
         """测试平局后不能落子"""
         self.controller.new_game("测试游戏平局")
-        # 模拟平局（填满棋盘但无五连）
-        # 黑方落子形成特定模式
-        for i in range(15):
-            for j in range(15):
-                if self.controller.game.winner == 0:
-                    self.controller.make_move(i, j)
 
-        # 如果游戏结束（平局），尝试落子应该失败
-        if self.controller.game.winner == 3:
-            result = self.controller.make_move(0, 0)
-            assert "error" in result
-            assert "游戏已结束" in result["error"]
+        # 注入预置残局并走出平局状态
+        empty = (14, 14)
+        self.controller.game = GomokuGame(state=_build_draw_residual_state(empty))
+        self.controller.make_move(*empty)
+        assert self.controller.game.winner == 3
+
+        # 平局后尝试再落子应返回错误（winner!=0 分支由 controller 先拦截）
+        result = self.controller.make_move(0, 0)
+        assert "error" in result
+        assert "游戏已结束" in result["error"]
 
     def test_make_move_no_game(self):
         """测试无游戏时落子返回错误"""

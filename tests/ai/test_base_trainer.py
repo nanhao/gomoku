@@ -9,7 +9,7 @@ import sys
 import tempfile
 import shutil
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import torch
 
@@ -132,7 +132,12 @@ class TestBaseTrainerWithCompleteSubclass(unittest.TestCase):
         self.assertIsNotNone(trainer.model)
     
     def test_train_single_generates_loss_log(self):
-        """测试 train_single 训练后通过依赖注入生成 loss 日志"""
+        """测试 train_single 训练后通过依赖注入生成 loss 日志
+
+        关注点：logger.log/plot 是否被正确调用（日志集成契约）。
+        真实 forward/backward 的覆盖由 test_fc_v1_trainer.py::test_train_batch_updates_model_params
+        等其他测试保障，此处 mock 掉 _forward_backward_step 以避免过度测试。
+        """
         with tempfile.TemporaryDirectory() as tmp_dir:
             # 创建 sample.json（单个样本，FC 模型输入 226 维，输出 225 维）
             sample_dir = os.path.join(tmp_dir, "sample")
@@ -148,8 +153,10 @@ class TestBaseTrainerWithCompleteSubclass(unittest.TestCase):
             trainer = self.TrainerClass(fresh=True)
             mock_logger = MagicMock()
             trainer.loss_logger = mock_logger
-            
-            trainer.train_single(sample_dir, epochs=400, verbose=False)
+
+            fake_step = (torch.tensor(0.5), 0.1)
+            with patch.object(trainer, '_forward_backward_step', return_value=fake_step):
+                trainer.train_single(sample_dir, epochs=400, verbose=False)
             
             # 验证 log 和 plot 被调用（400/200 = 2 次，断言 >= 1）
             self.assertTrue(mock_logger.log.called)
@@ -157,7 +164,10 @@ class TestBaseTrainerWithCompleteSubclass(unittest.TestCase):
             self.assertTrue(mock_logger.plot.called)
     
     def test_train_batch_generates_loss_curve(self):
-        """测试 train_batch 训练后通过依赖注入生成 loss 曲线图"""
+        """测试 train_batch 训练后通过依赖注入生成 loss 曲线图
+
+        关注点：logger.log/plot 调用契约。真实 forward/backward 的覆盖由其他测试保障。
+        """
         with tempfile.TemporaryDirectory() as tmp_dir:
             sample_dirs = []
             for i in range(2):
@@ -175,8 +185,10 @@ class TestBaseTrainerWithCompleteSubclass(unittest.TestCase):
             trainer = self.TrainerClass(fresh=True)
             mock_logger = MagicMock()
             trainer.loss_logger = mock_logger
-            
-            trainer.train_batch(sample_dirs, epochs=200, verbose=False)
+
+            fake_step = (torch.tensor(0.5), 0.1)
+            with patch.object(trainer, '_forward_backward_step', return_value=fake_step):
+                trainer.train_batch(sample_dirs, epochs=200, verbose=False)
             
             # 验证 log 和 plot 被调用
             self.assertTrue(mock_logger.log.called)

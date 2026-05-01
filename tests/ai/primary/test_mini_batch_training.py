@@ -9,6 +9,7 @@ import json
 import tempfile
 import unittest
 import shutil
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
@@ -170,25 +171,37 @@ class TestMiniBatchTraining(unittest.TestCase):
         self.assertFalse(torch.equal(params_before, params_after))
     
     def test_train_mini_batch_verbose_output(self):
-        """[primary] verbose=True 时每 200 个 epoch 输出一次 loss"""
+        """[primary] verbose=True 时每 200 个 epoch 输出一次 loss
+
+        关注点：verbose 打印契约（格式 `Epoch 200/200, avg_loss: ..., lr: ...`）。
+        真实 forward/backward 的覆盖由其他 mini-batch 用例（如 test_train_mini_batch_*
+        参数更新验证）保障，此处 mock 掉 _masked_loss 以避免过度测试。
+        mock 后 loss 是脱离计算图的 scalar，backward 空转、optimizer.step 跳过，
+        仅保留 epoch 循环 + verbose 分支判断。
+        """
         dir1 = self._create_sample_dir("s1", n_items=4)
         trainer = FCv1Trainer(fresh=True)
-        
+
         import io
         captured = io.StringIO()
         sys.stdout = captured
-        
+
         try:
-            trainer.train_mini_batch(
-                [dir1],
-                epochs=200,
-                batch_size=2,
-                verbose=True
-            )
+            # scalar tensor：.item() 返回 0.5，backward 不触发任何 model 参数梯度
+            def _fake_loss(*args, **kwargs):
+                return torch.tensor(0.5, requires_grad=True)
+
+            with patch.object(trainer, '_masked_loss', side_effect=_fake_loss):
+                trainer.train_mini_batch(
+                    [dir1],
+                    epochs=200,
+                    batch_size=2,
+                    verbose=True
+                )
             output = captured.getvalue()
         finally:
             sys.stdout = sys.__stdout__
-        
+
         # 应在第 200 个 epoch 输出
         self.assertIn("Epoch 200/200", output)
         self.assertIn("loss", output.lower())

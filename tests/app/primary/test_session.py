@@ -107,16 +107,13 @@ class TestGameSessionEdgeCases:
         assert "游戏尚未创建" in result["error"]
 
     def test_do_ai_move_pvp_raises_runtime_error(self):
-        """pvp 模式调用 do_ai_move 应抛出 RuntimeError"""
+        """pvp 模式调用 do_ai_move 应抛出 RuntimeError 且消息含 "pvp 模式没有 AI" """
         controller = _make_controller()
         controller.new_game("test_pvp_ai")
         session = GameSession("pvp", controller)
 
-        try:
+        with pytest.raises(RuntimeError, match=r"pvp 模式没有 AI"):
             session.do_ai_move()
-            assert False, "应该抛出 RuntimeError"
-        except RuntimeError as e:
-            assert "pvp 模式没有 AI" in str(e)
 
     def test_do_ai_move_returns_winner_when_game_over(self):
         """do_ai_move 游戏结束时返回 winner"""

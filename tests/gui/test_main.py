@@ -18,6 +18,7 @@ from game import GomokuController
 from game.save import GomokuSave
 from app import GameSession, GUIHelper
 from app.exceptions import ModelLoadError
+from gui.display_updater import GameDisplayUpdater
 from gui.main import GomokuGUI
 
 
@@ -276,6 +277,45 @@ class TestUpdateDisplay:
 
             mock_get.assert_called_once()
             self.gui._display_updater.update.assert_called_once_with({"board": [], "status": "playing"})
+
+    def test_update_display_with_real_updater_drives_ui_components(self):
+        """端到端：_update_display 接入真实 GameDisplayUpdater 后，
+
+        真实 UI 组件（mock）会收到符合预期的绘制/文本指令。
+        用于打破"只验证 _display_updater.update 被调用"的反模式：
+        原 mock updater 即使内部完全坏掉也能通过，真实 updater 会暴露契约。
+        """
+        self.gui.controller.new_game("real_updater_test")
+        self.gui.controller.make_move(7, 7)  # 落一手，让 history 有内容
+
+        # 替换为真实 GameDisplayUpdater（组件层仍用 MagicMock，但 updater 真实）
+        real_updater = GameDisplayUpdater(
+            board=self.gui.board,
+            save_name_label=self.gui.save_name_label,
+            status_label=self.gui.status_label,
+            game_status_label=self.gui.game_status_label,
+            history_listbox=self.gui.history_listbox,
+            helper=self.gui.helper,
+            color_text="#000000",
+            color_bear="#654321",
+        )
+        self.gui._display_updater = real_updater
+
+        self.gui._update_display()
+
+        # 端到端契约：真实 updater 应调用各个 UI 组件
+        self.gui.board.draw_board.assert_called_once()
+        self.gui.board.draw_pieces.assert_called_once()
+        # 存档名称标签应被设置包含存档名
+        save_calls = self.gui.save_name_label.config.call_args_list
+        assert any("real_updater_test" in str(c) for c in save_calls), (
+            f"save_name_label 应被更新为含存档名，实际调用: {save_calls}"
+        )
+        # 历史记录应被重置并插入 1 条（7,7）
+        self.gui.history_listbox.delete.assert_called()
+        insert_calls = self.gui.history_listbox.insert.call_args_list
+        assert len(insert_calls) == 1, f"history_listbox.insert 应被调 1 次，实际 {len(insert_calls)}"
+        assert "(7, 7)" in str(insert_calls[0])
 
 
 class TestNewGame:

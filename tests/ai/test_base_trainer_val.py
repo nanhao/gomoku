@@ -116,7 +116,11 @@ class TestTrainBatchWithValRatio(unittest.TestCase):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_train_batch_with_val_ratio(self):
-        """val_ratio > 0 时 val_loss 被记录"""
+        """val_ratio > 0 时 val_loss 被记录
+
+        关注点：log_val 调用契约。真实 forward/backward 与 val 前向的覆盖由
+        TestEvaluateValLoss 等其他测试保障，此处 mock 掉避免过度测试。
+        """
         # 创建足够多样本的数据（>10 个，确保有验证集）
         sample_dir = _create_sample_dir(self.temp_dir, "data", n_items=20)
         trainer = _ConcreteTrainer(fresh=True)
@@ -124,20 +128,28 @@ class TestTrainBatchWithValRatio(unittest.TestCase):
         mock_logger.dense_log = False
         trainer.loss_logger = mock_logger
 
-        trainer.train_batch([sample_dir], epochs=200, verbose=False, val_ratio=0.2)
+        fake_step = (torch.tensor(0.5), 0.1)
+        with patch.object(trainer, '_forward_backward_step', return_value=fake_step), \
+             patch.object(trainer, '_evaluate_val_loss', return_value=0.3):
+            trainer.train_batch([sample_dir], epochs=200, verbose=False, val_ratio=0.2)
 
         # val_loss 应在 LOSS_LOG_INTERVAL (200) 的 epoch 被记录
         self.assertTrue(mock_logger.log_val.called)
 
     def test_train_batch_val_ratio_zero(self):
-        """val_ratio=0 时行为与原逻辑一致（不记录 val_loss）"""
+        """val_ratio=0 时行为与原逻辑一致（不记录 val_loss）
+
+        关注点：log_val 不被调用 + log 被调用。真实 forward/backward 覆盖由其他测试保障。
+        """
         sample_dir = _create_sample_dir(self.temp_dir, "data", n_items=5)
         trainer = _ConcreteTrainer(fresh=True)
         mock_logger = MagicMock()
         mock_logger.dense_log = False
         trainer.loss_logger = mock_logger
 
-        trainer.train_batch([sample_dir], epochs=200, verbose=False, val_ratio=0.0)
+        fake_step = (torch.tensor(0.5), 0.1)
+        with patch.object(trainer, '_forward_backward_step', return_value=fake_step):
+            trainer.train_batch([sample_dir], epochs=200, verbose=False, val_ratio=0.0)
 
         # log_val 不应被调用
         self.assertFalse(mock_logger.log_val.called)

@@ -16,44 +16,55 @@ if project_root not in sys.path:
 from ai.registry import get_model, get_trainer, _list_models, MODEL_REGISTRY
 from ai.base_model import BaseModel
 from ai.base_trainer import BaseTrainer
+from ai.models.random.model import RandomModel
+from ai.models.fc_v1.model import FCv1Model
+from ai.models.cnn_v1.model import CNNV1Model
+from ai.models.cnn_v2.model import CNNV2Model
+from ai.models.cnn_v3.model import CNNV3Model
 
 
 class TestGetModel(unittest.TestCase):
     """测试 get_model 函数"""
 
+    def _assert_predict_smoke(self, model):
+        """通用端到端 smoke：predict 返回 225 维非负向量"""
+        vector = [0] * 225 + [1]
+        probs = model.predict(vector)
+        self.assertEqual(len(probs), 225, "predict 必须返回 225 维")
+        self.assertTrue(all(p >= 0 for p in probs), "概率分布不得为负")
+
     def test_get_model_random(self):
         """加载 random 模型"""
         model = get_model("random")
-        self.assertIsNotNone(model)
-        self.assertIsInstance(model, BaseModel)
+        self.assertIsInstance(model, RandomModel)
         self.assertEqual(model.name, "random")
+        self._assert_predict_smoke(model)
 
     def test_get_model_fc_v1(self):
         """加载 fc_v1 模型"""
         model = get_model("fc_v1")
-        self.assertIsNotNone(model)
-        self.assertIsInstance(model, BaseModel)
+        self.assertIsInstance(model, FCv1Model)
         self.assertEqual(model.name, "fc_v1")
+        self._assert_predict_smoke(model)
 
     def test_get_model_cnn_v1(self):
         """加载 cnn_v1 模型"""
         model = get_model("cnn_v1")
-        self.assertIsNotNone(model)
-        self.assertIsInstance(model, BaseModel)
+        self.assertIsInstance(model, CNNV1Model)
         self.assertEqual(model.name, "cnn_v1")
+        self._assert_predict_smoke(model)
 
     def test_get_model_cnn_v2(self):
         """加载 cnn_v2 模型"""
         model = get_model("cnn_v2")
-        self.assertIsNotNone(model)
-        self.assertIsInstance(model, BaseModel)
+        self.assertIsInstance(model, CNNV2Model)
         self.assertEqual(model.name, "cnn_v2")
+        self._assert_predict_smoke(model)
 
     def test_get_model_cnn_v3(self):
         """加载 cnn_v3.1 模型（多代模型必须指定代数）"""
         # 新硬校验：显式指定 gen 时必须命中 .pth，测试前临时创建占位权重
         import torch
-        from ai.models.cnn_v3.model import CNNV3Model
         base_dir = os.path.dirname(CNNV3Model.DEFAULT_MODEL_PATH)
         gen_dir = os.path.join(base_dir, "gen1")
         pth_path = os.path.join(gen_dir, "cnn_v3.pth")
@@ -64,10 +75,10 @@ class TestGetModel(unittest.TestCase):
             torch.save(tmp.network.state_dict(), pth_path)
         try:
             model = get_model("cnn_v3.1")
-            self.assertIsNotNone(model)
-            self.assertIsInstance(model, BaseModel)
+            self.assertIsInstance(model, CNNV3Model)
             self.assertEqual(model.name, "cnn_v3")
             self.assertEqual(model.full_name, "cnn_v3.1")
+            self._assert_predict_smoke(model)
         finally:
             if not pre_exists and os.path.exists(pth_path):
                 os.remove(pth_path)
@@ -142,16 +153,23 @@ class TestGetTrainer(unittest.TestCase):
         self.assertIsInstance(trainer, BaseTrainer)
 
     def test_get_trainer_passes_fresh(self):
-        """fresh 参数应传递给 Trainer 构造函数"""
+        """fresh=True 应传递给 Trainer: 模型为全新 FCv1Model, optimizer 无历史状态"""
         trainer = get_trainer("fc_v1", fresh=True)
-        self.assertIsNotNone(trainer)
-        self.assertIsNotNone(trainer.model)
+        self.assertIsInstance(trainer.model, FCv1Model)
+        # fresh 模型的 optimizer 未做过 step：state 字典应为空或仅含默认结构
+        optim_state = trainer.optimizer.state_dict().get('state', {})
+        self.assertEqual(
+            len(optim_state), 0,
+            f"fresh trainer 的 optimizer.state 应为空（未 step 过），实际 {len(optim_state)} 项"
+        )
 
     def test_get_trainer_passes_kwargs(self):
-        """额外 kwargs 应传递给 Trainer 构造函数（如 lr_scheduler_type）"""
+        """kwargs 应透传到 Trainer 构造并真实生效（以 lr_scheduler_type=\"step\" 为例）"""
+        import torch.optim.lr_scheduler as lr_scheduler
         trainer = get_trainer("fc_v1", fresh=True, lr_scheduler_type="step")
-        self.assertIsNotNone(trainer)
-        # 不崩溃即通过
+        # 直接验证属性与调度器类型，确保 kwargs 不是被 **kwargs 吞掉后静默忽略
+        self.assertEqual(trainer.lr_scheduler_type, "step")
+        self.assertIsInstance(trainer.lr_scheduler, lr_scheduler.StepLR)
 
 
 class TestListModels(unittest.TestCase):

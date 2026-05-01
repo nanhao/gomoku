@@ -119,6 +119,69 @@ class TestTrainFromDirTempCleanup(unittest.TestCase):
 
         mock_rmtree.assert_any_call('/fake/tmp/sample_dir', ignore_errors=True)
 
+    # ---- 真实目录端到端（方案 A：真 mkdtemp/rmtree + mock trainer）----
+
+    @patch('ai.train_main.get_trainer')
+    def test_json_path_temp_dir_actually_removed_on_disk(self, mock_get_trainer):
+        """端到端：--train-from-dir <.json> 退出后临时目录真从磁盘消失
+
+        破除上面 4 个用例"只验证 mock.rmtree.assert_any_call 被调用"
+        的弱断言。本用例不 patch shutil.rmtree 和 _create_temp_sample_dir，
+        让 tempfile.mkdtemp + shutil.rmtree 走真实逻辑，在磁盘上验证：
+          - 训练前: _create_temp_sample_dir 创建的目录真实存在
+          - 训练中: 目录仍然存在（未被提前清理）
+          - 训练后: 目录已从磁盘消失
+
+        为避免真训练耗时，依旧 mock get_trainer 返回桩 trainer。
+        """
+        import ai.runners as _runners
+
+        captured_paths = []
+        original_create = _runners._create_temp_sample_dir
+
+        def _spy_create(sample_data):
+            path = original_create(sample_data)
+            captured_paths.append(path)
+            # 此时 finally 尚未执行，目录应真实存在于磁盘
+            self.assertTrue(
+                os.path.isdir(path),
+                f"_create_temp_sample_dir 应在磁盘上创建真实目录: {path}"
+            )
+            # sample.json 应已写入
+            self.assertTrue(
+                os.path.isfile(os.path.join(path, 'sample.json')),
+                f"临时目录下应生成 sample.json: {path}"
+            )
+            return path
+
+        mock_trainer = self._make_mock_trainer()
+
+        def _train_auto_side_effect(*args, **kwargs):
+            # 训练过程中临时目录仍应存在（证明 rmtree 未提前触发）
+            self.assertTrue(captured_paths, "训练开始前应已创建临时目录")
+            self.assertTrue(
+                os.path.isdir(captured_paths[0]),
+                f"训练过程中临时目录应仍在磁盘上: {captured_paths[0]}"
+            )
+            return 0.5
+
+        mock_trainer.train_auto.side_effect = _train_auto_side_effect
+        mock_get_trainer.return_value = mock_trainer
+
+        with patch('ai.runners._create_temp_sample_dir', side_effect=_spy_create):
+            with patch('sys.argv', ['train_main.py', '--model', 'fc_v1',
+                                    '--train-from-dir', self.json_path]):
+                main()
+
+        # 关键断言：退出后临时目录真的从磁盘消失
+        self.assertEqual(len(captured_paths), 1,
+                         "应恰好创建 1 次临时目录")
+        tmp_path = captured_paths[0]
+        self.assertFalse(
+            os.path.exists(tmp_path),
+            f"训练退出后临时目录应已被清理（磁盘上不应存在）: {tmp_path}"
+        )
+
 
 if __name__ == '__main__':
     unittest.main()
