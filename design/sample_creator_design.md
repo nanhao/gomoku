@@ -242,6 +242,10 @@ def _augment_sample(sample):
 
 ## 第三十八次追加：winner_path 模式
 
+> **注意**：本节中关于 output 构造的规则（落子位=1.0、其余=0.0 的硬标签；
+> position 越界时 output 全 0）已被 **第三十九次追加** 替换，不再生效。
+> input / mask / 剔首 / 跳过规则 / D4 禁用等其他规则仍然保留。
+
 ### 背景与动机
 
 `winning_move` 模式只保留了每局的"最后一步（制胜那步）"作为 sample。这种策略
@@ -359,3 +363,126 @@ python ai/create_samples.py --model cnn_v3.1 --mode winner_path \
 | `tests/ai/test_sample_creator_winner_path.py` | 新增 | winner_path 模式 12 条单元测试 |
 | `tests/ai/test_create_samples.py` | 修改 | 补充 1 条 winner_path CLI 集成测试 |
 | `README.md` | 修改 | `--mode` 参数说明列出支持的模式；新增 winner_path 示例 |
+
+## 第三十九次追加：winner_path 软标签化（替换硬标签）
+
+### 背景与动机
+
+第三十八次追加中，`winner_path` 每步 output 采用硬标签：落子位=1.0、其他=0.0。
+该策略让模型把获胜方每一步都当作"唯一正确落点"学习，信号过于刚性，容易
+破坏模型已习得的合理分布。
+
+本次修订将 output 构造由硬标签改为**基于模型自身输出的软标签**，对落子位
+做**最小增强**使其成为严格 top1，其余增量由非落子位**等额汲取 + clip + 归一化**
+吸收。本次修订**直接替换**第三十八次追加的 output 行为；硬标签语义不再保留。
+
+### 核心规则
+
+| 规则项 | 取值/说明 |
+|--------|-----------|
+| 适用模式 | 仅 `winner_path` |
+| input / mask | 不变（input = `history[i]["input"]`；mask = 全 1）|
+| output 数据源 | `history[i]["output"]`（DataRecorder 已记录的当步模型 softmax 输出，225 维）|
+| 落子位已严格 top1 | 保持不变，output = 模型输出的拷贝 |
+| 落子位非严格 top1 | 按下方算法抬升至严格 top1，其余位置均摊汲取、clip 到 0、重归一化 |
+| EPS（超越阈值）| `1e-3`，作为模块级常量 `WINNER_PATH_TOP1_EPS` 暴露于 `ai/sample_creator.py` |
+| D4 增强 | 仍然强制禁用（与第三十八次追加一致）|
+| 跳过条件 | 平局/未结束/空 history 仍然跳过；获胜方剔首逻辑不变 |
+| position 越界兜底 | output 直接等于模型原分布（替换第三十八次追加的"全 0"行为）|
+| 输出总和 | 归一化后 `sum(output) == 1`，与 softmax 分布同量纲 |
+
+### 主流程伪代码
+
+```
+对 winner_path 每个入选步 i：
+    p   = list(history[i]["output"])                # 长度 225，sum≈1
+    idx = pos[0] * 15 + pos[1]
+
+    if not 0 <= idx < 225:
+        output = p                                  # 越界兜底：原分布
+    else:
+        p_move = p[idx]
+        p_max  = max(p)
+        strict_top1_at_idx = (p_move == p_max) and (p.count(p_max) == 1)
+
+        if strict_top1_at_idx:
+            output = p                              # 已严格 top1，原样使用
+        else:
+            delta     = p_max - p_move + EPS        # EPS = 1e-3
+            per_share = delta / 224
+            q = [p[j] - per_share for j in 0..224]  # 其余均摊汲取
+            q[idx] = p_move + delta                 # 抬升落子位
+            q = [max(v, 0.0) for v in q]            # clip 到 0（防负）
+            s = sum(q)                              # s 恒 > 0（q[idx] > 0 已保证）
+            output = [v / s for v in q]             # 归一化到 sum=1
+
+    mask = [1]*225
+    samples.append({"input": history[i]["input"], "output": output, "mask": mask})
+```
+
+### 归一化正确性说明（关键）
+
+1. 均摊扣减后理论 `sum = 1`；但 clip 负数归 0 会让 `sum ≥ 1`。归一化让总和回到 1，
+   与模型 softmax 输出同量纲。
+2. 归一化后落子位仍严格 top1，可证明：clip 前 `q[idx] = p_max + EPS`；其他位置
+   `q[j] ≤ p[j] ≤ p_max < q[idx]`。clip 只会把某些 `q[j]` 进一步降到 0，不会
+   抬高任何位置；同除以正 `s` 后不等式方向不变，故落子位在归一化后仍是严格最大。
+
+### API 变更
+
+仅影响 `SampleCreator` 在 `winner_path` 模式下的 output 构造，
+**不新增公开参数，不新增模式**。
+`SUPPORTED_MODES`、`__init__` 签名、`create()` / `create_from_round_dir()` 签名均不变。
+
+新增模块级常量：
+
+```python
+# ai/sample_creator.py
+WINNER_PATH_TOP1_EPS = 1e-3
+```
+
+### 与 record.json 的兼容性
+
+`history[i]["output"]` 自 `DataRecorder.record_move` 起即写入，现有所有
+`record.json` 均包含该字段。若未来出现缺失 `output` 字段的记录，视为非法输入
+直接抛出 `KeyError`（不回退到硬标签，避免静默退化）。
+
+### 新增测试用例（winner_path 软标签）
+
+测试追加至 `tests/ai/test_sample_creator_winner_path.py`。同时**删除**第三十八次
+追加节中以下两条已失效的用例：
+- `test_output_one_hot_at_position`（one-hot 语义已不存在）
+- `test_invalid_position_no_crash`（越界兜底从"全 0"改为"原分布"）
+
+| 用例 | 说明 |
+|------|------|
+| `test_soft_label_when_move_already_strict_top1` | 构造 record 使落子位概率严格最大 → output 与 `history[i]["output"]` 完全一致 |
+| `test_soft_label_boosts_move_to_strict_top1` | 落子位非 top1 → 生成 output 中落子位为严格最大值（> 其他所有位置）|
+| `test_soft_label_sum_is_one` | 生成 output 的 `sum` 与 1.0 的差值 < 1e-9 |
+| `test_soft_label_no_negative` | 生成 output 所有元素 ≥ 0 |
+| `test_soft_label_uses_recorded_output` | Mock record 中的 `output` 为特定分布 → 验证 SampleCreator 读取该字段而非模型重新推理 |
+| `test_soft_label_tie_top1_is_boosted` | 落子位与其他位置并列 top1 → 仍触发增强，使落子位成为严格 top1 |
+| `test_soft_label_clip_extreme_distribution` | 极不均分布（某位置 0.95，其余接近 0）→ 汲取后多数位置本应为负，clip+归一化后 output 非负且 `sum=1`，落子位仍严格 top1 |
+| `test_soft_label_eps_respected` | 显式断言归一化前 `q[idx] - 其他最大值 ≥ EPS` |
+| `test_winner_path_no_longer_one_hot` | 回归断言：output **不**是 one-hot（存在至少两个 > 0 的元素，且落子位 ≠ 1.0）|
+| `test_invalid_position_returns_model_output` | position 越界时 output 直接等于模型原分布（替换旧的"全 0"期望）|
+
+### 与第三十八次追加的差异回溯
+
+| 项 | 第三十八次（原）| 第三十九次（本次）|
+|---|---|---|
+| output 构造 | 落子位=1，其余=0（硬标签 / one-hot）| 基于模型输出的软标签 + 抬升到严格 top1 + 归一化 |
+| position 越界兜底 | output 全 0 | output = 模型原分布 |
+| record.json 依赖 | 仅读 `input` / `position` | 还读 `history[i]["output"]`（缺失则 KeyError）|
+| mask | 全 1 | 全 1（不变）|
+| D4 增强 | 强制禁用 | 强制禁用（不变）|
+| 剔首/跳过规则 | 不变 | 不变 |
+
+### 涉及文件（本节追加）
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `design/sample_creator_design.md` | 修改 | 追加本节；在第三十八次追加节开头加替换引用 |
+| `ai/sample_creator.py` | 修改 | `_build_winner_path_samples` output 构造改为软标签算法；新增常量 `WINNER_PATH_TOP1_EPS = 1e-3` |
+| `tests/ai/test_sample_creator_winner_path.py` | 修改 | 删除 2 条失效用例；新增 10 条软标签测试 |
+| `requirements/key_points.md` | 已追加 | 第三十九次追加（用户本次提交的需求）|

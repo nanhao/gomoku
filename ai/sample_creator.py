@@ -5,13 +5,28 @@
     - winning_move: 取每局最后一步的 input 作为 sample input，
       最后一步 position 对应位置 output=1，其余=0，mask 全为 1
     - winner_path:  取整局中获胜方的每一步（剔除获胜方第 1 步），
-      每一步的 input/output/mask 构造同 winning_move。此模式**强制不做**
-      D4 增强，详见 design/sample_creator_design.md 第三十八次追加。
+      每一步的 input/mask 构造同 winning_move；output 采用**软标签**
+      （第三十九次追加）——在模型自身 softmax 输出的基础上，把落子位
+      最小增强为严格 top1，增量由其他 224 位等额汲取、clip 到 0、再归一化
+      回 sum=1。此模式**强制不做** D4 增强，详见
+      design/sample_creator_design.md "第三十八/三十九次追加"。
 """
 
 import json
 import os
 from typing import List, Dict
+
+
+# ----------------------------------------------------------------------
+# 第三十九次追加：winner_path 软标签抬升阈值
+#
+# EPS 用于保证落子位在归一化前严格超过当前 top1：
+#     delta = p_max - p_move + EPS
+# 取 1e-3 是设计评审后的取值（见 key_points.md 第 647 行、设计文档第三十九次追加）。
+# 过小（如 1e-6）会在归一化后被浮点精度抹平；过大则让标签过于尖锐，
+# 退化为近似 one-hot，失去"保留模型分布"的初衷。
+# ----------------------------------------------------------------------
+WINNER_PATH_TOP1_EPS = 1e-3
 
 
 class SampleCreator:
@@ -130,6 +145,10 @@ class SampleCreator:
         - winner=1（黑胜）：获胜方在 history 中的偶数索引 [0, 2, 4, ...]
         - winner=2（白胜）：奇数索引 [1, 3, 5, ...]
         - 剔首后：winner=1 → [2, 4, ...]；winner=2 → [3, 5, ...]
+
+        Note:
+            output 构造采用第三十九次追加的**软标签**算法，详见
+            :meth:`_build_winner_path_output`。
         """
         start_idx = 0 if winner == 1 else 1
         winner_indices = list(range(start_idx, len(history), 2))
@@ -139,8 +158,78 @@ class SampleCreator:
         samples = []
         for i in kept_indices:
             step = history[i]
-            samples.append(self._build_sample(step["input"], step["position"]))
+            # 软标签 output：基于当步模型 softmax 输出构造
+            output = self._build_winner_path_output(
+                step["output"], step["position"]
+            )
+            samples.append({
+                "input": step["input"],
+                "output": output,
+                "mask": [1] * 225,
+            })
         return samples
+
+    @staticmethod
+    def _build_winner_path_output(model_output: list, position: list) -> list:
+        """第三十九次追加：winner_path 软标签 output 构造
+
+        算法（详见 design/sample_creator_design.md "第三十九次追加"）：
+            1. p = 模型当步 softmax 输出的拷贝（225 维，sum≈1）
+            2. idx = position[0]*15 + position[1]
+               - 若 idx 越界：output = p（原分布，不抬升）
+            3. 若落子位已是"严格 top1"（唯一最大）：output = p（原样）
+            4. 否则：
+                 delta = max(p) - p[idx] + EPS        (EPS = WINNER_PATH_TOP1_EPS)
+                 q[idx] = p[idx] + delta              (抬升落子位)
+                 q[j]   = p[j]   - delta/224          (其余等额汲取)
+                 q      = max(q, 0.0)                 (clip 负值到 0)
+                 output = q / sum(q)                  (归一化回 sum=1)
+
+        该算法保证：
+            - output 非负且 sum 精确为 1
+            - 落子位在归一化后仍是严格最大（严格 top1）
+            - 缺省 p 为"退化全零"时也能工作（此时 output 退化为 one-hot）
+
+        Args:
+            model_output: 长度 225 的浮点列表，当步模型 softmax 输出
+            position: [row, col] 落子坐标
+
+        Returns:
+            长度 225 的浮点列表：软标签 output
+        """
+        # 原分布的拷贝；无论是否抬升都必须拷贝，避免外部修改污染原 record
+        p = list(model_output)
+
+        r, c = position[0], position[1]
+        # 严格按 (r, c) 双维度各自在 [0, 15) 内判断越界；
+        # 与硬标签版本保持一致的越界语义，避免"行合法列越界"被误写到错位。
+        if not (0 <= r < 15 and 0 <= c < 15):
+            # 越界兜底：直接返回模型原分布，不做任何抬升
+            return p
+
+        idx = r * 15 + c
+        p_move = p[idx]
+        p_max = max(p)
+
+        # "严格 top1"判定：落子位等于最大值，且最大值在全表中仅出现一次
+        if p_move == p_max and p.count(p_max) == 1:
+            return p
+
+        # ---- 抬升 + 均摊汲取 ----
+        delta = p_max - p_move + WINNER_PATH_TOP1_EPS
+        per_share = delta / 224
+
+        # 先均摊扣减所有位置 per_share（包含落子位，稍后再覆写）
+        q = [v - per_share for v in p]
+        # 落子位：原值加 delta（覆盖上面均摊扣减的分量）
+        q[idx] = p_move + delta
+
+        # clip 到 [0, +inf)
+        q = [v if v > 0.0 else 0.0 for v in q]
+
+        # 归一化。q[idx] = p_max + EPS > 0，故 sum(q) > 0，除法安全
+        s = sum(q)
+        return [v / s for v in q]
 
 
     @staticmethod

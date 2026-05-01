@@ -5,10 +5,13 @@
 测试规则（参见 design/sample_creator_design.md "第三十八次追加"）：
 - 仅选取获胜方的落子步（黑胜 → history 偶数索引；白胜 → 奇数索引）
 - **剔除获胜方的第 1 步**（开局）
-- output：落子位=1.0，其余=0
 - mask：全 1
 - 平局/未结束/空 history：整局跳过
 - 强制不做 D4 增强（即使 augment=True 也不增强）
+
+注意：第三十九次追加已将 output 构造由硬标签替换为软标签，相关 output 精确值
+校验移至 tests/ai/test_sample_creator_winner_path_soft_label.py；
+本文件只保留与 output 算法无关的结构性测试。
 """
 
 import json
@@ -97,27 +100,11 @@ class TestWinnerPathInputAlignment(unittest.TestCase):
 
 
 class TestWinnerPathOutputOneHot(unittest.TestCase):
-    """每个 sample output 落子位=1.0，其它=0"""
+    """[已移除] 原硬标签 one-hot 语义用例已由第三十九次追加替换。
 
-    def test_output_one_hot_at_position(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # 手工构造一局黑胜（3 步），让后两步位置可预测
-            history = [
-                {"input": [0.0] * 226, "output": [0.0] * 225, "position": [0, 0]},   # 黑，剔除
-                {"input": [1.0] * 226, "output": [0.0] * 225, "position": [0, 1]},   # 白
-                {"input": [2.0] * 226, "output": [0.0] * 225, "position": [3, 4]},   # 黑，保留
-            ]
-            record = {"winner": 1, "history": history}
-            path = _write_record(tmpdir, record)
-
-            creator = SampleCreator(mode="winner_path")
-            samples = creator.create([path])
-
-            # 获胜方步=[0,2]，剔首 → [2]
-            self.assertEqual(len(samples), 1)
-            expected_output = [0.0] * 225
-            expected_output[3 * 15 + 4] = 1.0  # position [3, 4]
-            self.assertEqual(samples[0]["output"], expected_output)
+    软标签下的 output 精确值校验统一在
+    tests/ai/test_sample_creator_winner_path_soft_label.py 中覆盖。
+    """
 
 
 class TestWinnerPathMask(unittest.TestCase):
@@ -250,65 +237,11 @@ class TestWinnerPathNoAugmentation(unittest.TestCase):
 
 
 class TestWinnerPathInvalidPosition(unittest.TestCase):
-    """position 越界时不崩溃，对应 sample output 全 0"""
-
-    def test_invalid_position_no_crash(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # 黑胜、3 步，最后一步（黑方第 2 步）position 越界
-            history = [
-                {"input": [0.0] * 226, "output": [0.0] * 225, "position": [0, 0]},      # 黑，剔除
-                {"input": [1.0] * 226, "output": [0.0] * 225, "position": [0, 1]},      # 白
-                {"input": [2.0] * 226, "output": [0.0] * 225, "position": [20, 20]},    # 黑，保留但越界
-            ]
-            record = {"winner": 1, "history": history}
-            path = _write_record(tmpdir, record)
-
-            creator = SampleCreator(mode="winner_path")
-            samples = creator.create([path])
-
-            self.assertEqual(len(samples), 1)
-            self.assertEqual(samples[0]["output"], [0.0] * 225)
-            self.assertEqual(samples[0]["mask"], [1] * 225)
-
-    def test_negative_position_out_of_bounds(self):
-        """负坐标越界时对应 sample output 全 0"""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            history = [
-                {"input": [0.0] * 226, "output": [0.0] * 225, "position": [0, 0]},     # 白第1步剔除位
-                {"input": [1.0] * 226, "output": [0.0] * 225, "position": [0, 1]},     # 白，剔除
-                {"input": [2.0] * 226, "output": [0.0] * 225, "position": [0, 2]},     # 黑
-                {"input": [3.0] * 226, "output": [0.0] * 225, "position": [-1, 5]},    # 白，保留但越界
-            ]
-            record = {"winner": 2, "history": history}
-            path = _write_record(tmpdir, record)
-
-            creator = SampleCreator(mode="winner_path")
-            samples = creator.create([path])
-
-            # 白方步 = [1, 3]，剔首 → [3]
-            self.assertEqual(len(samples), 1)
-            self.assertEqual(samples[0]["output"], [0.0] * 225)
-
-    def test_single_axis_out_of_bounds_row_valid_col_invalid(self):
-        """行在界内但列越界时，idx 可能"巧合"落在 [0,225) 内，
-        严格语义要求：这种情况 output 必须保持全 0，不应把 1 打到错位上。"""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # 黑胜、3 步：最后一步 position=[0, 20] → row 合法、col 越界
-            # 若按 idx = 0*15+20 = 20 直接写入，会错误地打到 (1, 5)
-            history = [
-                {"input": [0.0] * 226, "output": [0.0] * 225, "position": [0, 0]},     # 黑，剔除
-                {"input": [1.0] * 226, "output": [0.0] * 225, "position": [0, 1]},     # 白
-                {"input": [2.0] * 226, "output": [0.0] * 225, "position": [0, 20]},    # 黑，保留但列越界
-            ]
-            record = {"winner": 1, "history": history}
-            path = _write_record(tmpdir, record)
-
-            creator = SampleCreator(mode="winner_path")
-            samples = creator.create([path])
-
-            self.assertEqual(len(samples), 1)
-            # 严格越界语义：整个 output 应全 0
-            self.assertEqual(samples[0]["output"], [0.0] * 225)
+    """[已移除] 原"越界 → output 全 0"语义已由第三十九次追加替换为
+    "越界 → output = 模型原分布"。相关用例移至
+    tests/ai/test_sample_creator_winner_path_soft_label.py 中
+    TestSoftLabelInvalidPositionReturnsModelOutput。
+    """
 
 
 class TestWinnerPathMultipleFiles(unittest.TestCase):
