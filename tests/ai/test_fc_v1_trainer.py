@@ -226,20 +226,31 @@ class TestFCv1TrainerTrainBatch(_DefaultModelPathIsolatedMixin, unittest.TestCas
         self.assertGreaterEqual(loss, 0.0)
 
     def test_train_batch_multiple_sample_dirs_merged(self):
-        """多目录 → 合并为一次 epoch 更新（<200 epoch 无输出）"""
+        """多目录合并为"一个 epoch 一次参数更新"：optimizer.step 调用次数 == epochs
+
+        原版用 stdout "无 Epoch 输出" 隐式断言合并语义，过于脆弱：
+        即使实现回退为"每个 sample_dir 都走一次 forward/backward"，
+        只要 verbose 打印被压制也能静默通过。
+        改为直接 mock optimizer.step，核心契约一目了然。
+        """
         dirs = [_make_batch_sample_dir(self.temp_dir, f"s{i}") for i in range(1, 4)]
         trainer = _build_trainer_with_tmp_logger(fresh=True)
+        epochs = 4
 
-        captured = io.StringIO()
-        sys.stdout = captured
-        try:
-            trainer.train_batch(dirs, epochs=2, verbose=True)
-            output = captured.getvalue()
-        finally:
-            sys.stdout = sys.__stdout__
+        with unittest.mock.patch.object(
+            trainer.optimizer, 'step', wraps=trainer.optimizer.step
+        ) as mock_step:
+            loss = trainer.train_batch(dirs, epochs=epochs, verbose=False)
 
-        epoch_lines = [l for l in output.strip().split('\n') if 'Epoch' in l]
-        self.assertEqual(len(epoch_lines), 0)
+        # 核心契约：无论 sample_dirs 有几个，每 epoch 只更新一次
+        self.assertEqual(
+            mock_step.call_count, epochs,
+            f"期望 optimizer.step 被调用 {epochs} 次（每 epoch 1 次），"
+            f"实际 {mock_step.call_count} 次。若为 {epochs * len(dirs)} 则说明"
+            f"回退为每目录单独更新"
+        )
+        self.assertIsInstance(loss, float)
+        self.assertGreaterEqual(loss, 0.0)
 
     def test_train_batch_updates_model_params(self):
         """train_batch 后模型参数应更新"""
@@ -450,30 +461,32 @@ class TestFCv1TrainerErrorHandling(_DefaultModelPathIsolatedMixin, unittest.Test
     """错误处理（合并原 error + batch 的异常测试）"""
 
     def test_train_single_missing_sample_file(self):
-        """train_single: sample 目录/文件不存在 → FileNotFoundError"""
+        """train_single: sample 目录/文件不存在 → FileNotFoundError with 路径消息"""
         trainer = FCv1Trainer()
-        with self.assertRaises(FileNotFoundError):
-            trainer.train_single(os.path.join(self.temp_dir, "nonexistent"))
+        bad_dir = os.path.join(self.temp_dir, "nonexistent")
+        with self.assertRaisesRegex(FileNotFoundError, r"Sample file not found:.*nonexistent"):
+            trainer.train_single(bad_dir)
 
     def test_train_batch_empty_list_raises(self):
-        """train_batch 空列表 → ValueError"""
+        """train_batch 空列表 → ValueError with "sample_dirs 不能为空列表" """
         trainer = _build_trainer_with_tmp_logger(fresh=True)
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, r"sample_dirs 不能为空列表"):
             trainer.train_batch([], epochs=1)
 
     def test_train_batch_missing_sample_file_raises(self):
-        """train_batch 目录不存在 → FileNotFoundError"""
+        """train_batch 目录不存在 → FileNotFoundError with 路径消息"""
         trainer = _build_trainer_with_tmp_logger(fresh=True)
-        with self.assertRaises(FileNotFoundError):
+        with self.assertRaisesRegex(FileNotFoundError, r"Sample file not found:.*nonexistent"):
             trainer.train_batch([os.path.join(self.temp_dir, "nonexistent")], epochs=1)
 
     def test_load_sample_invalid_json(self):
-        """_sample_loader.load 无效 JSON → JSONDecodeError"""
+        """_sample_loader.load 无效 JSON → JSONDecodeError with "Expecting value" """
         invalid_path = os.path.join(self.temp_dir, "invalid.json")
         with open(invalid_path, 'w', encoding='utf-8') as f:
             f.write("invalid json content")
         trainer = FCv1Trainer()
-        with self.assertRaises(json.JSONDecodeError):
+        # JSONDecodeError 消息格式由标准库提供，对无 JSON 前缀的输入固定为 "Expecting value"
+        with self.assertRaisesRegex(json.JSONDecodeError, r"Expecting value"):
             trainer._sample_loader.load(invalid_path)
 
 

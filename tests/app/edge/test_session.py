@@ -9,6 +9,8 @@
 import sys
 import os
 
+import pytest
+
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
@@ -50,12 +52,9 @@ class TestGameSessionEdge:
         assert "error" in result
 
     def test_pvp_do_ai_move_raises_runtime_error(self):
-        """pvp 模式调用 do_ai_move 应抛出 RuntimeError"""
-        try:
+        """pvp 模式调用 do_ai_move 应抛出 RuntimeError 且消息含 "pvp 模式没有 AI" """
+        with pytest.raises(RuntimeError, match=r"pvp 模式没有 AI"):
             self.session.do_ai_move()
-            assert False, "应抛出 RuntimeError"
-        except RuntimeError:
-            pass
 
     def test_make_move_no_game_started(self):
         """未创建游戏时落子应返回 error"""

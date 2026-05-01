@@ -19,6 +19,8 @@ if project_root not in sys.path:
 from ai.game_manager import AIGameManager
 from ai.engine import AIEngine
 from ai.models.random.model import RandomModel
+from ai.models.fc_v1.model import FCv1Model
+from ai.models.cnn_v1.model import CNNV1Model
 from ai.data_recorder import DataRecorder
 import ai.battle as battle_module
 
@@ -233,20 +235,26 @@ class TestBattleModule(unittest.TestCase):
     def test_load_model_random(self):
         """主流程：加载 random 模型（通过 registry.get_model）"""
         model = battle_module.get_model("random")
-        self.assertIsNotNone(model)
+        self.assertIsInstance(model, RandomModel)
         self.assertEqual(model.name, "random")
+        probs = model.predict([0] * 225 + [1])
+        self.assertEqual(len(probs), 225)
 
     def test_load_model_fc_v1(self):
         """主流程：加载 fc_v1 模型（通过 registry.get_model）"""
         model = battle_module.get_model("fc_v1")
-        self.assertIsNotNone(model)
+        self.assertIsInstance(model, FCv1Model)
         self.assertEqual(model.name, "fc_v1")
+        probs = model.predict([0] * 225 + [1])
+        self.assertEqual(len(probs), 225)
 
     def test_load_model_cnn(self):
         """主流程：加载 cnn_v1 模型（通过 registry.get_model）"""
         model = battle_module.get_model("cnn_v1")
-        self.assertIsNotNone(model)
+        self.assertIsInstance(model, CNNV1Model)
         self.assertEqual(model.name, "cnn_v1")
+        probs = model.predict([0] * 225 + [1])
+        self.assertEqual(len(probs), 225)
 
     def test_load_model_unknown_raises_value_error(self):
         """边缘：加载未知 AI 名称时抛出 ValueError（通过 registry.get_model）"""
