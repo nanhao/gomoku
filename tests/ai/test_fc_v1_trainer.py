@@ -28,7 +28,7 @@ import io
 import copy
 import inspect
 import re
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -422,14 +422,20 @@ class TestFCv1TrainerVerboseOutput(_DefaultModelPathIsolatedMixin, unittest.Test
         self.assertNotIn("loss", output.lower())
 
     def test_verbose_output_format(self):
-        """verbose=True → 每 200 epoch 打印一次，格式 `Epoch X/Y, loss: Z.ZZZZ`"""
+        """verbose=True → 每 200 epoch 打印一次，格式 `Epoch X/Y, loss: Z.ZZZZ`
+
+        关注点：verbose 打印格式契约。真实训练的覆盖由 test_trainer_train_single/
+        test_train_batch_updates_model_params 等其他测试保障，此处 mock 掉避免过度测试。
+        """
         sample_dir = self._create_test_sample()
         trainer = _build_trainer_with_tmp_logger(fresh=True)
 
         captured = io.StringIO()
         sys.stdout = captured
         try:
-            trainer.train_single(sample_dir, epochs=200, verbose=True)
+            fake_step = (torch.tensor(0.1234), 0.5)
+            with patch.object(trainer, '_forward_backward_step', return_value=fake_step):
+                trainer.train_single(sample_dir, epochs=200, verbose=True)
             output = captured.getvalue()
         finally:
             sys.stdout = sys.__stdout__
