@@ -9,6 +9,12 @@ from typing import List, Tuple
 from ai.base_model import BaseModel
 
 
+# 支持的落子策略常量
+STRATEGY_ARGMAX = "argmax"
+STRATEGY_SAMPLING = "sampling"
+_SUPPORTED_STRATEGIES = (STRATEGY_ARGMAX, STRATEGY_SAMPLING)
+
+
 def create_engine(ai_name: str) -> "AIEngine":
     """
     根据 AI 名称创建对应的 AIEngine 实例。
@@ -37,54 +43,64 @@ def create_engine(ai_name: str) -> "AIEngine":
 
 class AIEngine:
     """AI 引擎 - 连接 UI 和 AI 模型
-    
+
     负责：
     1. 将棋盘状态转换为模型输入向量
-    2. 调用模型获取 reward 预测
-    3. 根据 reward 选择最佳落子位置（排除已有棋子的位置）
-    4. 多个位置 reward 相同时随机选择
+    2. 调用模型获取概率分布
+    3. 根据指定策略（默认 argmax）在合法位置中选择落子
+
+    落子策略（参见设计文档 design/engine_move_strategy_design.md）：
+    - "argmax"（默认）：选择概率最大的合法位置；存在并列最大值时随机打破平局
+    - "sampling"：加权采样，**本次未实现**，调用时抛 NotImplementedError
     """
-    
+
     def __init__(self, model: BaseModel):
         """
         初始化 AI 引擎
-        
+
         Args:
             model: AI 模型实例，必须继承 BaseModel
         """
         self.model = model
-    
-    def get_move(self, board: List[List[int]], current_player: int, probs: List[float] = None) -> Tuple[int, int]:
+
+    def get_move(
+        self,
+        board: List[List[int]],
+        current_player: int,
+        probs: List[float] = None,
+        strategy: str = STRATEGY_ARGMAX,
+    ) -> Tuple[int, int]:
         """
         获取 AI 落子位置
-        
+
         流程：
         1. 将棋盘转换为 226 维向量
-        2. 调用模型获取 225 维概率分布
-        3. 按概率采样选择落子位置（排除已有棋子）
-        
-        使用概率采样而非选择最大值，确保即使模型输出接近均匀分布，
-        也会有足够的随机性，避免自我对弈时出现确定性结果。
-        
+        2. 调用模型获取 225 维概率分布（若已传入 probs 则跳过）
+        3. 在合法位置（空位）中按 strategy 选择落子
+
         Args:
             board: 15x15 棋盘，0=空, 1=黑, 2=白
             current_player: 当前落子方，1=黑, 2=白
-            probs: 预计算的概率分布（225维），若提供则跳过 model.predict 调用
-            
+            probs: 预计算的概率分布（225 维），若提供则跳过 model.predict 调用
+            strategy: 落子策略，取值见模块常量 STRATEGY_*。
+                - "argmax"（默认）：选择概率最大的合法位置，并列时随机打破
+                - "sampling"：本次暂未实现，调用时抛 NotImplementedError
+
         Returns:
             (x, y) 落子位置，0 <= x < 15, 0 <= y < 15
-            
+
         Raises:
-            ValueError: 棋盘已满，无空位可落子
+            ValueError: 棋盘已满，无空位可落子；或 strategy 取值未知
+            NotImplementedError: strategy="sampling" 时（预留给未来独立实现）
         """
         # 1. 转换棋盘为向量
         board_vector = self.board_to_vector(board, current_player)
-        
+
         # 2. 获取模型预测（225 维概率分布）
         # 性能优化：支持传入预计算的 probs，避免重复调用 model.predict
         if probs is None:
             probs = self.model.predict(board_vector)
-        
+
         # 3. 构建位置-概率列表，排除已有棋子的位置
         valid_positions = []
         valid_probs = []
@@ -94,33 +110,65 @@ class AIEngine:
             if 0 <= x < 15 and 0 <= y < 15 and board[x][y] == 0:
                 valid_positions.append((x, y))
                 valid_probs.append(probs[i])
-        
+
         if not valid_positions:
             raise ValueError("棋盘已满，无空位可落子")
-        
-        # 4. 按概率采样选择位置
-        # 如果所有有效概率都为 0（模型可能选择了已占位置），回退到均匀分布
-        total_prob = sum(valid_probs)
-        if total_prob <= 0:
-            valid_probs = [1.0] * len(valid_positions)
-        
-        # 使用 random.choices 进行加权随机选择
-        chosen_idx = random.choices(range(len(valid_positions)), weights=valid_probs, k=1)[0]
-        return valid_positions[chosen_idx]
-    
+
+        # 4. 按策略选择位置
+        if strategy == STRATEGY_ARGMAX:
+            return self._pick_argmax(valid_positions, valid_probs)
+        if strategy == STRATEGY_SAMPLING:
+            # 预留位置：未来将由独立的 sampling 模块实现
+            # （温度、top-k 等探索策略）。当前显式抛异常，避免静默退化。
+            raise NotImplementedError(
+                "strategy='sampling' 尚未实现，未来将提供独立的采样模块"
+            )
+        raise ValueError(
+            f"未知落子策略: {strategy!r}，支持的策略为 {_SUPPORTED_STRATEGIES}"
+        )
+
+    @staticmethod
+    def _pick_argmax(
+        valid_positions: List[Tuple[int, int]],
+        valid_probs: List[float],
+    ) -> Tuple[int, int]:
+        """argmax 选择：从概率最大的合法位置集合中随机选一个。
+
+        设计要点：
+        - 多个位置概率并列最大时，随机打破平局，避免固定取第一个导致
+          自对弈路径退化为完全确定性序列。
+        - 当 max_prob == 0（例如模型把所有概率压在已落子位置上）时，
+          所有空位都并列，此函数退化为在全部空位中均匀随机挑一个；
+          这是合理的兜底，不应抛异常。
+
+        Args:
+            valid_positions: 合法（空位）坐标列表
+            valid_probs: 与 valid_positions 一一对应的概率列表
+
+        Returns:
+            选中的 (x, y) 坐标
+        """
+        max_prob = max(valid_probs)
+        candidates = [
+            pos for pos, p in zip(valid_positions, valid_probs)
+            if p == max_prob
+        ]
+        # 并列时随机挑一个；只有一个候选时 random.choice 等价于直接返回
+        return random.choice(candidates)
+
     @staticmethod
     def board_to_vector(board: List[List[int]], current_player: int) -> List[int]:
         """
         将棋盘转换为 226 维向量
-        
+
         转换规则：
         - 前 225 位：按行优先展开棋盘，board[0][0], board[0][1], ..., board[14][14]
         - 第 226 位：当前落子方（1=黑, 2=白）
-        
+
         Args:
             board: 15x15 棋盘
             current_player: 当前落子方
-            
+
         Returns:
             226 维向量
         """
