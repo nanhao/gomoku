@@ -4,8 +4,8 @@
 目前实现模式：
     - winning_move: 取每局最后一步的 input 作为 sample input，
       最后一步 position 对应位置 output=1，其余=0，mask 全为 1
-    - winner_path:  取整局中获胜方的每一步（剔除获胜方第 1 步），
-      每一步的 input/mask 构造同 winning_move；output 采用**软标签**
+    - winner_path:  取整局中获胜方的每一步，每一步的 input/mask
+      构造同 winning_move；output 采用**软标签**
       （第三十九次追加）——在模型自身 softmax 输出的基础上，把落子位
       最小增强为严格 top1，增量由其他 224 位等额汲取、clip 到 0、再归一化
       回 sum=1。此模式**强制不做** D4 增强，详见
@@ -62,7 +62,7 @@ class SampleCreator:
 
         按 ``self.mode`` 分派到对应的处理路径：
         - ``winning_move``：每局产出 1 条（取最后一步），可选 D4 增强
-        - ``winner_path``：每局产出 ``获胜方步数-1`` 条（剔除开局），不增强
+        - ``winner_path``：每局产出 ``获胜方步数`` 条，不增强
 
         Args:
             record_files: record.json 文件路径列表
@@ -140,11 +140,11 @@ class SampleCreator:
         return [self._build_sample(last_step["input"], last_step["position"])]
 
     def _build_winner_path_samples(self, winner: int, history: list) -> List[Dict]:
-        """winner_path 模式：取获胜方每一步，剔除首步（开局）
+        """winner_path 模式：取获胜方每一步
 
         - winner=1（黑胜）：获胜方在 history 中的偶数索引 [0, 2, 4, ...]
         - winner=2（白胜）：奇数索引 [1, 3, 5, ...]
-        - 剔首后：winner=1 → [2, 4, ...]；winner=2 → [3, 5, ...]
+        - 获胜方步索引：winner=1 → [0, 2, 4, ...]；winner=2 → [1, 3, 5, ...]
 
         Note:
             output 构造采用第三十九次追加的**软标签**算法，详见
@@ -152,8 +152,7 @@ class SampleCreator:
         """
         start_idx = 0 if winner == 1 else 1
         winner_indices = list(range(start_idx, len(history), 2))
-        # 剔除获胜方的第 1 步（开局）
-        kept_indices = winner_indices[1:]
+        kept_indices = winner_indices
 
         samples = []
         for i in kept_indices:

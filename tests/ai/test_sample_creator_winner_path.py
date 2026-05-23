@@ -4,7 +4,6 @@
 
 测试规则（参见 design/sample_creator_design.md "第三十八次追加"）：
 - 仅选取获胜方的落子步（黑胜 → history 偶数索引；白胜 → 奇数索引）
-- **剔除获胜方的第 1 步**（开局）
 - mask：全 1
 - 平局/未结束/空 history：整局跳过
 - 强制不做 D4 增强（即使 augment=True 也不增强）
@@ -50,7 +49,7 @@ def _write_record(tmpdir: str, record: dict, filename: str = "record.json") -> s
 
 
 class TestWinnerPathBlackWins(unittest.TestCase):
-    """黑胜、history=5 步 → 获胜方 3 步，剔首 → 2 个 sample"""
+    """黑胜、history=5 步 → 获胜方 3 步，不再剔首 → 3 个 sample"""
 
     def test_black_wins_generates_correct_count(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -61,12 +60,12 @@ class TestWinnerPathBlackWins(unittest.TestCase):
             creator = SampleCreator(mode="winner_path")
             samples = creator.create([path])
 
-            # 获胜方步 = [0, 2, 4]，剔首 → [2, 4] → 2 个 sample
-            self.assertEqual(len(samples), 2)
+            # 获胜方步 = [0, 2, 4]，不再剔首 → 3 个 sample
+            self.assertEqual(len(samples), 3)
 
 
 class TestWinnerPathWhiteWins(unittest.TestCase):
-    """白胜、history=6 步 → 获胜方 3 步，剔首 → 2 个 sample"""
+    """白胜、history=6 步 → 获胜方 3 步，不再剔首 → 3 个 sample"""
 
     def test_white_wins_generates_correct_count(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -77,8 +76,8 @@ class TestWinnerPathWhiteWins(unittest.TestCase):
             creator = SampleCreator(mode="winner_path")
             samples = creator.create([path])
 
-            # 获胜方步 = [1, 3, 5]，剔首 → [3, 5] → 2 个 sample
-            self.assertEqual(len(samples), 2)
+            # 获胜方步 = [1, 3, 5]，不再剔首 → 3 个 sample
+            self.assertEqual(len(samples), 3)
 
 
 class TestWinnerPathInputAlignment(unittest.TestCase):
@@ -86,17 +85,18 @@ class TestWinnerPathInputAlignment(unittest.TestCase):
 
     def test_each_sample_input_is_per_step(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            # 黑胜、6 步：获胜方步 = [0, 2, 4]，剔首 → [2, 4]
+            # 黑胜、6 步：获胜方步 = [0, 2, 4]，不再剔首 → 3 个 sample
             record = {"winner": 1, "history": _make_history(6)}
             path = _write_record(tmpdir, record)
 
             creator = SampleCreator(mode="winner_path")
             samples = creator.create([path])
 
-            self.assertEqual(len(samples), 2)
+            self.assertEqual(len(samples), 3)
             # _make_history 中 step i 的 input 全为 float(i)
-            self.assertEqual(samples[0]["input"], [2.0] * 226)
-            self.assertEqual(samples[1]["input"], [4.0] * 226)
+            self.assertEqual(samples[0]["input"], [0.0] * 226)
+            self.assertEqual(samples[1]["input"], [2.0] * 226)
+            self.assertEqual(samples[2]["input"], [4.0] * 226)
 
 
 class TestWinnerPathOutputOneHot(unittest.TestCase):
@@ -151,10 +151,10 @@ class TestWinnerPathSkipNoWinner(unittest.TestCase):
             self.assertEqual(samples, [])
 
 
-class TestWinnerPathFirstMoveExcluded(unittest.TestCase):
-    """显式验证 history[0]（黑胜）不在样本中"""
+class TestWinnerPathFirstMoveIncluded(unittest.TestCase):
+    """显式验证 history[0]（黑胜）或 history[1]（白胜）出现在样本中"""
 
-    def test_first_move_is_excluded_black_wins(self):
+    def test_first_move_is_included_black_wins(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             # 黑胜、history=5 步，_make_history 中 step 0 的 input 全为 0.0
             record = {"winner": 1, "history": _make_history(5)}
@@ -163,11 +163,11 @@ class TestWinnerPathFirstMoveExcluded(unittest.TestCase):
             creator = SampleCreator(mode="winner_path")
             samples = creator.create([path])
 
-            # history[0] 的 input 全为 0.0，不应出现在样本中
-            for s in samples:
-                self.assertNotEqual(s["input"], [0.0] * 226)
+            # history[0] 的 input 全为 0.0，应出现在样本中（不再剔首）
+            included = any(s["input"] == [0.0] * 226 for s in samples)
+            self.assertTrue(included)
 
-    def test_first_move_is_excluded_white_wins(self):
+    def test_first_move_is_included_white_wins(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             # 白胜、history=6 步，白方第 1 步是 history[1]，其 input 全为 1.0
             record = {"winner": 2, "history": _make_history(6)}
@@ -176,16 +176,16 @@ class TestWinnerPathFirstMoveExcluded(unittest.TestCase):
             creator = SampleCreator(mode="winner_path")
             samples = creator.create([path])
 
-            # history[1] 的 input 全为 1.0，不应出现在样本中
-            for s in samples:
-                self.assertNotEqual(s["input"], [1.0] * 226)
+            # history[1] 的 input 全为 1.0，应出现在样本中（不再剔首）
+            included = any(s["input"] == [1.0] * 226 for s in samples)
+            self.assertTrue(included)
 
 
 class TestWinnerPathShortGame(unittest.TestCase):
-    """获胜方仅 1 步时剔首后为空"""
+    """获胜方仅 1 步时不再剔首，期望 1 个 sample"""
 
-    def test_black_wins_only_one_move_returns_empty(self):
-        """history=1 步，黑胜；获胜方仅 1 步，剔首后 0 个 sample"""
+    def test_black_wins_only_one_move_returns_one_sample(self):
+        """history=1 步，黑胜；获胜方仅 1 步，不再剔首 → 1 个 sample"""
         with tempfile.TemporaryDirectory() as tmpdir:
             record = {"winner": 1, "history": _make_history(1)}
             path = _write_record(tmpdir, record)
@@ -193,10 +193,10 @@ class TestWinnerPathShortGame(unittest.TestCase):
             creator = SampleCreator(mode="winner_path")
             samples = creator.create([path])
 
-            self.assertEqual(samples, [])
+            self.assertEqual(len(samples), 1)
 
-    def test_white_wins_only_one_move_returns_empty(self):
-        """history=2 步，白胜；白方仅 1 步，剔首后 0 个 sample"""
+    def test_white_wins_only_one_move_returns_one_sample(self):
+        """history=2 步，白胜；白方仅 1 步，不再剔首 → 1 个 sample"""
         with tempfile.TemporaryDirectory() as tmpdir:
             record = {"winner": 2, "history": _make_history(2)}
             path = _write_record(tmpdir, record)
@@ -204,7 +204,7 @@ class TestWinnerPathShortGame(unittest.TestCase):
             creator = SampleCreator(mode="winner_path")
             samples = creator.create([path])
 
-            self.assertEqual(samples, [])
+            self.assertEqual(len(samples), 1)
 
 
 class TestWinnerPathNoAugmentation(unittest.TestCase):
@@ -212,28 +212,32 @@ class TestWinnerPathNoAugmentation(unittest.TestCase):
 
     def test_no_augmentation_even_if_enabled(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            # 黑胜、history=5 步 → 获胜方 3 步，剔首 → 2 个 sample
+            # 黑胜、history=5 步 → 获胜方 3 步，不再剔首 → 3 个 sample
             record = {"winner": 1, "history": _make_history(5)}
             path = _write_record(tmpdir, record)
 
             creator = SampleCreator(mode="winner_path", augment=True)
             samples = creator.create([path])
 
-            # 即使启用 augment，也应只有 2 个（不是 2*8=16）
-            self.assertEqual(len(samples), 2)
+            # 即使启用 augment，也应只有 3 个（不是 3*8=24）
+            self.assertEqual(len(samples), 3)
             # 进一步：creator.augment 应在 __init__ 中被强制置为 False
             self.assertFalse(creator.augment)
             # 每个 sample 的 output 的 1 位置应落在原始保留步的 position 上
             # _make_history 中 step i 的 position=[i//15, i%15]
-            # 保留步 = [2, 4] → 位置分别为 [0,2]、[0,4] → idx=2、idx=4
-            self.assertEqual(samples[0]["output"][2], 1.0)
-            self.assertEqual(samples[1]["output"][4], 1.0)
+            # 保留步 = [0, 2, 4] → 位置分别为 [0,0]、[0,2]、[0,4] → idx=0、idx=2、idx=4
+            # 注意：因 model_output 为全零退化为 one-hot，故 output 仍为精确 1.0
+            self.assertEqual(samples[0]["output"][0], 1.0)
+            self.assertEqual(samples[1]["output"][2], 1.0)
+            self.assertEqual(samples[2]["output"][4], 1.0)
             # 其余位置必须为 0（不是 D4 变换产生的副本）
             for idx in range(225):
-                if idx != 2:
+                if idx != 0:
                     self.assertEqual(samples[0]["output"][idx], 0.0)
-                if idx != 4:
+                if idx != 2:
                     self.assertEqual(samples[1]["output"][idx], 0.0)
+                if idx != 4:
+                    self.assertEqual(samples[2]["output"][idx], 0.0)
 
 
 class TestWinnerPathInvalidPosition(unittest.TestCase):
@@ -249,13 +253,13 @@ class TestWinnerPathMultipleFiles(unittest.TestCase):
 
     def test_multiple_files_count(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            # 文件 1：黑胜、5 步 → 2 个 sample
+            # 文件 1：黑胜、5 步 → 3 个 sample
             path1 = _write_record(
                 tmpdir,
                 {"winner": 1, "history": _make_history(5)},
                 filename="record1.json",
             )
-            # 文件 2：白胜、6 步 → 2 个 sample
+            # 文件 2：白胜、6 步 → 3 个 sample
             path2 = _write_record(
                 tmpdir,
                 {"winner": 2, "history": _make_history(6, start_input_value=100.0)},
@@ -271,7 +275,7 @@ class TestWinnerPathMultipleFiles(unittest.TestCase):
             creator = SampleCreator(mode="winner_path")
             samples = creator.create([path1, path2, path3])
 
-            self.assertEqual(len(samples), 4)
+            self.assertEqual(len(samples), 6)
 
 
 class TestWinnerPathFromRoundDir(unittest.TestCase):
@@ -279,7 +283,7 @@ class TestWinnerPathFromRoundDir(unittest.TestCase):
 
     def test_discovers_all_records(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            # 3 局黑胜、每局 5 步 → 每局 2 个 sample → 共 6 个
+            # 3 局黑胜、每局 5 步 → 每局 3 个 sample → 共 9 个
             for i in [1, 2, 3]:
                 game_dir = os.path.join(tmpdir, str(i))
                 os.makedirs(game_dir, exist_ok=True)
@@ -293,7 +297,7 @@ class TestWinnerPathFromRoundDir(unittest.TestCase):
             creator = SampleCreator(mode="winner_path")
             samples = creator.create_from_round_dir(tmpdir)
 
-            self.assertEqual(len(samples), 6)
+            self.assertEqual(len(samples), 9)
 
 
 if __name__ == '__main__':

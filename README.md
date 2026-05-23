@@ -96,7 +96,7 @@ python ai/create_samples.py --model <模型名称> --output <输出文件路径>
 
 **模式说明**：
 - `winning_move`：仅取每局最后一步（制胜那步）作为样本，默认启用 D4 8 变换增强。
-- `winner_path`：取整局中**获胜方的每一步**（剔除开局第 1 步）作为样本，让模型拟合获胜方整条路径；由于每局已产出多条样本，**强制不做 D4 增强**以避免数据量失控。每步的 output 采用**软标签**（基于模型当步 softmax 输出，将落子位最小增强为严格 top1 后归一化），而非 one-hot，以保留模型分布、避免信号过于刚性。
+- `winner_path`：取整局中**获胜方的每一步**作为样本，让模型拟合获胜方整条路径；由于每局已产出多条样本，**强制不做 D4 增强**以避免数据量失控。每步的 output 采用**软标签**（基于模型当步 softmax 输出，将落子位最小增强为严格 top1 后归一化），而非 one-hot，以保留模型分布、避免信号过于刚性。
 
 ```bash
 # 示例
@@ -106,7 +106,7 @@ python ai/create_samples.py --model cnn_v3.1 --games 200 --output ai/train_data/
 python ai/create_samples.py --model cnn_v3.1 --no-augment --output ai/train_data/win_samples.json
 python ai/create_samples.py --model random  --output ai/merge_samples/winning/win_samples2.json --games 5000
 
-# winner_path 模式：获胜方整条路径（剔除开局）
+# winner_path 模式：获胜方整条路径
 python ai/create_samples.py --model cnn_v3.1 --mode winner_path --games 200 --output ai/train_data/winner_path_samples.json
 ```
 

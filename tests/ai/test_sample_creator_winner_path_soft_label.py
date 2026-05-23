@@ -34,17 +34,18 @@ from ai.sample_creator import SampleCreator, WINNER_PATH_TOP1_EPS
 # ----------------------------------------------------------------------
 
 def _make_black_wins_record(keep_output: list, keep_position: list) -> dict:
-    """构造一局黑胜、3 步 history 的 record
+    """构造一局黑胜、3 步 history 的 record。
 
-    history[0]（黑，被剔除）、history[1]（白）、history[2]（黑，保留）
-    保留步的 output = keep_output，position = keep_position。
+    history[0]（黑，保留）、history[1]（白）、history[2]（黑，保留）。
+    history[2] 的 output = keep_output，position = keep_position；
+    history[0] 使用占位 output/position。
 
     Args:
         keep_output: 长度为 225 的浮点数列表（模拟该步模型 softmax 输出）
         keep_position: [row, col]
     """
     history = [
-        {"input": [0.0] * 226, "output": [0.0] * 225, "position": [0, 0]},    # 黑第 1 步（剔除）
+        {"input": [0.0] * 226, "output": [0.0] * 225, "position": [0, 0]},    # 黑第 1 步（保留）
         {"input": [1.0] * 226, "output": [0.0] * 225, "position": [1, 1]},    # 白第 1 步
         {"input": [2.0] * 226, "output": list(keep_output),
          "position": list(keep_position)},                                    # 黑第 2 步（保留）
@@ -82,9 +83,9 @@ class TestSoftLabelAlreadyStrictTop1(unittest.TestCase):
             path = _write_record(tmpdir, record)
             samples = SampleCreator(mode="winner_path").create([path])
 
-        self.assertEqual(len(samples), 1)
-        # 原样保留，精确等于 history 中记录的 output
-        self.assertEqual(samples[0]["output"], p)
+        self.assertEqual(len(samples), 2)
+        # 原样保留，精确等于 history[2] 中记录的 output
+        self.assertEqual(samples[1]["output"], p)
 
 
 # ----------------------------------------------------------------------
@@ -104,7 +105,7 @@ class TestSoftLabelBoostsToStrictTop1(unittest.TestCase):
             path = _write_record(tmpdir, record)
             samples = SampleCreator(mode="winner_path").create([path])
 
-        out = samples[0]["output"]
+        out = samples[1]["output"]
         # 落子位严格大于其他所有位置
         other_max = max(v for j, v in enumerate(out) if j != idx_move)
         self.assertGreater(out[idx_move], other_max)
@@ -123,7 +124,7 @@ class TestSoftLabelSumIsOne(unittest.TestCase):
             path = _write_record(tmpdir, record)
             samples = SampleCreator(mode="winner_path").create([path])
 
-        self.assertAlmostEqual(sum(samples[0]["output"]), 1.0, places=9)
+        self.assertAlmostEqual(sum(samples[1]["output"]), 1.0, places=9)
 
 
 # ----------------------------------------------------------------------
@@ -143,7 +144,7 @@ class TestSoftLabelNoNegative(unittest.TestCase):
             path = _write_record(tmpdir, record)
             samples = SampleCreator(mode="winner_path").create([path])
 
-        for v in samples[0]["output"]:
+        for v in samples[1]["output"]:
             self.assertGreaterEqual(v, 0.0)
 
 
@@ -189,7 +190,7 @@ class TestSoftLabelUsesRecordedOutput(unittest.TestCase):
             samples_b = SampleCreator(mode="winner_path").create([path_b])
 
         # 同一 position、不同 p → 生成的 output 必然不同
-        self.assertNotEqual(samples_a[0]["output"], samples_b[0]["output"])
+        self.assertNotEqual(samples_a[1]["output"], samples_b[1]["output"])
 
 
 # ----------------------------------------------------------------------
@@ -210,7 +211,7 @@ class TestSoftLabelTieTop1IsBoosted(unittest.TestCase):
             path = _write_record(tmpdir, record)
             samples = SampleCreator(mode="winner_path").create([path])
 
-        out = samples[0]["output"]
+        out = samples[1]["output"]
         # 落子位必须严格大于并列的那个对手位置
         self.assertGreater(out[idx_move], out[idx_peer])
         # 且大于所有其他位置
@@ -236,7 +237,7 @@ class TestSoftLabelClipExtremeDistribution(unittest.TestCase):
             path = _write_record(tmpdir, record)
             samples = SampleCreator(mode="winner_path").create([path])
 
-        out = samples[0]["output"]
+        out = samples[1]["output"]
         # 非负 + sum=1 + 落子位严格 top1
         self.assertTrue(all(v >= 0.0 for v in out))
         self.assertAlmostEqual(sum(out), 1.0, places=9)
@@ -273,7 +274,7 @@ class TestSoftLabelEpsRespected(unittest.TestCase):
             path = _write_record(tmpdir, record)
             samples = SampleCreator(mode="winner_path").create([path])
 
-        out = samples[0]["output"]
+        out = samples[1]["output"]
 
         # delta = EPS（因并列 top1 → p_max = p_move）
         # 归一化前差 = EPS + EPS/224 ≈ EPS * (1 + 1/224)
@@ -305,7 +306,7 @@ class TestSoftLabelNotOneHot(unittest.TestCase):
             path = _write_record(tmpdir, record)
             samples = SampleCreator(mode="winner_path").create([path])
 
-        out = samples[0]["output"]
+        out = samples[1]["output"]
         # 落子位绝不会等于 1.0
         self.assertNotEqual(out[idx_move], 1.0)
         # 至少存在两个 > 0 的元素（即非 one-hot）
@@ -327,11 +328,11 @@ class TestSoftLabelInvalidPositionReturnsModelOutput(unittest.TestCase):
             path = _write_record(tmpdir, record)
             samples = SampleCreator(mode="winner_path").create([path])
 
-        self.assertEqual(len(samples), 1)
+        self.assertEqual(len(samples), 2)
         # 越界兜底：output 直接等于模型原分布
-        self.assertEqual(samples[0]["output"], p)
+        self.assertEqual(samples[1]["output"], p)
         # mask 仍全 1
-        self.assertEqual(samples[0]["mask"], [1] * 225)
+        self.assertEqual(samples[1]["mask"], [1] * 225)
 
 
 if __name__ == '__main__':

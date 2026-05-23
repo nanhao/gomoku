@@ -244,14 +244,14 @@ def _augment_sample(sample):
 
 > **注意**：本节中关于 output 构造的规则（落子位=1.0、其余=0.0 的硬标签；
 > position 越界时 output 全 0）已被 **第三十九次追加** 替换，不再生效。
-> input / mask / 剔首 / 跳过规则 / D4 禁用等其他规则仍然保留。
+> input / mask / 跳过规则 / D4 禁用等其他规则仍然保留。
 
 ### 背景与动机
 
 `winning_move` 模式只保留了每局的"最后一步（制胜那步）"作为 sample。这种策略
 让模型只学到"如何把即将成形的五连补上最后一子"，对于整局布局缺乏监督信号。
 
-新模式 `winner_path` 把**整局中获胜方的每一步**（除开局第 1 步）都作为 sample，
+新模式 `winner_path` 把**整局中获胜方的每一步**都作为 sample，
 目的是让模型拟合"获胜方走出的整条路径"，学习整局的布局决策，而不仅仅是封口一步。
 
 ### 核心规则
@@ -260,15 +260,15 @@ def _augment_sample(sample):
 |--------|-----------|
 | 模式名 | `winner_path` |
 | 选取范围 | 仅获胜方的落子步（败方的步丢弃） |
-| 剔除开局 | **剔除获胜方的第 1 步**（开局第 1 子几乎无战术信息，且经增强后会把对称位置反复强化，引入位置偏置） |
+
 | input | 每一步 history[i]["input"]（即落子前的棋盘 226 维向量） |
 | output | 该步落子位 = 1.0，其余 225 维位置 = 0.0 |
 | mask | 全 1（与 winning_move 一致，已落子位也参与 loss 计算） |
-| 数据增强（D4） | **强制不启用**。因为 winner_path 本身已极大膨胀 sample 量（每局产生 k-1 条，k 为获胜方步数），叠加 8 倍 D4 会导致训练数据体量失控。传入 `augment=True` 时也忽略 |
+| 数据增强（D4） | **强制不启用**。因为 winner_path 本身已极大膨胀 sample 量（每局产生 k 条，k 为获胜方步数），叠加 8 倍 D4 会导致训练数据体量失控。传入 `augment=True` 时也忽略 |
 | 平局（winner=3） | 整局跳过 |
 | 未结束（winner=0） | 整局跳过 |
 | 空 history | 整局跳过 |
-| 获胜方仅 1 步 | 剔首后无剩余，产生 0 个 sample |
+| 获胜方仅 1 步 | 产生 1 个 sample |
 | position 越界 | 该 sample 的 output 保持全 0，不崩溃 |
 
 ### 获胜方步序的识别
@@ -278,9 +278,9 @@ def _augment_sample(sample):
 - 因此：
     - winner=1（黑胜）→ 获胜方步索引集 = `[0, 2, 4, ...]`
     - winner=2（白胜）→ 获胜方步索引集 = `[1, 3, 5, ...]`
-- **剔除首步后**：
-    - winner=1 → `[2, 4, 6, ...]`
-    - winner=2 → `[3, 5, 7, ...]`
+- 因此获胜方步索引集即为：
+    - winner=1 → `[0, 2, 4, 6, ...]`
+    - winner=2 → `[1, 3, 5, 7, ...]`
 
 ### API 变更
 
@@ -387,7 +387,7 @@ python ai/create_samples.py --model cnn_v3.1 --mode winner_path \
 | 落子位非严格 top1 | 按下方算法抬升至严格 top1，其余位置均摊汲取、clip 到 0、重归一化 |
 | EPS（超越阈值）| `1e-3`，作为模块级常量 `WINNER_PATH_TOP1_EPS` 暴露于 `ai/sample_creator.py` |
 | D4 增强 | 仍然强制禁用（与第三十八次追加一致）|
-| 跳过条件 | 平局/未结束/空 history 仍然跳过；获胜方剔首逻辑不变 |
+| 跳过条件 | 平局/未结束/空 history 仍然跳过 |
 | position 越界兜底 | output 直接等于模型原分布（替换第三十八次追加的"全 0"行为）|
 | 输出总和 | 归一化后 `sum(output) == 1`，与 softmax 分布同量纲 |
 
@@ -476,7 +476,7 @@ WINNER_PATH_TOP1_EPS = 1e-3
 | record.json 依赖 | 仅读 `input` / `position` | 还读 `history[i]["output"]`（缺失则 KeyError）|
 | mask | 全 1 | 全 1（不变）|
 | D4 增强 | 强制禁用 | 强制禁用（不变）|
-| 剔首/跳过规则 | 不变 | 不变 |
+| 跳过规则 | 不变 | 不变 |
 
 ### 涉及文件（本节追加）
 
@@ -486,3 +486,50 @@ WINNER_PATH_TOP1_EPS = 1e-3
 | `ai/sample_creator.py` | 修改 | `_build_winner_path_samples` output 构造改为软标签算法；新增常量 `WINNER_PATH_TOP1_EPS = 1e-3` |
 | `tests/ai/test_sample_creator_winner_path.py` | 修改 | 删除 2 条失效用例；新增 10 条软标签测试 |
 | `requirements/key_points.md` | 已追加 | 第三十九次追加（用户本次提交的需求）|
+
+## 第四十次追加：移除 winner_path 剔首逻辑
+
+### 背景与动机
+
+第三十八次追加中引入了"剔除获胜方第 1 步"的规则，理由是"开局第 1 子几乎无
+战术信息，且经增强后会把对称位置反复强化，引入位置偏置"。但实践证明这是
+**错误的**：
+
+1. **开局步有战略价值**。例如第一步下在天元的胜率最高。如果排除开局步，
+   模型永远学不到开局怎么下，这是致命的训练盲区。
+2. 随着软标签化（第三十九次追加），剔首的原始担忧（位置偏置）已经大幅减弱。
+3. D4 增强在 `winner_path` 下本就强制禁用，"8 倍增强放大偏置"的风险不存在。
+
+因此，本次修订**移除 winner_path 的剔首逻辑**，获胜方的每一步（包括开局首步）
+都纳入样本。
+
+### 核心规则变更
+
+| 规则项 | 第三十八/三十九次（旧）| 第四十次（新）|
+|--------|----------------------|-------------|
+| 选取范围 | 获胜方的第 2 步起 | 获胜方**全部**步 |
+| 每局 sample 数 | 获胜方步数 − 1 | 获胜方步数 |
+| 获胜方仅 1 步 | 产生 0 个 sample | 产生 1 个 sample |
+| 获胜方步索引（黑胜）| `[2, 4, 6, ...]` | `[0, 2, 4, 6, ...]` |
+| 获胜方步索引（白胜）| `[3, 5, 7, ...]` | `[1, 3, 5, 7, ...]` |
+| 跳过规则 | 不变 | 不变（平局/未结束/空 history 仍跳过）|
+| D4 增强 | 不变 | 不变（仍强制禁用）|
+| output 构造 | 不变 | 不变（软标签算法不变）|
+
+### API 变更
+
+无新增参数/模式。`SampleCreator` 签名不变，仅 `_build_winner_path_samples`
+内部移除 `winner_indices[1:]` 切片。
+
+### 涉及文件
+
+| 文件 | 变更类型 | 说明 |
+|------|---------|------|
+| `design/sample_creator_design.md` | 修改 | 第三十八/三十九次追加节去除剔首引用；追加本节 |
+| `ai/sample_creator.py` | 修改 | `_build_winner_path_samples` 移除剔首切片；更新 docstring |
+| `ai/create_samples.py` | 修改 | 更新 `--mode` help 文本和 epilog 示例（移除"剔除开局"字样）|
+| `tests/ai/test_sample_creator_winner_path.py` | 修改 | sample 计数预期 N−1 → N；反转 `TestWinnerPathFirstMoveExcluded` 语义；更新短对局用例 |
+| `tests/ai/test_sample_creator_winner_path_soft_label.py` | 修改 | 更新辅助函数适配不再剔首 |
+| `tests/ai/test_create_samples.py` | 修改 | 更新 winner_path CLI 测试的样本数预期 |
+| `README.md` | 修改 | 移除"剔除开局"描述 |
+| `requirements/key_points.md` | 已追加 | 第四十次追加（用户本次提交的需求）|

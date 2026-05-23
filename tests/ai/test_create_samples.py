@@ -249,7 +249,7 @@ class TestCliWinnerPathMode(unittest.TestCase):
     @patch('ai.create_samples.AIGameManager')
     @patch('ai.create_samples.DataRecorder')
     def test_winner_path_mode_cli(self, mock_recorder_cls, mock_manager_cls, mock_engine_cls, mock_get_model):
-        """--mode winner_path 时产物 sample 数 = 获胜方步数-1，且不做 D4 增强"""
+        """--mode winner_path 时产物 sample 数 = 获胜方步数，且不做 D4 增强"""
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = os.path.join(tmpdir, "winner_path.json")
 
@@ -272,7 +272,7 @@ class TestCliWinnerPathMode(unittest.TestCase):
             os.makedirs(round_dir, exist_ok=True)
             game_dir = os.path.join(round_dir, "1")
             os.makedirs(game_dir, exist_ok=True)
-            # 构造 5 步黑胜局：黑方步 = [0, 2, 4]，剔首 → [2, 4] → 2 个 sample
+            # 构造 5 步黑胜局：黑方步 = [0, 2, 4]，不再剔首 → 3 个 sample
             history = []
             for i in range(5):
                 history.append({
@@ -300,16 +300,16 @@ class TestCliWinnerPathMode(unittest.TestCase):
             with open(output_path, 'r', encoding='utf-8') as f:
                 samples = json.load(f)
 
-            # 剔首后获胜方保留 2 步，winner_path 强制不增强 → 2 个样本
-            self.assertEqual(len(samples), 2)
+            # 不再剔首 → 获胜方保留 3 步，winner_path 强制不增强 → 3 个样本
+            self.assertEqual(len(samples), 3)
             # 每个 sample 结构齐全、mask 全 1
             for s in samples:
                 self.assertIn("input", s)
                 self.assertIn("output", s)
                 self.assertIn("mask", s)
                 self.assertEqual(s["mask"], [1] * 225)
-                # input 应是保留步的原始 input（值为 2.0 或 4.0）
-                self.assertIn(s["input"][0], (2.0, 4.0))
+                # input 应是保留步的原始 input（值为 0.0、2.0 或 4.0）
+                self.assertIn(s["input"][0], (0.0, 2.0, 4.0))
 
 
 class TestCliAugmentPrintReflectsRuntime(unittest.TestCase):
