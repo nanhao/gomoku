@@ -363,6 +363,7 @@ class _SpyRecorder:
             "temperature": temperature,
             "top_k": top_k,
             "has_sampling_probs": sampling_probs is not None,
+            "sampling_probs_len": len(sampling_probs) if sampling_probs is not None else 0,
         })
 
     def save_game_result(self, game_id, winner, end_board):
@@ -449,6 +450,37 @@ class TestRecordMoveTempInfo(_TempSaveDirTestBase):
         self.assertGreater(len(sampling_moves), 0)
         for m in sampling_moves:
             self.assertTrue(m["has_sampling_probs"])
+
+    def test_record_move_sampling_probs_always_225(self):
+        """sampling_probs 应始终为 225 维数组（已落子位填 0），而非仅空位长度。
+
+        回归防护：此前 sampling_probs 仅包含空位值（长度 = 空位数），
+        导致第 2 步起长度 < 225，ReplayViewer 的 Sampling 热力图无法渲染。
+        """
+        engine = _SpyEngine()
+        recorder = _SpyRecorder()
+        cfg = TempConfig(
+            temperature=1.0, temp_moves=99, temp_side=TEMP_SIDE_BOTH, seed=1,
+        )
+
+        AIGameManager.start_ai_vs_ai(
+            engine, engine, num_games=1, recorder=recorder, temp_config=cfg,
+        )
+
+        sampling_moves = [
+            m for m in recorder.move_calls
+            if m["strategy"] == "sampling"
+        ]
+        self.assertGreater(
+            len(sampling_moves), 5,
+            "应对弈超过 5 步以验证非满棋盘场景",
+        )
+        for i, m in enumerate(sampling_moves):
+            self.assertEqual(
+                m["sampling_probs_len"], 225,
+                f"第 {i+1} 个 sampling 步的 sampling_probs 长度应为 225，"
+                f"实际为 {m['sampling_probs_len']}"
+            )
 
 
 if __name__ == "__main__":

@@ -216,16 +216,16 @@ class AIGameManager:
             # 记录数据
             # 第四十一次追加：按策略传递温度采样信息
             if use_temp and temp_config is not None:
-                # 构建 valid_probs：从 225 维 probs 中提取空位概率
-                valid_probs = [
-                    probs[i] for i in range(225)
-                    if board[i // 15][i % 15] == 0
-                ]
-                # 计算温度变换后的采样权重（p^(1/T)，未归一化）
-                sampling_probs = [
-                    (p ** (1.0 / temp_config.temperature)) if p > 0 else 0.0
-                    for p in valid_probs
-                ]
+                # 构建 225 维 sampling_probs：
+                # 空位 → p^(1/T)；已落子位 → 0.0
+                # 保持与棋盘位置一一对应，确保 ReplayViewer 热力图正确渲染
+                sampling_probs = [0.0] * 225
+                for i in range(225):
+                    if board[i // 15][i % 15] == 0:
+                        p = probs[i]
+                        sampling_probs[i] = (
+                            (p ** (1.0 / temp_config.temperature)) if p > 0 else 0.0
+                        )
                 recorder.record_move(
                     current_game_id, board_vector, probs, (x, y),
                     strategy=STRATEGY_SAMPLING,
