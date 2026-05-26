@@ -308,3 +308,71 @@ class TestAIBattleManager:
     def test_manager_has_run_method(self):
         """AIBattleManager 应有 run_ai_vs_ai 方法"""
         assert hasattr(AIBattleManager, "run_ai_vs_ai")
+
+
+# ---------------------------------------------------------------------------
+# 第四十一次追加：AIBattleProgressWindow 透传 temp_config 测试
+# ---------------------------------------------------------------------------
+
+class TestAIBattleProgressWindowTempConfig:
+    """验证 AIBattleProgressWindow 接受 temp_config 参数。"""
+
+    def test_accepts_temp_config_parameter(self):
+        """AIBattleProgressWindow 应接受 temp_config 参数并存储。"""
+        from ai.move_sampler import TempConfig
+        cfg = TempConfig(temperature=2.0, temp_moves=5, temp_side="black")
+        window = AIBattleProgressWindow(
+            num_games=1,
+            ai1_name="random",
+            ai2_name="random",
+            temp_config=cfg,
+        )
+        try:
+            assert window.temp_config is cfg
+            assert window.temp_config.temperature == 2.0
+        finally:
+            window.root.destroy()
+
+    def test_default_temp_config_is_none(self):
+        """不传 temp_config 时，temp_config 应为 None（向后兼容）。"""
+        window = AIBattleProgressWindow(
+            num_games=1,
+            ai1_name="random",
+            ai2_name="random",
+        )
+        try:
+            assert window.temp_config is None
+        finally:
+            window.root.destroy()
+
+
+# ---------------------------------------------------------------------------
+# 第四十一次追加：run_ai_vs_ai_mode 默认启用温度采样测试
+# ---------------------------------------------------------------------------
+
+class TestRunAIVsAIModeTempConfig:
+    """验证 run_ai_vs_ai_mode 默认构造并透传 TempConfig。"""
+
+    def test_run_ai_vs_ai_mode_creates_default_temp_config(self):
+        """run_ai_vs_ai_mode 应默认构造 TempConfig 并传递。"""
+        from gui.ai_battle import run_ai_vs_ai_mode
+        from ai.move_sampler import TempConfig
+        from unittest.mock import patch, MagicMock
+
+        # Mock AIBattleProgressWindow 避免实际启动对战
+        with patch("gui.ai_battle.AIBattleProgressWindow") as mock_window_cls:
+            mock_progress = MagicMock()
+            mock_window_cls.return_value = mock_progress
+
+            run_ai_vs_ai_mode(num_games=1, ai1_name="random", ai2_name="random")
+
+            # 验证 AIBattleProgressWindow 被调用时 temp_config 非 None 且为 TempConfig 实例
+            call_args = mock_window_cls.call_args
+            assert call_args is not None
+            # 位置参数 + 关键字参数
+            temp_config = call_args[1].get("temp_config")
+            assert temp_config is not None
+            assert isinstance(temp_config, TempConfig)
+            assert temp_config.temperature == 1.0
+            assert temp_config.temp_moves == 12
+            assert temp_config.temp_side == "both"

@@ -336,5 +336,120 @@ class TestRandomMatchSupportsTempConfig(_TempSaveDirTestBase):
         )
 
 
+# ---------------------------------------------------------------------------
+# 第四十一次追加：验证 record_move 记录了温度采样信息
+# ---------------------------------------------------------------------------
+
+class _SpyRecorder:
+    """记录 record_move 每次调用参数的桩 recorder。
+
+    用于验证 _play_single_game 在温度采样启用时是否正确向
+    DataRecorder.record_move() 传递 strategy / temperature / sampling_probs。
+    """
+
+    def __init__(self):
+        self.current_game_id = 1
+        self.move_calls: list = []
+
+    def new_game(self):
+        self.current_game_id += 1
+
+    def record_move(self, game_id, input_vector, output_vector, position,
+                    strategy=None, temperature=None, top_k=None,
+                    sampling_probs=None):
+        self.move_calls.append({
+            "game_id": game_id,
+            "strategy": strategy,
+            "temperature": temperature,
+            "top_k": top_k,
+            "has_sampling_probs": sampling_probs is not None,
+        })
+
+    def save_game_result(self, game_id, winner, end_board):
+        pass
+
+    def get_round_dir(self):
+        import tempfile
+        import os
+        return tempfile.mkdtemp()
+
+
+class TestRecordMoveTempInfo(_TempSaveDirTestBase):
+    """验证 _play_single_game 在温度采样时向 recorder 传递正确信息。"""
+
+    def test_record_move_with_temp_config_passes_strategy_and_temperature(self):
+        """temp_config 启用时，record_move 收到 strategy="sampling" 和温度值。"""
+        engine = _SpyEngine()
+        recorder = _SpyRecorder()
+        cfg = TempConfig(
+            temperature=1.5, temp_moves=99, temp_side=TEMP_SIDE_BOTH, seed=1,
+        )
+
+        AIGameManager.start_ai_vs_ai(
+            engine, engine, num_games=1, recorder=recorder, temp_config=cfg,
+        )
+
+        sampling_moves = [
+            m for m in recorder.move_calls
+            if m["strategy"] == "sampling"
+        ]
+        self.assertGreater(
+            len(sampling_moves), 0,
+            "启用 temp_config 后应至少有一次 sampling 记录",
+        )
+        for m in sampling_moves:
+            self.assertEqual(m["temperature"], 1.5)
+            self.assertIsNone(m["top_k"])
+            self.assertTrue(
+                m["has_sampling_probs"],
+                "sampling 步应传入 sampling_probs",
+            )
+
+    def test_record_move_without_temp_config_uses_argmax(self):
+        """不传 temp_config 时，record_move 收到 strategy="argmax"。"""
+        engine = _SpyEngine()
+        recorder = _SpyRecorder()
+        cfg = TempConfig(
+            temp_moves=3, temp_side=TEMP_SIDE_BOTH, seed=1,
+        )
+
+        AIGameManager.start_ai_vs_ai(
+            engine, engine, num_games=1, recorder=recorder, temp_config=cfg,
+        )
+
+        # 阈值（3 步）之后应为 argmax
+        argmax_moves = [
+            m for m in recorder.move_calls
+            if m["strategy"] == "argmax"
+        ]
+        self.assertGreater(
+            len(argmax_moves), 0,
+            "超过阈值后应有 argmax 记录",
+        )
+        for m in argmax_moves:
+            self.assertIsNone(m["temperature"])
+            self.assertFalse(m["has_sampling_probs"])
+
+    def test_record_move_sampling_probs_present(self):
+        """sampling_probs 长度与空位数一致（>=1）。"""
+        engine = _SpyEngine()
+        recorder = _SpyRecorder()
+        cfg = TempConfig(
+            temperature=1.0, temp_moves=99, temp_side=TEMP_SIDE_BOTH, seed=1,
+        )
+
+        AIGameManager.start_ai_vs_ai(
+            engine, engine, num_games=1, recorder=recorder, temp_config=cfg,
+        )
+
+        sampling_moves = [
+            m for m in recorder.move_calls
+            if m["strategy"] == "sampling"
+        ]
+        self.assertGreater(len(sampling_moves), 0)
+        for m in sampling_moves:
+            self.assertTrue(m["has_sampling_probs"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -94,26 +94,48 @@ class DataRecorder:
             self.current_game_id = game_id
 
     def record_move(self, game_id: int, input_vector: List[int],
-                    output_vector: List[float], position: Tuple[int, int]):
+                    output_vector: List[float], position: Tuple[int, int],
+                    strategy: str = None,
+                    temperature: float = None,
+                    top_k: int = None,
+                    sampling_probs: List[float] = None):
         """
         记录一次落子
-        
+
         每次落子都要记录，不是游戏结束才记录。
-        
+
         Args:
             game_id: 游戏编号（由 new_game 返回）
             input_vector: 226 维输入向量（棋盘 + 当前落子方）
             output_vector: 225 维输出向量（Softmax 概率分布，每个元素为 0~1 的浮点数）
             position: 引擎最终成功落子的位置 (x, y)
+            strategy: 落子策略（"argmax" 或 "sampling"），默认 None（不写入字段，向后兼容）
+            temperature: 温度值，仅 sampling 时有效，默认 None
+            top_k: 截断阈值，仅 sampling 时有效，默认 None
+            sampling_probs: 温度变换后的 225 维采样权重，仅 sampling 时有效，默认 None
         """
         # 校验游戏编号一致性
         self._ensure_game_id(game_id)
 
-        self.current_game_data["history"].append({
+        entry = {
             "input": input_vector,
             "output": output_vector,
             "position": list(position)
-        })
+        }
+
+        # 第四十一次追加：条件写入温度采样字段
+        # 策略：strategy=None（旧调用）→ 不写任何新字段，向后兼容
+        #       strategy="argmax" → 只写 strategy
+        #       strategy="sampling" → 写入全部温度字段
+        if strategy is not None:
+            entry["strategy"] = strategy
+            if strategy == "sampling":
+                entry["temperature"] = temperature
+                entry["top_k"] = top_k
+                if sampling_probs is not None:
+                    entry["sampling_probs"] = list(sampling_probs)
+
+        self.current_game_data["history"].append(entry)
     
     def save_game_result(self, game_id: int, winner: int, end_board: List[int]):
         """

@@ -31,6 +31,7 @@ class BattleSession:
         num_games: int,
         ai_data_dir: str = None,
         train_data_dir: str = None,
+        temp_config=None,
     ):
         """
         初始化 AI 内战会话
@@ -41,12 +42,16 @@ class BattleSession:
             num_games: 对战局数
             ai_data_dir: AI 数据目录，默认使用 AI_DATA_DIR 常量
             train_data_dir: 训练数据目录，默认使用 TRAIN_DATA_DIR 常量
+            temp_config: 温度采样配置（ai.move_sampler.TempConfig）。
+                None 表示全程 argmax（向后兼容），非 None 时透传给
+                AIGameManager.start_ai_vs_ai。
         """
         self._ai1_name = ai1_name
         self._ai2_name = ai2_name
         self._num_games = num_games
         self._ai_data_dir = ai_data_dir if ai_data_dir is not None else AI_DATA_DIR
         self._train_data_dir = train_data_dir if train_data_dir is not None else TRAIN_DATA_DIR
+        self._temp_config = temp_config
         self._recorder = None
 
     def run(self, on_progress: Callable[[int, int], None] = None) -> List[dict]:
@@ -80,6 +85,7 @@ class BattleSession:
         results = AIGameManager.start_ai_vs_ai(
             engine1, engine2, self._num_games, recorder,
             on_progress=on_progress,
+            temp_config=self._temp_config,
         )
 
         # 对战完成后生成训练样本

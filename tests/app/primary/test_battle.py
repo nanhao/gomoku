@@ -138,3 +138,63 @@ class TestBattleSessionRun:
         train_data_dir = os.path.join(_TEST_ROOT, "train_data")
         session = BattleSession("random", "random", num_games=1, ai_data_dir=ai_data_dir, train_data_dir=train_data_dir)
         assert session.get_recorder() is None
+
+
+# ---------------------------------------------------------------------------
+# 第四十一次追加：BattleSession 透传 temp_config 测试
+# ---------------------------------------------------------------------------
+
+class TestBattleSessionTempConfig:
+    """验证 BattleSession 接受并透传 temp_config 给 AIGameManager。"""
+
+    def setup_method(self):
+        _clean_test_root()
+        self.test_save_dir = tempfile.mkdtemp(prefix="test_battle_tempcfg_")
+        # Patch GomokuController 使其使用临时目录
+        self._patcher = patch(
+            'ai.game_manager.GomokuController',
+            lambda save_dir=None: __import__('game').GomokuController(
+                save_dir=self.test_save_dir
+            ),
+        )
+        self._patcher.start()
+
+    def teardown_method(self):
+        self._patcher.stop()
+        shutil.rmtree(self.test_save_dir, ignore_errors=True)
+
+    def test_accepts_temp_config_parameter(self):
+        """BattleSession 应接受 temp_config 参数并存储。"""
+        from ai.move_sampler import TempConfig
+        cfg = TempConfig(temperature=2.0, temp_moves=5, temp_side="black")
+        session = BattleSession(
+            "random", "random", num_games=1,
+            ai_data_dir=os.path.join(_TEST_ROOT, "ai_data"),
+            train_data_dir=os.path.join(_TEST_ROOT, "train_data"),
+            temp_config=cfg,
+        )
+        assert session._temp_config is cfg
+        assert session._temp_config.temperature == 2.0
+
+    def test_runs_with_temp_config(self):
+        """BattleSession.run() 在有 temp_config 时不报错。"""
+        from ai.move_sampler import TempConfig
+        cfg = TempConfig(temperature=1.0, temp_moves=12, temp_side="both")
+        session = BattleSession(
+            "random", "random", num_games=1,
+            ai_data_dir=os.path.join(_TEST_ROOT, "ai_data"),
+            train_data_dir=os.path.join(_TEST_ROOT, "train_data"),
+            temp_config=cfg,
+        )
+        results = session.run()
+        assert len(results) == 1
+        assert results[0]["winner"] in (1, 2, 3)
+
+    def test_default_temp_config_is_none(self):
+        """不传 temp_config 时，_temp_config 应为 None（向后兼容）。"""
+        session = BattleSession(
+            "random", "random", num_games=1,
+            ai_data_dir=os.path.join(_TEST_ROOT, "ai_data"),
+            train_data_dir=os.path.join(_TEST_ROOT, "train_data"),
+        )
+        assert session._temp_config is None

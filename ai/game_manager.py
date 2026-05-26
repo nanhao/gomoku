@@ -214,7 +214,30 @@ class AIGameManager:
                 break
 
             # 记录数据
-            recorder.record_move(current_game_id, board_vector, probs, (x, y))
+            # 第四十一次追加：按策略传递温度采样信息
+            if use_temp and temp_config is not None:
+                # 构建 valid_probs：从 225 维 probs 中提取空位概率
+                valid_probs = [
+                    probs[i] for i in range(225)
+                    if board[i // 15][i % 15] == 0
+                ]
+                # 计算温度变换后的采样权重（p^(1/T)，未归一化）
+                sampling_probs = [
+                    (p ** (1.0 / temp_config.temperature)) if p > 0 else 0.0
+                    for p in valid_probs
+                ]
+                recorder.record_move(
+                    current_game_id, board_vector, probs, (x, y),
+                    strategy=STRATEGY_SAMPLING,
+                    temperature=temp_config.temperature,
+                    top_k=temp_config.top_k,
+                    sampling_probs=sampling_probs,
+                )
+            else:
+                recorder.record_move(
+                    current_game_id, board_vector, probs, (x, y),
+                    strategy=STRATEGY_ARGMAX,
+                )
 
             # 执行落子
             controller.make_move(x, y)

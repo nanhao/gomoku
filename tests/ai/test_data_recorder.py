@@ -179,5 +179,183 @@ class TestDataRecorder(unittest.TestCase):
         self.assertEqual(data2["winner"], 2)
 
 
+    # ====================================================================
+    # 第四十一次追加：温度采样字段记录测试
+    # ====================================================================
+
+    def test_record_move_with_sampling_strategy(self):
+        """record_move 记录 sampling 策略时写入全部温度字段"""
+        recorder = DataRecorder("test", self.test_dir)
+        game_id = recorder.new_game()
+
+        sampling_probs = [0.001] * 225
+        sampling_probs[112] = 0.5  # (7,7)
+
+        recorder.record_move(
+            game_id,
+            input_vector=[0] * 226,
+            output_vector=[0.001] * 225,
+            position=(7, 7),
+            strategy="sampling",
+            temperature=1.0,
+            top_k=None,
+            sampling_probs=sampling_probs,
+        )
+
+        recorder.save_game_result(game_id, 1, [0] * 226)
+
+        # 验证 JSON 文件内容
+        round_dir = recorder.get_round_dir()
+        record_file = os.path.join(round_dir, "1", "record.json")
+        with open(record_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        move = data["history"][0]
+        self.assertEqual(move["strategy"], "sampling")
+        self.assertEqual(move["temperature"], 1.0)
+        self.assertIsNone(move["top_k"])
+        self.assertEqual(len(move["sampling_probs"]), 225)
+        self.assertEqual(move["sampling_probs"][112], 0.5)
+
+    def test_record_move_with_argmax_strategy(self):
+        """record_move 记录 argmax 策略时仅写入 strategy 字段"""
+        recorder = DataRecorder("test", self.test_dir)
+        game_id = recorder.new_game()
+
+        recorder.record_move(
+            game_id,
+            input_vector=[0] * 226,
+            output_vector=[0.001] * 225,
+            position=(7, 7),
+            strategy="argmax",
+        )
+
+        recorder.save_game_result(game_id, 1, [0] * 226)
+
+        round_dir = recorder.get_round_dir()
+        record_file = os.path.join(round_dir, "1", "record.json")
+        with open(record_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        move = data["history"][0]
+        self.assertEqual(move["strategy"], "argmax")
+        self.assertNotIn("temperature", move)
+        self.assertNotIn("sampling_probs", move)
+
+    def test_record_move_backward_compatible(self):
+        """record_move 不传新参数时保持旧格式兼容（无 strategy 等字段）"""
+        recorder = DataRecorder("test", self.test_dir)
+        game_id = recorder.new_game()
+
+        # 使用旧签名调用（不传 strategy 等新参数）
+        recorder.record_move(
+            game_id,
+            input_vector=[0] * 226,
+            output_vector=[0.001] * 225,
+            position=(7, 7),
+        )
+
+        recorder.save_game_result(game_id, 1, [0] * 226)
+
+        round_dir = recorder.get_round_dir()
+        record_file = os.path.join(round_dir, "1", "record.json")
+        with open(record_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        move = data["history"][0]
+        # 旧格式：不应有 strategy 字段（向后兼容）
+        self.assertNotIn("strategy", move)
+        self.assertNotIn("temperature", move)
+        self.assertNotIn("sampling_probs", move)
+
+    def test_record_move_sampling_mixed_with_argmax(self):
+        """同一局中 sampling 和 argmax 步穿插记录"""
+        recorder = DataRecorder("test", self.test_dir)
+        game_id = recorder.new_game()
+
+        # 第 1 步：sampling
+        recorder.record_move(
+            game_id,
+            input_vector=[0] * 226,
+            output_vector=[0.001] * 225,
+            position=(7, 7),
+            strategy="sampling",
+            temperature=1.0,
+            top_k=None,
+            sampling_probs=[0.001] * 225,
+        )
+        # 第 2 步：argmax
+        recorder.record_move(
+            game_id,
+            input_vector=[1] * 226,
+            output_vector=[0.002] * 225,
+            position=(7, 8),
+            strategy="argmax",
+        )
+        # 第 3 步：sampling（不同温度）
+        recorder.record_move(
+            game_id,
+            input_vector=[2] * 226,
+            output_vector=[0.003] * 225,
+            position=(8, 7),
+            strategy="sampling",
+            temperature=2.0,
+            top_k=5,
+            sampling_probs=[0.002] * 225,
+        )
+
+        recorder.save_game_result(game_id, 1, [0] * 226)
+
+        round_dir = recorder.get_round_dir()
+        record_file = os.path.join(round_dir, "1", "record.json")
+        with open(record_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        self.assertEqual(len(data["history"]), 3)
+
+        # 第 1 步：sampling, T=1.0, top_k=None
+        m1 = data["history"][0]
+        self.assertEqual(m1["strategy"], "sampling")
+        self.assertEqual(m1["temperature"], 1.0)
+        self.assertIsNone(m1["top_k"])
+
+        # 第 2 步：argmax
+        m2 = data["history"][1]
+        self.assertEqual(m2["strategy"], "argmax")
+        self.assertNotIn("temperature", m2)
+
+        # 第 3 步：sampling, T=2.0, top_k=5
+        m3 = data["history"][2]
+        self.assertEqual(m3["strategy"], "sampling")
+        self.assertEqual(m3["temperature"], 2.0)
+        self.assertEqual(m3["top_k"], 5)
+
+    def test_record_move_sampling_probs_length(self):
+        """sampling_probs 长度校验：应为 225（满棋盘时为空位数）"""
+        recorder = DataRecorder("test", self.test_dir)
+        game_id = recorder.new_game()
+
+        # 正常情况：225 个元素的 sampling_probs
+        recorder.record_move(
+            game_id,
+            input_vector=[0] * 226,
+            output_vector=[0.001] * 225,
+            position=(7, 7),
+            strategy="sampling",
+            temperature=1.0,
+            top_k=None,
+            sampling_probs=[0.0] * 225,
+        )
+
+        recorder.save_game_result(game_id, 1, [0] * 226)
+
+        round_dir = recorder.get_round_dir()
+        record_file = os.path.join(round_dir, "1", "record.json")
+        with open(record_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        self.assertEqual(len(data["history"][0]["sampling_probs"]), 225)
+
+
 if __name__ == "__main__":
     unittest.main()

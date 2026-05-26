@@ -548,3 +548,17 @@ python -m ai.create_samples --model cnn_v3.1 --games 50 \
 - Dirichlet 噪声。
 - 温度的连续衰减（方案 B）。
 - 为 PvE / 评估 / battle.py 开启温度采样。
+
+---
+
+# 第四十一次追加：GUI AI 内战启用温度采样 + Replay 展示
+
+> 对应需求：`requirements/key_points.md` 第四十一次追加。
+> 详细设计：`design/gui_temp_sampling_replay_design.md`。
+
+原设计目标中"GUI AI 内战不启用"在本次追加中变更为：
+
+- **GUI AI 内战默认启用温度采样**，使用与 CLI 一致的默认参数（`temperature=1.0, temp_moves=12, temp_side="both"`），通过 `BattleSession` 透传 `temp_config`。
+- **非目标**中"为 PvE / 评估 / battle.py 开启温度采样"仍然成立——PvE 人机对战保持 argmax 不变。
+- 新增 `DataRecorder.record_move()` 扩展字段（`strategy`/`temperature`/`top_k`/`sampling_probs`），用于记录每步的采样信息。
+- 新增 `ReplayViewer` Sampling 热力图 + 策略文本展示，在回放界面可视化温度采样细节。

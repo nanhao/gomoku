@@ -39,6 +39,9 @@ class ReplayViewer:
         self.show_input = tk.BooleanVar(value=False)
         self.show_output = tk.BooleanVar(value=False)
         
+        # 采样热力图（第四十一次追加：温度采样展示）
+        self.sampling_heatmap = None
+        
         # 创建界面
         self._create_widgets()
         
@@ -164,6 +167,21 @@ class ReplayViewer:
             ).pack(pady=(5, 0))
         else:
             self.sample_heatmap = None
+        
+        # Sampling 热力图（第四十一次追加：温度采样展示）
+        sampling_frame = tk.Frame(heatmap_frame, bg="#F5F5DC")
+        sampling_frame.pack(side=tk.LEFT, padx=(20, 0))
+        
+        self.sampling_heatmap = HeatmapCanvas(sampling_frame, title="Sampling", width=280, height=280)
+        self.sampling_heatmap.pack()
+        
+        tk.Label(
+            sampling_frame,
+            text="Sampling",
+            font=("微软雅黑", 9, "bold"),
+            bg="#F5F5DC",
+            fg="#228B22"
+        ).pack(pady=(5, 0))
         
         # 颜色标尺
         self.legend = HeatmapLegend(right_frame)
@@ -295,6 +313,16 @@ class ReplayViewer:
             if len(output_vector) >= 225:
                 rewards = list(output_vector[:225])
                 self.sample_heatmap.draw_heatmap(rewards, self._on_cell_hover)
+        
+        # Sampling 热力图（第四十一次追加：展示温度变换后的采样概率）
+        if self.sampling_heatmap:
+            strategy = move.get("strategy", "")
+            sampling_probs = move.get("sampling_probs", [])
+            if strategy == "sampling" and len(sampling_probs) >= 225:
+                probs_list = list(sampling_probs[:225])
+                self.sampling_heatmap.draw_heatmap(probs_list, self._on_cell_hover)
+            else:
+                self.sampling_heatmap.canvas.delete("all")
     
     def _draw_pieces(self, input_vector, move):
         """绘制棋子"""
@@ -358,12 +386,22 @@ class ReplayViewer:
         player = "黑" if step % 2 == 1 else "白"
         self.info_text.insert(tk.END, f"\n落子方: {player}\n")
         self.info_text.insert(tk.END, f"落子位置: ({pos[0]}, {pos[1]})\n")
+        
+        # 温度采样信息（第四十一次追加：展示落子策略和采样参数）
+        strategy = move.get("strategy", "argmax")
+        self.info_text.insert(tk.END, f"\n--- 温度采样 ---\n")
+        self.info_text.insert(tk.END, f"策略: {strategy}\n")
+        if strategy == "sampling":
+            self.info_text.insert(tk.END, f"温度: {move.get('temperature', 'N/A')}\n")
+            self.info_text.insert(tk.END, f"Top-K: {move.get('top_k', 'None')}\n")
     
     def _clear_heatmaps(self):
         """清除热力图（步骤归零时调用）"""
         self.ai_heatmap.canvas.delete("all")
         if self.sample_heatmap:
             self.sample_heatmap.canvas.delete("all")
+        if self.sampling_heatmap:
+            self.sampling_heatmap.canvas.delete("all")
     
     def _clear_info_text(self):
         """清除信息文本（步骤归零时调用）"""

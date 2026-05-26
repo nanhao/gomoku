@@ -6,17 +6,25 @@
 import os
 
 from gui.components import AIBattleProgressWindow, ReplayWindow
+from ai.move_sampler import TempConfig
 
 
 def run_ai_vs_ai_mode(num_games, ai1_name="random", ai2_name="random"):
     """运行 AI 内战模式
-    
+
+    第四十一次追加：默认启用温度采样（temperature=1.0, temp_moves=12, temp_side="both"）。
+
     Args:
         num_games: 对局数量
         ai1_name: AI1 模型名称
         ai2_name: AI2 模型名称
     """
-    progress = AIBattleProgressWindow(num_games, ai1_name, ai2_name)
+    # 构造默认温度采样配置
+    temp_config = TempConfig(temperature=1.0, temp_moves=12, temp_side="both")
+
+    progress = AIBattleProgressWindow(
+        num_games, ai1_name, ai2_name, temp_config=temp_config,
+    )
     
     def on_complete(recorder, should_replay):
         if should_replay and recorder:

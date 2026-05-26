@@ -175,18 +175,21 @@ class AIBattleProgressWindow:
     COLOR_TEXT = COLORS["text"]
     COLOR_BEAR = COLORS["bear"]
     
-    def __init__(self, num_games, ai1_name="random", ai2_name="random"):
+    def __init__(self, num_games, ai1_name="random", ai2_name="random",
+                 temp_config=None):
         """
         初始化进度窗口
-        
+    
         Args:
             num_games: 对战局数
             ai1_name: 黑方 AI 名称
             ai2_name: 白方 AI 名称
+            temp_config: 温度采样配置，None 表示全程 argmax
         """
         self.num_games = num_games
         self.ai1_name = ai1_name
         self.ai2_name = ai2_name
+        self.temp_config = temp_config
         self.recorder = None
         self.on_complete = None
         
@@ -255,6 +258,7 @@ class AIBattleProgressWindow:
                 ai1_name=self.ai1_name,
                 ai2_name=self.ai2_name,
                 num_games=self.num_games,
+                temp_config=self.temp_config,
             )
             self._battle_session = session
 

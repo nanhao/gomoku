@@ -285,3 +285,115 @@ class TestReplayWindow:
 
         assert window.sample_file == sample_file
         window.root.destroy()
+
+
+# ---------------------------------------------------------------------------
+# 第四十一次追加：温度采样回放展示测试
+# ---------------------------------------------------------------------------
+
+class TestReplayViewerTempSampling:
+    """验证 ReplayViewer 对温度采样信息的展示。"""
+
+    def setup_method(self):
+        self.root = tk.Tk()
+        self.root.withdraw()
+        self.temp_dir = tempfile.mkdtemp()
+        self.record_file = os.path.join(self.temp_dir, "record.json")
+
+        # 写入含温度采样字段的 record.json
+        record_data = {
+            "history": [
+                {
+                    "input": [0] * 225 + [1],
+                    "output": [0.004] * 225,
+                    "position": [7, 7],
+                    "strategy": "sampling",
+                    "temperature": 1.0,
+                    "top_k": None,
+                    "sampling_probs": [0.004] * 225,
+                },
+                {
+                    "input": [0] * 225 + [2],
+                    "output": [0.003] * 225,
+                    "position": [7, 8],
+                    "strategy": "argmax",
+                },
+            ],
+            "winner": 1
+        }
+        with open(self.record_file, 'w', encoding='utf-8') as f:
+            json.dump(record_data, f)
+
+    def teardown_method(self):
+        try:
+            self.root.destroy()
+        except tk.TclError:
+            pass
+        import shutil
+        try:
+            shutil.rmtree(self.temp_dir)
+        except tk.TclError:
+            pass
+
+    def test_sampling_heatmap_created(self):
+        """ReplayViewer 应为有新格式数据时创建 Sampling 热力图。"""
+        viewer = ReplayViewer(self.root, self.record_file)
+        assert viewer.sampling_heatmap is not None
+
+    def test_info_text_shows_sampling_strategy(self):
+        """info_text 应在 sampling 步显示策略和温度。"""
+        viewer = ReplayViewer(self.root, self.record_file)
+        viewer.current_step = 1
+        move = viewer.history[0]  # strategy="sampling"
+        viewer._update_info_text(1, move)
+
+        text = viewer.info_text.get(1.0, tk.END)
+        assert "策略: sampling" in text
+        assert "温度: 1.0" in text
+        assert "Top-K: None" in text
+
+    def test_info_text_shows_argmax_strategy(self):
+        """info_text 应在 argmax 步只显示策略，不显示温度。"""
+        viewer = ReplayViewer(self.root, self.record_file)
+        viewer.current_step = 2
+        move = viewer.history[1]  # strategy="argmax"
+        viewer._update_info_text(2, move)
+
+        text = viewer.info_text.get(1.0, tk.END)
+        assert "策略: argmax" in text
+        assert "温度:" not in text
+
+    def test_old_format_record_defaults_to_argmax(self):
+        """旧 record.json（无 strategy 字段）默认视为 argmax。"""
+        # 创建旧格式 record
+        old_record_file = os.path.join(self.temp_dir, "old_record.json")
+        old_data = {
+            "history": [
+                {
+                    "input": [0] * 225 + [1],
+                    "output": [0.004] * 225,
+                    "position": [7, 7],
+                },
+            ],
+            "winner": 1
+        }
+        with open(old_record_file, 'w', encoding='utf-8') as f:
+            json.dump(old_data, f)
+
+        viewer = ReplayViewer(self.root, old_record_file)
+        viewer.current_step = 1
+        move = viewer.history[0]
+        # 不应抛异常
+        viewer._update_info_text(1, move)
+        viewer._draw_heatmaps(1, move)
+
+        text = viewer.info_text.get(1.0, tk.END)
+        assert "策略: argmax" in text
+
+    def test_draw_heatmaps_does_not_crash_with_sampling_fields(self):
+        """_draw_heatmaps 在含 sampling_probs 时不抛异常。"""
+        viewer = ReplayViewer(self.root, self.record_file)
+        viewer.current_step = 1
+        move = viewer.history[0]  # sampling move
+        viewer._draw_heatmaps(1, move)
+        assert True  # 不抛异常即通过
