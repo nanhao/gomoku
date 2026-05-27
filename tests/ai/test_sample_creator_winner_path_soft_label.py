@@ -10,12 +10,9 @@ winner_path 模式下 output 的构造由硬标签（落子位=1、其余=0）�
     若 idx 越界 -> output = p（原分布）
     否则若落子位已经是严格 top1 -> output = p（原样）
     否则：
-        delta     = max(p) - p[idx] + EPS           # EPS = 1e-3
-        per_share = delta / 224
-        q[idx] = p[idx] + delta
-        q[j]   = p[j] - per_share   (j != idx)
-        q      = max(q, 0.0)                         # clip
-        output = q / sum(q)                          # 归一化
+        q[idx] = max(p) + EPS                      # 抬升落子位到原冠军 + EPS
+        q[j]   = p[j]               (j != idx)     # 其余位置保持原始值
+        output = q / sum(q)                         # 直接归一化
 """
 
 import json
@@ -253,9 +250,10 @@ class TestSoftLabelEpsRespected(unittest.TestCase):
         """验证抬升阈值 EPS 被严格遵循。
 
         构造"落子位与单一对手位并列 top1"的场景，使 delta = EPS；
-        其余 223 位平均填充但远小于 top1，使 clip 不触发。
-        此时归一化前 q[idx_move] - q[idx_top] = EPS + delta/224 ≈ EPS（差 ≤ 1e-5），
-        归一化后 s 精确等于 1，故 out[idx_move] - out[idx_top] ≈ EPS。
+        其余 223 位平均填充但远小于 top1。
+        新算法：q[idx_move] = p_max + EPS，其余不变，再归一化。
+        归一化后差 = EPS / (1 + delta)，其中 delta = p_max - p_move + EPS。
+        并列场景下 delta = EPS，故差 = EPS / (1 + EPS)。
         """
         pos = [4, 4]
         idx_move = pos[0] * 15 + pos[1]
@@ -276,10 +274,8 @@ class TestSoftLabelEpsRespected(unittest.TestCase):
 
         out = samples[1]["output"]
 
-        # delta = EPS（因并列 top1 → p_max = p_move）
-        # 归一化前差 = EPS + EPS/224 ≈ EPS * (1 + 1/224)
-        # clip 不触发（0.8/223 ≈ 3.6e-3 >> EPS/224）→ s = 1
-        expected_diff = WINNER_PATH_TOP1_EPS * (1.0 + 1.0 / 224)
+        # 新算法：归一化后差 = EPS / (1 + delta) = EPS / (1 + EPS)
+        expected_diff = WINNER_PATH_TOP1_EPS / (1.0 + WINNER_PATH_TOP1_EPS)
         self.assertAlmostEqual(
             out[idx_move] - out[idx_top],
             expected_diff,
@@ -333,6 +329,78 @@ class TestSoftLabelInvalidPositionReturnsModelOutput(unittest.TestCase):
         self.assertEqual(samples[1]["output"], p)
         # mask 仍全 1
         self.assertEqual(samples[1]["mask"], [1] * 225)
+
+
+# ----------------------------------------------------------------------
+# 用例 11：极端分布下非落子位比例关系应保留（均摊扣除修复验证）
+# ----------------------------------------------------------------------
+class TestSoftLabelPreservesProportions(unittest.TestCase):
+    """验证修复后的算法：抬升落子位后直接归一化，不做 per_share 均摊扣除。
+
+    旧算法的 per_share 均摊扣除会：
+      1. 把大量低概率位置 clip 清零，造成落子位份额虚高
+      2. 破坏非落子位之间的原始比例关系
+
+    新算法：q = list(p); q[idx] = p_max + EPS; return q / sum(q)
+      - 每个非落子位的相对比例与原始分布完全一致
+      - 落子位仅比原冠军高 EPS 级别
+    """
+
+    def test_non_boosted_positions_preserve_ratios(self):
+        """极端分布（p_max=0.9）下，两个非落子位的比例关系应保持不变。"""
+        pos = [7, 7]
+        idx_move = pos[0] * 15 + pos[1]
+        idx_peak = 0 * 15 + 0
+        idx_other = 5 * 15 + 5
+
+        # p_peak=0.9, p_move≈0, p_other≈0.04, 其余≈0
+        p = [0.1 / 224] * 225
+        p[idx_peak] = 0.9
+        p[idx_move] = 0.001
+        p[idx_other] = 0.04
+        diff = 1.0 - sum(p)
+        p[1] += diff  # 修正浮点
+
+        record = _make_black_wins_record(keep_output=p, keep_position=pos)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = _write_record(tmpdir, record)
+            samples = SampleCreator(mode="winner_path").create([path])
+
+        out = samples[1]["output"]
+
+        # 两个非落子位的比例应与原始分布一致
+        # （旧算法 per_share 扣除后比例会偏移）
+        original_ratio = p[idx_peak] / p[idx_other]
+        output_ratio = out[idx_peak] / out[idx_other]
+        self.assertAlmostEqual(original_ratio, output_ratio, places=6)
+
+    def test_extreme_distribution_not_over_concentrated(self):
+        """极端分布下落子位不应独占过多概率（旧算法会 → 0.6+，新算法应远低于此）。"""
+        pos = [7, 7]
+        idx_move = pos[0] * 15 + pos[1]
+        idx_peak = 0 * 15 + 0
+
+        # p_peak=0.9, p_move=0.001, 其余≈0
+        p = [0.099 / 223] * 225
+        p[idx_peak] = 0.9
+        p[idx_move] = 0.001
+        diff = 1.0 - sum(p)
+        p[1] += diff
+
+        record = _make_black_wins_record(keep_output=p, keep_position=pos)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = _write_record(tmpdir, record)
+            samples = SampleCreator(mode="winner_path").create([path])
+
+        out = samples[1]["output"]
+
+        # 新算法：q[idx_move] = 0.9 + 0.001 = 0.901, sum ≈ 1.9
+        # out[idx_move] ≈ 0.901 / 1.9 ≈ 0.474
+        # 旧算法：大量位置 clip 清零，out[idx_move] ≈ 0.501
+        # 阈值 0.49：新算法通过，旧算法失败
+        self.assertLess(out[idx_move], 0.49,
+                        "落子位在极端分布下不应超过 0.49；"
+                        "旧算法 per_share 扣除会 clip 清零大量位置导致虚高")
 
 
 if __name__ == '__main__':

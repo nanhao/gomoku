@@ -483,5 +483,77 @@ class TestRecordMoveTempInfo(_TempSaveDirTestBase):
             )
 
 
+class _SpyRecorderFull(_SpyRecorder):
+    """扩展版 spy recorder，额外保存 sampling_probs 实际数值列表。
+
+    用于验证 sampling_probs 的具体值（不仅仅是长度/存在性）。
+    """
+
+    def record_move(self, game_id, input_vector, output_vector, position,
+                    strategy=None, temperature=None, top_k=None,
+                    sampling_probs=None):
+        super().record_move(
+            game_id, input_vector, output_vector, position,
+            strategy=strategy, temperature=temperature,
+            top_k=top_k, sampling_probs=sampling_probs,
+        )
+        # 额外保存实际数值，供值级别断言使用
+        self.move_calls[-1]["sampling_probs_values"] = (
+            list(sampling_probs) if sampling_probs is not None else None
+        )
+
+
+class TestSamplingProbsOccupiedPositions(_TempSaveDirTestBase):
+    """sampling_probs 应覆盖全部 225 个位置，包括已落子位（不被强制置 0）。
+
+    Bug：此前已落子位在 sampling_probs 构建时被 `if board[x][y] == 0`
+    过滤，导致 sampling_probs[occupied] = 0.0，而 AI output 的同位置
+    值非零。log 归一化的 max_r 不同 → 两个热力图颜色比例不一致。
+
+    修复后：温度变换对全部 225 个位置统一执行，已落子位同样记录
+    p^(1/T)，视觉上 T=1.0 时 Sampling 热力图与 AI 热力图完全一致。
+    """
+
+    def test_sampling_probs_covers_occupied_positions(self):
+        """T=1.0、均匀分布模型下，sampling_probs 各步之和应均为 1.0。
+
+        SpyModel 返回均匀分布 [1/225]*225，T=1.0 → p^(1/1)=p=1/225。
+        全部 225 格均应记录非零值，sum=1.0。
+
+        若已落子位被置 0（Bug 状态）：第 2 步起 sum = (225-k)/225 < 1.0，
+        其中 k 为已落子数，测试失败。
+        """
+        engine = _SpyEngine()
+        recorder = _SpyRecorderFull()
+        cfg = TempConfig(
+            temperature=1.0, temp_moves=99, temp_side=TEMP_SIDE_BOTH, seed=1,
+        )
+
+        AIGameManager.start_ai_vs_ai(
+            engine, engine, num_games=1, recorder=recorder, temp_config=cfg,
+        )
+
+        sampling_moves = [
+            m for m in recorder.move_calls
+            if m["strategy"] == "sampling"
+        ]
+        self.assertGreater(len(sampling_moves), 5, "应对弈超过 5 步")
+
+        for i, m in enumerate(sampling_moves):
+            sp = m["sampling_probs_values"]
+            self.assertIsNotNone(sp, f"第 {i+1} 步 sampling_probs 不应为 None")
+            self.assertEqual(len(sp), 225, f"第 {i+1} 步长度应为 225")
+            actual_sum = sum(sp)
+            self.assertAlmostEqual(
+                actual_sum, 1.0, places=6,
+                msg=(
+                    f"第 {i+1} 步 sampling_probs 之和应为 1.0"
+                    f"（T=1.0 时 p^1=p，全部 225 位应有非零值），"
+                    f"实际 {actual_sum:.8f}。"
+                    f"已落子位被置 0 会导致此值小于 1.0。"
+                ),
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

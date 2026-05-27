@@ -216,16 +216,16 @@ class AIGameManager:
             # 记录数据
             # 第四十一次追加：按策略传递温度采样信息
             if use_temp and temp_config is not None:
-                # 构建 225 维 sampling_probs：
-                # 空位 → p^(1/T)；已落子位 → 0.0
-                # 保持与棋盘位置一一对应，确保 ReplayViewer 热力图正确渲染
+                # 构建 225 维 sampling_probs：对全部 225 个位置统一做温度变换。
+                # 不区分空位/已落子位——sampling_probs 仅用于可视化，
+                # 对全部位置一视同仁可确保 T=1.0 时与 AI output 归一化尺度一致，
+                # T≠1.0 时也能自洽地反映温度变换效果。
                 sampling_probs = [0.0] * 225
                 for i in range(225):
-                    if board[i // 15][i % 15] == 0:
-                        p = probs[i]
-                        sampling_probs[i] = (
-                            (p ** (1.0 / temp_config.temperature)) if p > 0 else 0.0
-                        )
+                    p = probs[i]
+                    sampling_probs[i] = (
+                        (p ** (1.0 / temp_config.temperature)) if p > 0 else 0.0
+                    )
                 recorder.record_move(
                     current_game_id, board_vector, probs, (x, y),
                     strategy=STRATEGY_SAMPLING,

@@ -178,15 +178,14 @@ class SampleCreator:
                - 若 idx 越界：output = p（原分布，不抬升）
             3. 若落子位已是"严格 top1"（唯一最大）：output = p（原样）
             4. 否则：
-                 delta = max(p) - p[idx] + EPS        (EPS = WINNER_PATH_TOP1_EPS)
-                 q[idx] = p[idx] + delta              (抬升落子位)
-                 q[j]   = p[j]   - delta/224          (其余等额汲取)
-                 q      = max(q, 0.0)                 (clip 负值到 0)
-                 output = q / sum(q)                  (归一化回 sum=1)
+                 q[idx] = max(p) + EPS              (EPS = WINNER_PATH_TOP1_EPS)
+                 q[j]   = p[j]       (j != idx)    (其余位置保持原始值)
+                 output = q / sum(q)                (直接归一化)
 
         该算法保证：
             - output 非负且 sum 精确为 1
             - 落子位在归一化后仍是严格最大（严格 top1）
+            - 非落子位之间的相对比例与原始分布完全一致
             - 缺省 p 为"退化全零"时也能工作（此时 output 退化为 one-hot）
 
         Args:
@@ -214,17 +213,14 @@ class SampleCreator:
         if p_move == p_max and p.count(p_max) == 1:
             return p
 
-        # ---- 抬升 + 均摊汲取 ----
-        delta = p_max - p_move + WINNER_PATH_TOP1_EPS
-        per_share = delta / 224
-
-        # 先均摊扣减所有位置 per_share（包含落子位，稍后再覆写）
-        q = [v - per_share for v in p]
-        # 落子位：原值加 delta（覆盖上面均摊扣减的分量）
-        q[idx] = p_move + delta
-
-        # clip 到 [0, +inf)
-        q = [v if v > 0.0 else 0.0 for v in q]
+        # ---- 抬升落子位 + 直接归一化 ----
+        # 旧算法使用 per_share 均摊扣除，在极端分布下会 clip 清零大量低概率位置，
+        # 导致落子位份额虚高，且破坏非落子位之间的原始比例关系。
+        # 修复：去掉 per_share 扣除，仅抬升落子位后直接归一化。
+        # 效果：落子位 = (p_max + EPS) / sum，比原冠军高 EPS 级别；
+        #       所有非落子位的相对比例与原始分布完全一致。
+        q = list(p)
+        q[idx] = p_max + WINNER_PATH_TOP1_EPS
 
         # 归一化。q[idx] = p_max + EPS > 0，故 sum(q) > 0，除法安全
         s = sum(q)
