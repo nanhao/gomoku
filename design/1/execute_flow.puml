@@ -1,0 +1,70 @@
+@startuml execute_flow
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+title 点击"执行"按钮交互流程
+
+actor 用户 as User
+participant "前端\n(参数填写区)" as FE
+participant "Flask 后端" as BE
+participant "executor.py\n(子进程管理)" as EX
+participant "create_samples.py\n(子进程)" as CS
+participant "ai/ai_data/\n(文件系统)" as FS
+
+User -> FE: 填写参数，点击"执行"
+activate FE
+
+FE -> FE: 按钮灰化\n脚本输出区显示"执行中..."
+
+FE -> BE: POST /api/create-samples/execute\n{model, mode, games, output, ...}
+activate BE
+
+BE -> EX: 执行(params)
+activate EX
+
+EX -> FS: 记录 S_before\n(ai_data_dir 已有目录集合)
+FS --> EX: S_before
+
+EX -> EX: 构造 CLI 命令
+EX -> CS: subprocess.Popen\n(stdout=PIPE, stderr=STDOUT)
+activate CS
+
+EX -> CS: process.communicate()\n(阻塞等待子进程结束...)
+
+CS --> EX: 返回 (output_text, returncode)
+deactivate CS
+
+alt returncode == 0
+    EX -> FS: 扫描 ai_data_dir\n计算 S_after - S_before
+    FS --> EX: round_dir 路径
+    EX --> BE: {status: "completed", command: "...",\noutput: "...", returncode: 0}
+else returncode != 0
+    EX --> BE: {status: "error", command: "...",\noutput: "Error: ...", returncode: 1}
+end
+
+deactivate EX
+
+BE --> FE: 200 OK (同步返回完整结果)
+deactivate BE
+
+FE -> FE: 解除按钮灰化
+
+alt status == completed
+    FE -> FE: 脚本输出区展示完整输出
+
+    FE -> BE: GET /api/create-samples/temp-info
+    BE --> FE: {temperature, temp_moves, temp_side, ...}
+    FE -> FE: 渲染温度信息区
+
+    FE -> BE: GET /api/create-samples/games
+    BE -> FS: 扫描 round_dir\n读取各局 record.json
+    FS --> BE: 对局数据
+    BE --> FE: {games: [...], total: N}
+    FE -> FE: 渲染对局列表
+else status == error
+    FE -> FE: 脚本输出区展示错误信息
+    FE -> FE: 热力图区显示"无数据"
+end
+
+deactivate FE
+@enduml
