@@ -112,7 +112,7 @@ body { font-family: "Microsoft YaHei", "SimHei", sans-serif; background: #f5f5f5
             </div>
             <div class="param-row"><label>mode</label><select><option value="winning_move" selected>winning_move</option><option value="winner_path">winner_path</option></select></div>
             <div class="param-row"><label>games</label><input type="number" value="100"></div>
-            <div class="param-row"><label>output</label><input type="text" value="ai/train_data/samples.json"></div>
+            <div class="param-row"><label>output</label><input type="text" placeholder="必填，如 ai/train_data/samples.json"></div>
             <div class="param-row"><label>数据增强</label><div class="switch-wrap"><input type="checkbox"><span class="switch-label">禁用 (--no-augment)</span></div></div>
             <div class="param-row"><label>温度采样</label><div class="switch-wrap"><input type="checkbox"><span class="switch-label">禁用 (--no-temp-sampling)</span></div></div>
             <div class="param-row"><label>temperature</label><input type="number" value="1.0" step="0.1" min="0.01"></div>
@@ -144,7 +144,6 @@ body { font-family: "Microsoft YaHei", "SimHei", sans-serif; background: #f5f5f5
                 <span class="info-label">温度值</span><span class="info-value highlight">T = 1.0</span>
                 <span class="info-label">采样步数阈值</span><span class="info-value">前 12 步</span>
                 <span class="info-label">采样方</span><span class="info-value">双方</span>
-                <span class="info-label">采样步数统计</span><span class="info-value highlight">12 / 15 步</span>
             </div>
         </div>
 
