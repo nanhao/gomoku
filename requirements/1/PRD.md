@@ -257,3 +257,4 @@
 | 子文档 | 路径 | 说明 |
 |--------|------|------|
 | UI原型 | requirements/1/prototype.html | HTML/CSS 原型，展示五区域布局（参数区/脚本输出区/温度信息区/对局列表/热力图区） |
+| 空状态原型 | requirements/1/prototype_empty.html | HTML/CSS 原型，展示未执行脚本时各区域的空状态 |

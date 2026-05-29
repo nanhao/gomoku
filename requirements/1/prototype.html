@@ -83,14 +83,6 @@ body { font-family: "Microsoft YaHei", "SimHei", sans-serif; background: #f5f5f5
 
 .prototype-note { background: #fef9e7; border: 1px solid #f9e79f; padding: 8px 12px; border-radius: 4px; font-size: 12px; color: #7d6608; margin-bottom: 8px; }
 
-/* 空状态样式 */
-.empty-state { display: flex; align-items: center; justify-content: center; min-height: 40px; color: #999; font-size: 13px; font-style: italic; }
-
-/* 空状态展示区分隔 */
-.state-divider { margin: 24px 0; padding: 16px 0; border-top: 3px dashed #bdc3c7; }
-.state-divider h2 { font-size: 16px; color: #7f8c8d; margin-bottom: 12px; }
-.state-divider .state-label { display: inline-block; background: #e74c3c; color: #fff; font-size: 12px; padding: 2px 8px; border-radius: 3px; margin-bottom: 12px; font-style: normal; }
-
 @media (max-width: 800px) { .app-main { flex-direction: column; } .left-panel { width: 100%; max-height: 40vh; } }
 </style>
 </head>
@@ -446,38 +438,6 @@ function buildHeatmapGrid() {
 // ===== 初始化 =====
 buildHeatmapGrid();
 </script>
-
-<!-- ===== 空状态展示 ===== -->
-<div class="state-divider">
-    <h2>空状态展示（未执行脚本时）</h2>
-    <span class="state-label">以下为脚本未执行时的界面状态</span>
-
-    <!-- 脚本输出区空状态 -->
-    <div class="script-output-section" style="margin-bottom:12px;">
-        <h2>脚本输出</h2>
-        <div class="script-output-content">
-            <div class="empty-state">请先执行脚本</div>
-        </div>
-    </div>
-
-    <!-- 温度信息区空状态 -->
-    <div class="temp-info-section" style="margin-bottom:12px;">
-        <h2>温度采样信息</h2>
-        <div class="empty-state">请先执行脚本</div>
-    </div>
-
-    <!-- 对局列表区空状态 -->
-    <div class="game-list-section" style="margin-bottom:12px;">
-        <h2>对局列表</h2>
-        <div class="empty-state">请先执行脚本</div>
-    </div>
-
-    <!-- 热力图区空状态 -->
-    <div class="right-panel">
-        <h2>热力图对比</h2>
-        <div class="empty-state" style="min-height:200px;">无数据</div>
-    </div>
-</div>
 
 </body>
 </html>
