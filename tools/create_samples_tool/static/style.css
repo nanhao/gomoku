@@ -1,0 +1,94 @@
+/* create_samples 验收工具样式 */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: "Microsoft YaHei", "SimHei", sans-serif; background: #f5f5f5; color: #333; }
+
+/* 顶部标题栏 */
+.app-header { background: #2c3e50; color: #ecf0f1; padding: 12px 24px; font-size: 18px; font-weight: bold; }
+
+/* 主布局：左右分栏 */
+.app-main { display: flex; gap: 16px; padding: 16px; min-height: calc(100vh - 52px); }
+.left-panel { width: 320px; display: flex; flex-direction: column; gap: 12px; }
+
+/* ---------- 参数区 ---------- */
+.param-section { background: #fff; border-radius: 6px; padding: 16px; border: 1px solid #ddd; }
+.param-section h2 { font-size: 15px; margin-bottom: 12px; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 6px; }
+.param-row { display: flex; align-items: center; margin-bottom: 8px; gap: 8px; }
+.param-row label { width: 110px; font-size: 13px; text-align: right; color: #555; flex-shrink: 0; }
+.param-row input[type="text"], .param-row input[type="number"], .param-row select { flex: 1; padding: 4px 8px; border: 1px solid #ccc; border-radius: 3px; font-size: 13px; }
+.param-row .switch-wrap { flex: 1; display: flex; align-items: center; gap: 6px; }
+.param-row .switch-wrap input[type="checkbox"] { width: 16px; height: 16px; }
+.param-row .switch-wrap .switch-label { font-size: 13px; color: #666; }
+.btn-run { display: block; width: 100%; padding: 8px; margin-top: 12px; background: #3498db; color: #fff; border: none; border-radius: 4px; font-size: 14px; font-weight: bold; cursor: pointer; }
+.btn-run:hover { background: #2980b9; }
+.btn-run:disabled { background: #95a5a6; cursor: not-allowed; }
+
+/* ---------- 脚本输出区 ---------- */
+.script-output-section { background: #1e1e1e; border-radius: 6px; padding: 12px 16px; border: 1px solid #444; max-height: 180px; overflow-y: auto; }
+.script-output-section h2 { font-size: 15px; margin-bottom: 8px; color: #9cdcfe; border-bottom: 2px solid #4ec9b0; padding-bottom: 6px; }
+.script-output-content { font-family: "Consolas", "Courier New", monospace; font-size: 12px; color: #d4d4d4; white-space: pre-wrap; word-break: break-all; line-height: 1.5; }
+.script-output-content .line-info { color: #4ec9b0; }
+.script-output-content .line-err { color: #f44747; }
+.script-output-content .line-cmd { color: #9cdcfe; }
+.script-output-hint { color: #888; font-style: italic; font-family: "Consolas", "Courier New", monospace; font-size: 12px; }
+
+/* ---------- 温度信息区 ---------- */
+.temp-info-section { background: #fff; border-radius: 6px; padding: 12px 16px; border: 1px solid #ddd; }
+.temp-info-section h2 { font-size: 15px; margin-bottom: 8px; color: #2c3e50; border-bottom: 2px solid #e67e22; padding-bottom: 6px; }
+.temp-info-grid { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 13px; }
+.temp-info-grid .info-label { color: #888; text-align: right; }
+.temp-info-grid .info-value { color: #333; font-weight: bold; }
+.temp-info-grid .info-value.highlight { color: #e67e22; }
+.temp-info-hint { color: #888; font-style: italic; font-size: 13px; }
+
+/* ---------- 对局列表区 ---------- */
+.game-list-section { background: #fff; border-radius: 6px; padding: 12px; border: 1px solid #ddd; min-height: 200px; max-height: 300px; display: flex; flex-direction: column; }
+.game-list-section h2 { font-size: 15px; margin-bottom: 8px; color: #2c3e50; border-bottom: 2px solid #27ae60; padding-bottom: 6px; }
+.game-list { flex: 1; overflow-y: auto; list-style: none; }
+.game-item { display: flex; align-items: center; padding: 8px 10px; margin-bottom: 4px; border-radius: 4px; border: 1px solid #ddd; cursor: pointer; font-size: 13px; transition: background 0.2s; }
+.game-item:hover { background: #ecf0f1; }
+.game-item.selected { background: #d5f5e3; border-color: #27ae60; }
+.game-item.draw { opacity: 0.55; }
+.game-item .game-num { width: 40px; font-weight: bold; color: #2c3e50; }
+.game-item .game-winner { width: 60px; }
+.game-item .game-winner.black-win { color: #333; }
+.game-item .game-winner.white-win { color: #7f8c8d; }
+.game-item .game-winner.draw-result { color: #999; }
+.game-item .game-temp-side { flex: 1; text-align: right; font-size: 12px; color: #888; }
+.game-list-hint { color: #888; font-style: italic; font-size: 13px; padding: 8px; }
+
+/* ---------- 热力图区 ---------- */
+.right-panel { flex: 1; background: #fff; border-radius: 6px; padding: 16px; border: 1px solid #ddd; display: flex; flex-direction: column; }
+.right-panel h2 { font-size: 15px; margin-bottom: 12px; color: #2c3e50; border-bottom: 2px solid #e67e22; padding-bottom: 6px; }
+.heatmap-container { flex: 1; overflow-x: auto; overflow-y: hidden; }
+.heatmap-grid { display: inline-flex; flex-direction: column; }
+.heatmap-row { display: flex; align-items: center; gap: 4px; }
+.row-label { width: 80px; text-align: right; font-size: 13px; font-weight: bold; color: #555; flex-shrink: 0; }
+.heatmap-cells-row { display: flex; gap: 4px; }
+.step-labels-row { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; }
+.step-label { width: 180px; text-align: center; font-size: 12px; color: #888; }
+
+/* canvas 棋盘 */
+.board-canvas-wrap { width: 180px; height: 180px; border: 1px solid #bbb; border-radius: 2px; position: relative; }
+.board-canvas-wrap canvas { width: 180px; height: 180px; display: block; }
+
+/* 占位图 */
+.placeholder-board { width: 180px; height: 180px; background: #D0D0D0; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #999; font-weight: bold; border: 1px solid #bbb; border-radius: 2px; }
+
+/* 图例 */
+.legend-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; color: #666; flex-wrap: wrap; }
+.legend-swatch { width: 16px; height: 16px; border-radius: 2px; border: 1px solid #999; }
+.legend-swatch.board-bg { background: #DEB887; }
+.legend-swatch.green-border { background: transparent; border: 3px solid #2ecc71; }
+.legend-swatch.stone-black { background: #222; border-radius: 50%; }
+.legend-swatch.stone-white { background: #fff; border-radius: 50%; border: 1px solid #333; }
+.legend-gradient { height: 16px; width: 80px; background: linear-gradient(to right, #fff, #ffee00, #ff8c00, #ff0000); border: 1px solid #999; border-radius: 2px; }
+
+/* Tooltip */
+.heatmap-tooltip { position: fixed; background: rgba(0,0,0,0.8); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 12px; pointer-events: none; z-index: 1000; display: none; }
+
+/* 热力图空状态提示 */
+.heatmap-hint { color: #888; font-style: italic; font-size: 13px; }
+
+/* 响应式 */
+@media (max-width: 800px) { .app-main { flex-direction: column; } .left-panel { width: 100%; max-height: 40vh; } }

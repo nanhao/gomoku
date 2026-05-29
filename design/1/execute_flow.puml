@@ -46,8 +46,7 @@ end
 
 deactivate EX
 
-BE --> FE: 200 OK (同步返回完整结果
-+ round_dir + output_path + games)
+BE --> FE: 200 OK\n(同步返回完整结果 + round_dir + output_path + games)
 deactivate BE
 
 FE -> FE: 解除按钮灰化
