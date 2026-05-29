@@ -129,14 +129,13 @@ class SampleCreator:
         if 0 <= r < 15 and 0 <= c < 15:
             output[r * 15 + c] = 1.0
         mask = [1] * 225
-        sample = {
-            "input": input_vector,
-            "output": output,
-            "mask": mask,
-        }
-        # step_id 透传：仅当 record.json 中含 step_id 时写入样本
+        sample = {}
+        # step_id 首字段：仅当 record.json 中含 step_id 时写入样本
         if step_id is not None:
             sample["step_id"] = step_id
+        sample["input"] = input_vector
+        sample["output"] = output
+        sample["mask"] = mask
         return sample
 
     def _build_winning_move_samples(self, history: list) -> List[Dict]:
@@ -167,14 +166,14 @@ class SampleCreator:
             output = self._build_winner_path_output(
                 step["output"], step["position"]
             )
-            samples.append({
-                "input": step["input"],
-                "output": output,
-                "mask": [1] * 225,
-            })
-            # step_id 透传：仅当 record.json 中含 step_id 时写入样本
+            # 构造样本，step_id 为首字段
+            s = {}
             if "step_id" in step:
-                samples[-1]["step_id"] = step["step_id"]
+                s["step_id"] = step["step_id"]
+            s["input"] = step["input"]
+            s["output"] = output
+            s["mask"] = [1] * 225
+            samples.append(s)
         return samples
 
     @staticmethod
@@ -313,14 +312,14 @@ class SampleCreator:
             new_board = SampleCreator._apply_transform(board, tid)
             new_output = SampleCreator._apply_transform(output, tid)
             new_mask = SampleCreator._apply_transform(mask, tid)
-            augmented.append({
-                "input": new_board + [player],
-                "output": new_output,
-                "mask": new_mask,
-            })
-            # step_id 透传：D4 增强变体共享原始 step_id
+            # 构造增强变体，step_id 为首字段
+            aug = {}
             if "step_id" in sample:
-                augmented[-1]["step_id"] = sample["step_id"]
+                aug["step_id"] = sample["step_id"]
+            aug["input"] = new_board + [player]
+            aug["output"] = new_output
+            aug["mask"] = new_mask
+            augmented.append(aug)
         return augmented
 
     def create_from_round_dir(self, round_dir: str) -> List[Dict]:
