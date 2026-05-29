@@ -21,7 +21,8 @@ GL -> GL: 第3局高亮选中\n其他局取消高亮
 GL -> BE: GET /api/create-samples/games/3/steps?round_dir=xxx&sample_path=xxx
 activate BE
 
-BE -> DP: parse_game_steps(round_dir, game_id=3)
+BE -> DP: parse_game_steps(round_dir, game_id=3,
+sample_path)
 activate DP
 
 DP -> FS: 读取 {round_dir}/3/record.json

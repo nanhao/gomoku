@@ -189,13 +189,12 @@ samples.append({
 })
 
 # 变更后
-sample = {
-    "input": step["input"],
-    "output": output,
-    "mask": [1] * 225,
-}
+sample = {}
 if "step_id" in step:
     sample["step_id"] = step["step_id"]
+sample["input"] = step["input"]
+sample["output"] = output
+sample["mask"] = [1] * 225
 samples.append(sample)
 ```
 

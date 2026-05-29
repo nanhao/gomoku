@@ -37,7 +37,9 @@ deactivate CS
 alt returncode == 0
     EX -> FS: 扫描 ai_data_dir\n计算 S_after - S_before
     FS --> EX: round_dir 路径
-    EX --> BE: {status: "completed", command: "...",\noutput: "...", returncode: 0}
+    EX -> FS: scan_round_dir(round_dir)
+    FS --> EX: games 列表
+    EX --> BE: {status: "completed", command: "...",\noutput: "...", returncode: 0,\nround_dir: "...", output_path: "...", games: [...]}
 else returncode != 0
     EX --> BE: {status: "error", command: "...",\noutput: "Error: ...", returncode: 1}
 end
