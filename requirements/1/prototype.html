@@ -7,8 +7,8 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: "Microsoft YaHei", "SimHei", sans-serif; background: #f5f5f5; color: #333; }
 .app-header { background: #2c3e50; color: #ecf0f1; padding: 12px 24px; font-size: 18px; font-weight: bold; }
-.app-main { display: flex; gap: 16px; padding: 16px; height: calc(100vh - 52px); }
-.left-panel { width: 320px; display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+.app-main { display: flex; gap: 16px; padding: 16px; min-height: calc(100vh - 52px); }
+.left-panel { width: 320px; display: flex; flex-direction: column; gap: 12px; }
 
 /* 参数区 */
 .param-section { background: #fff; border-radius: 6px; padding: 16px; border: 1px solid #ddd; }
@@ -23,6 +23,14 @@ body { font-family: "Microsoft YaHei", "SimHei", sans-serif; background: #f5f5f5
 .btn-run { display: block; width: 100%; padding: 8px; margin-top: 12px; background: #3498db; color: #fff; border: none; border-radius: 4px; font-size: 14px; font-weight: bold; cursor: pointer; }
 .btn-run:hover { background: #2980b9; }
 
+/* 脚本输出区 */
+.script-output-section { background: #1e1e1e; border-radius: 6px; padding: 12px 16px; border: 1px solid #444; max-height: 180px; overflow-y: auto; }
+.script-output-section h2 { font-size: 15px; margin-bottom: 8px; color: #9cdcfe; border-bottom: 2px solid #4ec9b0; padding-bottom: 6px; }
+.script-output-content { font-family: "Consolas", "Courier New", monospace; font-size: 12px; color: #d4d4d4; white-space: pre-wrap; word-break: break-all; line-height: 1.5; }
+.script-output-content .line-info { color: #4ec9b0; }
+.script-output-content .line-err { color: #f44747; }
+.script-output-content .line-cmd { color: #9cdcfe; }
+
 /* 温度信息区 */
 .temp-info-section { background: #fff; border-radius: 6px; padding: 12px 16px; border: 1px solid #ddd; }
 .temp-info-section h2 { font-size: 15px; margin-bottom: 8px; color: #2c3e50; border-bottom: 2px solid #e67e22; padding-bottom: 6px; }
@@ -32,7 +40,7 @@ body { font-family: "Microsoft YaHei", "SimHei", sans-serif; background: #f5f5f5
 .temp-info-grid .info-value.highlight { color: #e67e22; }
 
 /* 对局列表区 */
-.game-list-section { background: #fff; border-radius: 6px; padding: 12px; border: 1px solid #ddd; flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+.game-list-section { background: #fff; border-radius: 6px; padding: 12px; border: 1px solid #ddd; min-height: 200px; max-height: 300px; display: flex; flex-direction: column; }
 .game-list-section h2 { font-size: 15px; margin-bottom: 8px; color: #2c3e50; border-bottom: 2px solid #27ae60; padding-bottom: 6px; }
 .game-list { flex: 1; overflow-y: auto; list-style: none; }
 .game-item { display: flex; align-items: center; padding: 8px 10px; margin-bottom: 4px; border-radius: 4px; border: 1px solid #ddd; cursor: pointer; font-size: 13px; transition: background 0.2s; }
@@ -47,7 +55,7 @@ body { font-family: "Microsoft YaHei", "SimHei", sans-serif; background: #f5f5f5
 .game-item .game-temp-side { flex: 1; text-align: right; font-size: 12px; color: #888; }
 
 /* 热力图区 */
-.right-panel { flex: 1; background: #fff; border-radius: 6px; padding: 16px; border: 1px solid #ddd; display: flex; flex-direction: column; overflow: hidden; }
+.right-panel { flex: 1; background: #fff; border-radius: 6px; padding: 16px; border: 1px solid #ddd; display: flex; flex-direction: column; }
 .right-panel h2 { font-size: 15px; margin-bottom: 12px; color: #2c3e50; border-bottom: 2px solid #e67e22; padding-bottom: 6px; }
 .heatmap-container { flex: 1; overflow-x: auto; overflow-y: hidden; }
 .heatmap-grid { display: inline-flex; flex-direction: column; }
@@ -112,6 +120,21 @@ body { font-family: "Microsoft YaHei", "SimHei", sans-serif; background: #f5f5f5
             <div class="param-row"><label>temp-side</label><select><option value="both" selected>both</option><option value="black">black</option><option value="white">white</option><option value="random">random</option></select></div>
             <div class="param-row"><label>temp-seed</label><input type="number" placeholder="可选，用于复现"></div>
             <button class="btn-run">▶ 执行</button>
+        </div>
+
+        <!-- 脚本输出区 -->
+        <div class="script-output-section">
+            <h2>脚本输出</h2>
+            <div class="script-output-content"><span class="line-cmd">$ python ai/create_samples.py --model cnn_v1 --mode winning_move --games 10 --output ai/train_data/samples.json --temperature 1.0 --temp-moves 12 --temp-side both</span>
+<span class="line-info">[INFO] Loading model: cnn_v1 (gen=1)</span>
+<span class="line-info">[INFO] Model loaded successfully</span>
+<span class="line-info">[INFO] Running 10 games with winning_move mode...</span>
+<span class="line-info">Game 1: Black wins (15 steps, 12 sampling steps)</span>
+<span class="line-info">Game 2: White wins (23 steps, 12 sampling steps)</span>
+<span class="line-info">Game 3: Black wins (31 steps, 12 sampling steps)</span>
+...
+<span class="line-info">[INFO] All 10 games completed</span>
+<span class="line-info">[INFO] Samples written to ai/train_data/samples.json</span></div>
         </div>
 
         <!-- 温度信息区 -->
