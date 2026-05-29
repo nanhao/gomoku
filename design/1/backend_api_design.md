@@ -5,12 +5,10 @@
 | # | Method | Endpoint | 作用 | 核心动作 |
 |---|--------|----------|------|----------|
 | 1 | GET | `/api/create-samples/models` | 获取可用模型列表 | 子进程调用 registry，解析输出 |
-| 2 | POST | `/api/create-samples/execute` | 执行 create_samples.py（同步阻塞） | 构造 CLI → Popen → communicate() → 返回全部结果 |
-| 3 | GET | `/api/create-samples/temp-info` | 获取温度采样信息 | 从提交参数中提取 |
-| 4 | GET | `/api/create-samples/games` | 获取对局列表 | 扫描 round_dir，解析各局 record.json |
-| 5 | GET | `/api/create-samples/games/<game_id>/steps` | 获取某局步数据 | 解析 record.json + 匹配样本 |
+| 2 | POST | `/api/create-samples/execute` | 执行 create_samples.py（同步阻塞）+ 返回对局列表 | 构造 CLI → Popen → communicate() → 扫描 round_dir → 返回全部结果 |
+| 3 | GET | `/api/create-samples/games/<game_id>/steps` | 获取某局步数据 | 参数传入 round_dir + sample_path → 解析 record.json + 匹配样本 |
 
-> 仅 5 个端点。POST /api/create-samples/execute 同步阻塞等待子进程结束，一次性返回完整结果（含输出文本），无需轮询或额外状态查询。
+> 3 个端点，全部无状态。POST /api/create-samples/execute 同步阻塞等待子进程结束，一次性返回完整结果（含对局列表），无需轮询。温度信息由前端表单本地持有，无需后端返回。
 
 ---
 
@@ -49,7 +47,7 @@
 
 ### 2.2 POST /api/create-samples/execute
 
-**作用**：接收用户填写的参数，构造 CLI 命令，**同步阻塞**执行子进程，等子进程结束后一次性返回完整结果。
+**作用**：接收用户填写的参数，构造 CLI 命令，**同步阻塞**执行子进程，等子进程结束后一次性返回完整结果（含对局列表）。
 
 **核心动作**：
 1. 记录 `ai/ai_data/` 下已有目录集合 `S_before`
@@ -57,7 +55,8 @@
 3. 启动 `subprocess.Popen`（stdout=PIPE, stderr=STDOUT）
 4. 调用 `process.communicate()` **阻塞等待**子进程结束，收集全部输出
 5. 子进程结束后发现 round_dir
-6. 一次性返回 status + command + output + returncode
+6. 扫描 round_dir，解析各局 record.json → 对局摘要列表
+7. 一次性返回 status + command + output + returncode + round_dir + output_path + games
 
 **参数**（JSON Body）：
 
@@ -83,7 +82,29 @@
   "status": "completed",
   "command": "python ai/create_samples.py --model cnn_v1 --mode winning_move --games 10 --output ai/train_data/samples.json --temperature 1.0 --temp-moves 12 --temp-side both",
   "output": "[INFO] Loading model: cnn_v1 (gen=1)\n[INFO] Model loaded successfully\n[INFO] Running 10 games with winning_move mode...\nGame 1: Black wins (15 steps, 12 sampling steps)\nGame 2: White wins (23 steps, 12 sampling steps)\n...\n[INFO] All 10 games completed\n[INFO] Samples written to ai/train_data/samples.json",
-  "returncode": 0
+  "returncode": 0,
+  "round_dir": "ai/ai_data/cnn_v1_battle_1",
+  "output_path": "ai/train_data/samples.json",
+  "games": [
+    {
+      "game_id": 1,
+      "winner": 1,
+      "winner_display": "黑胜",
+      "temp_side": "both",
+      "temp_side_display": "双方采样",
+      "total_steps": 15,
+      "is_draw": false
+    },
+    {
+      "game_id": 5,
+      "winner": 3,
+      "winner_display": "平局",
+      "temp_side": "both",
+      "temp_side_display": "双方采样",
+      "total_steps": 50,
+      "is_draw": true
+    }
+  ]
 }
 ```
 
@@ -104,12 +125,23 @@
 | command | string | 实际执行的完整 CLI 命令 |
 | output | string | 子进程完整输出文本（stdout + stderr 合并） |
 | returncode | integer | 子进程退出码 |
+| round_dir | string | round_dir 相对路径（仅 completed 时有值） |
+| output_path | string | 样本输出文件路径（仅 completed 时有值） |
+| games | array | 对局摘要列表（仅 completed 时有值，按 game_id 升序） |
+| games[].game_id | integer | 对局编号（从 1 开始） |
+| games[].winner | integer | 胜方：1=黑胜, 2=白胜, 3=平局 |
+| games[].winner_display | string | 显示用："黑胜" / "白胜" / "平局" |
+| games[].temp_side | string | 该局实际采样方："both" / "black" / "white" / "none" |
+| games[].temp_side_display | string | 显示用："双方采样" / "黑方采样" / "白方采样" / "无(argmax)" |
+| games[].total_steps | integer | 该局总步数 |
+| games[].is_draw | boolean | 是否为平局 |
 
 **前端对接要点**：
 - 使用 `await fetch(...)` 发起请求，浏览器会自动等待响应
 - 执行期间（可能数分钟）前端处于等待状态，按钮保持灰化
 - 脚本输出区可显示"执行中..."提示
-- 响应返回后：根据 status 展示 output 内容，然后请求温度信息和对局列表
+- 响应返回后：根据 status 展示 output 内容，用返回的 games 渲染对局列表
+- 温度信息（temperature、temp_side 等）由前端表单本地持有，无需后端返回
 
 **CLI 命令构造规则**：
 
@@ -136,139 +168,22 @@ python ai/create_samples.py \
 
 ---
 
-### 2.3 GET /api/create-samples/temp-info
-
-**作用**：获取本次运行的温度采样全局配置信息。
-
-**核心动作**：
-1. 从上次 POST /api/create-samples/execute 提交的参数中提取温度配置
-2. 返回格式化的温度信息
-
-**参数**：无
-
-**Response**：
-
-```json
-{
-  "temperature": 1.0,
-  "temp_moves": 12,
-  "temp_side": "both",
-  "no_temp_sampling": false,
-  "temp_side_display": "双方"
-}
-```
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| temperature | number | 温度值 T |
-| temp_moves | integer | 采样步数阈值 |
-| temp_side | string | 原始 temp_side 值 |
-| no_temp_sampling | boolean | 是否禁用温度采样 |
-| temp_side_display | string | 显示用中文："黑方" / "白方" / "双方" / "random" / "无(argmax)" |
-
-**temp_side_display 映射规则**：
-
-| no_temp_sampling | temp_side | display |
-|------------------|-----------|---------|
-| true | * | "无(argmax)" |
-| false | "both" | "双方" |
-| false | "black" | "黑方" |
-| false | "white" | "白方" |
-| false | "random" | "random" |
-
-**错误处理**：
-
-| 场景 | HTTP 状态码 | Response |
-|------|-------------|----------|
-| 无执行记录 | 404 | `{"error": "尚未执行脚本"}` |
-
----
-
-### 2.4 GET /api/create-samples/games
-
-**作用**：获取本次执行的所有对局基本信息列表。
-
-**核心动作**：
-1. 定位 round_dir
-2. 遍历子目录 `1/`, `2/`, ..., 读取 `record.json`
-3. 从每局 record.json 提取 winner、temp_side 信息
-4. 返回对局列表
-
-**参数**：无
-
-**Response**：
-
-```json
-{
-  "games": [
-    {
-      "game_id": 1,
-      "winner": 1,
-      "winner_display": "黑胜",
-      "temp_side": "both",
-      "temp_side_display": "双方采样",
-      "total_steps": 15,
-      "is_draw": false
-    },
-    {
-      "game_id": 5,
-      "winner": 3,
-      "winner_display": "平局",
-      "temp_side": "both",
-      "temp_side_display": "双方采样",
-      "total_steps": 50,
-      "is_draw": true
-    }
-  ],
-  "total": 10
-}
-```
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| games | array | 对局列表，按 game_id 升序 |
-| games[].game_id | integer | 对局编号（从 1 开始） |
-| games[].winner | integer | 胜方：1=黑胜, 2=白胜, 3=平局 |
-| games[].winner_display | string | 显示用："黑胜" / "白胜" / "平局" |
-| games[].temp_side | string | 该局实际 temp_side |
-| games[].temp_side_display | string | 显示用："双方采样" / "黑方采样" / "白方采样" / "无(argmax)" |
-| games[].total_steps | integer | 该局总步数 |
-| games[].is_draw | boolean | 是否为平局 |
-| total | integer | 对局总数 |
-
-**temp_side_display 映射**（per-game，基于 record.json 中的 strategy 字段推断）：
-
-| 推断条件 | display |
-|----------|---------|
-| 所有步均为 argmax | "无(argmax)" |
-| 仅黑方步有 sampling | "黑方采样" |
-| 仅白方步有 sampling | "白方采样" |
-| 黑白方均有 sampling | "双方采样" |
-
-**错误处理**：
-
-| 场景 | HTTP 状态码 | Response |
-|------|-------------|----------|
-| 无执行记录 | 404 | `{"error": "尚未执行脚本"}` |
-| round_dir 不存在 | 500 | `{"error": "数据目录不存在"}` |
-| record.json 损坏 | — | 跳过该局，不影响其他局数据返回 |
-
----
-
-### 2.5 GET /api/create-samples/games/\<game_id\>/steps
+### 2.3 GET /api/create-samples/games/\<game_id\>/steps
 
 **作用**：获取指定对局的每步详细数据，供前端渲染三行热力图。
 
 **核心动作**：
-1. 读取 `{round_dir}/{game_id}/record.json`
-2. 读取样本输出文件，匹配该局的样本
+1. 根据 round_dir + game_id 读取 `{round_dir}/{game_id}/record.json`
+2. 根据 sample_path 读取样本输出文件，匹配该局的样本
 3. 组装每步的完整数据
 
 **参数**：
 
-| 参数 | 位置 | 类型 | 说明 |
-|------|------|------|------|
-| game_id | URL path | integer | 对局编号（从 1 开始） |
+| 参数 | 位置 | 类型 | 必填 | 说明 |
+|------|------|------|------|------|
+| game_id | URL path | integer | 是 | 对局编号（从 1 开始） |
+| round_dir | query | string | 是 | 轮次目录路径（来自 execute 响应） |
+| sample_path | query | string | 是 | 样本输出文件路径（来自 execute 响应） |
 
 **Response**：
 
@@ -345,8 +260,8 @@ python ai/create_samples.py \
 
 | 场景 | HTTP 状态码 | Response |
 |------|-------------|----------|
-| 无执行记录 | 404 | `{"error": "尚未执行脚本"}` |
 | game_id 不存在 | 404 | `{"error": "对局 {game_id} 不存在"}` |
+| round_dir 不存在 | 500 | `{"error": "数据目录不存在"}` |
 | record.json 损坏 | 500 | `{"error": "对局 {game_id} 数据损坏"}` |
 
 ---
@@ -378,6 +293,8 @@ class ExecuteResult:
     output: str              # 子进程完整输出文本 (stdout+stderr)
     returncode: int          # 子进程退出码
     round_dir: str | None    # 发现的 round_dir (仅 completed 时有值)
+    output_path: str | None  # 样本输出文件路径 (仅 completed 时有值)
+    games: list | None       # 对局摘要列表 (仅 completed 时有值)
 ```
 
 ### 3.3 对局摘要 (GameSummary)
@@ -435,12 +352,15 @@ function execute(params):
 
     if process.returncode == 0:
         round_dir = discover_round_dir(S_before)
+        games = scan_round_dir(round_dir)  # 扫描对局数据
         return {
             status: "completed",
             command: command,
             output: output_text,
             returncode: 0,
-            round_dir: round_dir
+            round_dir: round_dir,
+            output_path: params["output"],
+            games: games
         }
     else:
         return {
@@ -479,8 +399,10 @@ async function onExecute() {
     showOutput(result.output);
 
     if (result.status === "completed") {
-        loadTempInfo();
-        loadGames();
+        renderGames(result.games);        // 直接用 execute 响应中的 games
+        storeRoundDir(result.round_dir);  // 保存 round_dir 供后续 steps 请求
+        storeOutputPath(result.output_path);
+        // 温度信息由前端表单本地持有，无需请求
     }
 }
 ```
@@ -499,12 +421,12 @@ async function onExecute() {
 
 | 错误源 | 表现 | 处理方式 |
 |--------|------|----------|
-| argparse 参数校验失败 | 子进程 stderr 输出错误信息 | POST /api/execute 返回 status="error"，output 包含错误文本 |
+| argparse 参数校验失败 | 子进程 stderr 输出错误信息 | POST /api/create-samples/execute 返回 status="error"，output 包含错误文本 |
 | 模型加载失败 | 子进程 stderr 输出异常 | 同上 |
-| 子进程崩溃 | returncode != 0 | POST /api/execute 返回 status="error" |
-| record.json 损坏 | JSON 解析失败 | 跳过该局，不影响其他局 |
+| 子进程崩溃 | returncode != 0 | POST /api/create-samples/execute 返回 status="error" |
+| record.json 损坏 | JSON 解析失败 | execute 响应中跳过该局；steps 请求返回 500 |
 | 样本文件不存在 | 文件读取失败 | 所有步 sample_output 为 null，Row 3 全占位 |
-| round_dir 未发现 | 差集为空 | GET /api/games 返回 500 |
+| round_dir 未发现 | 差集为空 | execute 响应中 round_dir 为 null |
 
 ---
 
@@ -514,16 +436,17 @@ async function onExecute() {
 |---|--------|---------|---------|
 | T1 | 模型列表获取 | GET /api/create-samples/models | 返回非空列表，含 "random" |
 | T2 | 模型列表子进程失败 | GET /api/create-samples/models | 返回 500 + error 字段 |
-| T3 | 正常执行 | POST /api/create-samples/execute | 返回 status="completed" + output 非空 + returncode=0 |
+| T3 | 正常执行 | POST /api/create-samples/execute | 返回 status="completed" + output 非空 + returncode=0 + games 非空 |
 | T4 | 执行失败 | POST /api/create-samples/execute | 返回 status="error" + output 含错误文本 + returncode!=0 |
 | T5 | CLI 命令构造正确 | POST /api/create-samples/execute | 布尔开关仅 true 时追加 flag |
-| T6 | 温度信息 | GET /api/create-samples/temp-info | 正确映射 temp_side_display |
-| T7 | 无执行时温度信息 | GET /api/create-samples/temp-info | 返回 404 |
-| T8 | 对局列表 | GET /api/create-samples/games | 返回正确数量和 winner_display |
-| T9 | 平局对局标记 | GET /api/create-samples/games | is_draw=true, winner_display="平局" |
+| T6 | execute 响应含对局列表 | POST /api/create-samples/execute | games 列表含正确 game_id、winner_display、temp_side_display |
+| T7 | execute 响应含 round_dir + output_path | POST /api/create-samples/execute | completed 时返回路径，error 时为 null |
+| T8 | 平局对局标记 | POST /api/create-samples/execute | games 中 is_draw=true, winner_display="平局" |
+| T9 | record.json 损坏跳过 | POST /api/create-samples/execute | games 中不含损坏局，其他局正常 |
 | T10 | 步数据完整 | GET /api/create-samples/games/1/steps | raw_output/sampling_probs/sample_output 齐全 |
 | T11 | argmax 步无 sampling_probs | GET /api/create-samples/games/1/steps | sampling_probs=null → 前端渲染占位图 |
 | T12 | 样本匹配正确 | GET /api/create-samples/games/1/steps | winning_move 仅最后步有 sample_output |
 | T13 | 平局全占位 | GET /api/create-samples/games/5/steps | 所有步 sample_output=null |
 | T14 | 不存在的 game_id | GET /api/create-samples/games/999/steps | 返回 404 |
-| T15 | record.json 损坏 | GET /api/create-samples/games | 跳过该局，其他局正常返回 |
+| T15 | steps 缺少 round_dir 参数 | GET /api/create-samples/games/1/steps | 返回 400 |
+| T16 | record.json 损坏 | GET /api/create-samples/games/1/steps | 返回 500 |

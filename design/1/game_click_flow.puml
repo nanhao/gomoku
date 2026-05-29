@@ -18,7 +18,7 @@ activate GL
 
 GL -> GL: 第3局高亮选中\n其他局取消高亮
 
-GL -> BE: GET /api/create-samples/games/3/steps
+GL -> BE: GET /api/create-samples/games/3/steps?round_dir=xxx&sample_path=xxx
 activate BE
 
 BE -> DP: parse_game_steps(round_dir, game_id=3)
@@ -80,7 +80,7 @@ deactivate GL
 
 User -> GL: 点击第5局（平局，灰化）
 GL -> GL: 第5局高亮选中
-GL -> BE: GET /api/create-samples/games/5/steps
+GL -> BE: GET /api/create-samples/games/5/steps?round_dir=xxx&sample_path=xxx
 BE -> DP: parse_game_steps(round_dir, game_id=5)
 DP -> FS: 读取 record.json
 FS --> DP: record JSON (winner=3)

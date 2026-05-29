@@ -48,7 +48,7 @@
 | 组件 | 选型 | 理由 |
 |------|------|------|
 | Web 框架 | Flask | 轻量，项目已有 Python 环境，无需额外运行时 |
-| 实时输出 | 无（同步阻塞等待） | POST /api/execute 阻塞等待子进程结束，一次性返回全部输出 |
+| 实时输出 | 无（同步阻塞等待） | POST /api/create-samples/execute 阻塞等待子进程结束，一次性返回全部输出 + 对局列表 |
 | 前端 | 原生 HTML/CSS/JS + Canvas | 原型已用纯 HTML/CSS，热力图用 Canvas 渲染 |
 | 子进程 | `subprocess.Popen` + `communicate()` | 同步阻塞等待，一次性收集输出 |
 | 数据格式 | JSON | record.json 和样本输出均为 JSON |
@@ -92,9 +92,9 @@ data_parser.py → 无外部依赖（仅标准库 json, os）
 
 1. 用户填写参数 → POST /api/create-samples/execute
 2. 后端构造 CLI 命令，启动子进程，**同步阻塞等待**结束
-3. 子进程结束后，POST 响应一次性返回完整输出
-4. 前端展示脚本输出，获取温度信息和对局列表
-5. 用户点击某局查看热力图
+3. 子进程结束后，POST 响应一次性返回完整输出 + 对局列表
+4. 前端展示脚本输出和对局列表
+5. 用户点击某局，传入 round_dir + sample_path → GET steps
 
 → 详细交互图见 [execute_flow.puml](execute_flow.puml)
 
@@ -110,16 +110,14 @@ data_parser.py → 无外部依赖（仅标准库 json, os）
 ## 5. 数据流向
 
 ```
-用户 → [参数填写区] → POST /api/execute → 后端构造 CLI 命令
+用户 → [参数填写区] → POST /api/create-samples/execute → 后端构造 CLI 命令
                                             ↓ subprocess.Popen + communicate()
                                     create_samples.py 执行 (阻塞等待)
                                             ↓ 结束后
-                        POST 响应 → [脚本输出区] 展示完整输出
+                        POST 响应 → [脚本输出区] + [对局列表区] + [温度信息区(前端本地)]
                                后端扫描 ai_data_dir → 发现 round_dir
-                                            ↓
-                        GET /api/create-samples/games → [对局列表区] + [温度信息区]
                                             ↓ 用户点击某局
-                 GET /api/create-samples/games/{id}/steps → [三行热力图区]
+                 GET /api/create-samples/games/{id}/steps?round_dir=xxx&sample_path=xxx → [三行热力图区]
                                             ↓
                         record.json + 样本文件 → 解析匹配 → 渲染
 ```

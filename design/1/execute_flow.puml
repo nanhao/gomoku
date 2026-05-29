@@ -44,23 +44,16 @@ end
 
 deactivate EX
 
-BE --> FE: 200 OK (同步返回完整结果)
+BE --> FE: 200 OK (同步返回完整结果
++ round_dir + output_path + games)
 deactivate BE
 
 FE -> FE: 解除按钮灰化
 
 alt status == completed
     FE -> FE: 脚本输出区展示完整输出
-
-    FE -> BE: GET /api/create-samples/temp-info
-    BE --> FE: {temperature, temp_moves, temp_side, ...}
-    FE -> FE: 渲染温度信息区
-
-    FE -> BE: GET /api/create-samples/games
-    BE -> FS: 扫描 round_dir\n读取各局 record.json
-    FS --> BE: 对局数据
-    BE --> FE: {games: [...], total: N}
-    FE -> FE: 渲染对局列表
+    FE -> FE: 用 result.games 渲染对局列表
+    FE -> FE: 温度信息由表单本地渲染
 else status == error
     FE -> FE: 脚本输出区展示错误信息
     FE -> FE: 热力图区显示"无数据"
