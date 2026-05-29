@@ -307,6 +307,99 @@ class TestUnsupportedMode(unittest.TestCase):
             SampleCreator(mode="unsupported_mode")
 
 
+class TestStepIdWinningMove(unittest.TestCase):
+    """winning_move 模式 step_id 透传测试"""
+
+    def test_step_id_from_history_to_sample(self):
+        """record.json 中含 step_id 时，样本透传该字段"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            record = {
+                "winner": 1,
+                "history": [
+                    {"step_id": "aaaa-bbbb-cccc", "input": [0.0] * 226, "output": [0.0] * 225, "position": [0, 0]},
+                    {"step_id": "dddd-eeee-ffff", "input": [1.0] * 226, "output": [0.0] * 225, "position": [1, 1]},
+                ],
+                "end_board": [0.0] * 226
+            }
+            path = os.path.join(tmpdir, "record.json")
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(record, f)
+
+            creator = SampleCreator(mode="winning_move", augment=False)
+            samples = creator.create([path])
+
+            self.assertEqual(len(samples), 1)
+            # winning_move 取最后一步，step_id 应为最后一步的
+            self.assertEqual(samples[0]["step_id"], "dddd-eeee-ffff")
+
+    def test_no_step_id_in_history_no_step_id_in_sample(self):
+        """旧格式 record.json 无 step_id 时，样本也不含该字段"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            record = {
+                "winner": 1,
+                "history": [
+                    {"input": [0.0] * 226, "output": [0.0] * 225, "position": [0, 0]},
+                ],
+                "end_board": [0.0] * 226
+            }
+            path = os.path.join(tmpdir, "record.json")
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(record, f)
+
+            creator = SampleCreator(mode="winning_move", augment=False)
+            samples = creator.create([path])
+
+            self.assertEqual(len(samples), 1)
+            self.assertNotIn("step_id", samples[0])
+
+
+class TestStepIdWithAugmentation(unittest.TestCase):
+    """D4 增强时 step_id 保留测试"""
+
+    def test_augment_preserves_step_id(self):
+        """D4 增强后的 8 个变体都保留相同的 step_id"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            record = {
+                "winner": 1,
+                "history": [
+                    {"step_id": "test-uuid-1234", "input": [0.0] * 226, "output": [0.0] * 225, "position": [7, 7]},
+                ],
+                "end_board": [0.0] * 226
+            }
+            path = os.path.join(tmpdir, "record.json")
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(record, f)
+
+            creator = SampleCreator(mode="winning_move", augment=True)
+            samples = creator.create([path])
+
+            self.assertEqual(len(samples), 8)
+            # 所有变体共享同一 step_id
+            for s in samples:
+                self.assertEqual(s["step_id"], "test-uuid-1234")
+
+    def test_augment_without_step_id_no_step_id(self):
+        """旧格式无 step_id 时，增强变体也不含该字段"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            record = {
+                "winner": 1,
+                "history": [
+                    {"input": [0.0] * 226, "output": [0.0] * 225, "position": [7, 7]},
+                ],
+                "end_board": [0.0] * 226
+            }
+            path = os.path.join(tmpdir, "record.json")
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(record, f)
+
+            creator = SampleCreator(mode="winning_move", augment=True)
+            samples = creator.create([path])
+
+            self.assertEqual(len(samples), 8)
+            for s in samples:
+                self.assertNotIn("step_id", s)
+
+
 class TestDataAugmentation(unittest.TestCase):
     """D4 群数据增强测试"""
 

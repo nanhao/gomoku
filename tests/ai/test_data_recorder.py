@@ -356,6 +356,115 @@ class TestDataRecorder(unittest.TestCase):
 
         self.assertEqual(len(data["history"][0]["sampling_probs"]), 225)
 
+    # ====================================================================
+    # step_id 字段测试（step_id_matching_design.md）
+    # ====================================================================
+
+    def test_step_id_present_in_record(self):
+        """record_move 自动生成 step_id，保存后 JSON 中包含该字段"""
+        recorder = DataRecorder("test", self.test_dir)
+        game_id = recorder.new_game()
+
+        recorder.record_move(game_id, [0] * 226, [0] * 225, (7, 7))
+        recorder.save_game_result(game_id, 1, [0] * 226)
+
+        round_dir = recorder.get_round_dir()
+        record_file = os.path.join(round_dir, "1", "record.json")
+        with open(record_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        move = data["history"][0]
+        self.assertIn("step_id", move)
+        self.assertIsInstance(move["step_id"], str)
+        self.assertGreater(len(move["step_id"]), 0)
+
+    def test_step_id_uuid4_format(self):
+        """step_id 为 UUID4 格式：8-4-4-4-12 连字符分隔"""
+        recorder = DataRecorder("test", self.test_dir)
+        game_id = recorder.new_game()
+
+        recorder.record_move(game_id, [0] * 226, [0] * 225, (7, 7))
+        recorder.save_game_result(game_id, 1, [0] * 226)
+
+        round_dir = recorder.get_round_dir()
+        record_file = os.path.join(round_dir, "1", "record.json")
+        with open(record_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        step_id = data["history"][0]["step_id"]
+        # UUID4 格式：xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+        # 简单校验：5 段用连字符分隔，总长度 36
+        self.assertEqual(len(step_id), 36)
+        parts = step_id.split('-')
+        self.assertEqual(len(parts), 5)
+        self.assertEqual(len(parts[0]), 8)
+        self.assertEqual(len(parts[1]), 4)
+        self.assertEqual(len(parts[2]), 4)
+        self.assertEqual(len(parts[3]), 4)
+        self.assertEqual(len(parts[4]), 12)
+        # UUID4 的第 3 段首字符为 '4'
+        self.assertEqual(parts[2][0], '4')
+
+    def test_step_id_unique_across_moves(self):
+        """不同步的 step_id 互不相同"""
+        recorder = DataRecorder("test", self.test_dir)
+        game_id = recorder.new_game()
+
+        recorder.record_move(game_id, [0] * 226, [0] * 225, (7, 7))
+        recorder.record_move(game_id, [1] * 226, [1] * 225, (7, 8))
+        recorder.record_move(game_id, [2] * 226, [2] * 225, (8, 7))
+        recorder.save_game_result(game_id, 1, [0] * 226)
+
+        round_dir = recorder.get_round_dir()
+        record_file = os.path.join(round_dir, "1", "record.json")
+        with open(record_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        step_ids = [step["step_id"] for step in data["history"]]
+        self.assertEqual(len(step_ids), 3)
+        self.assertEqual(len(set(step_ids)), 3, f"step_id 不唯一: {step_ids}")
+
+    def test_step_id_unique_across_games(self):
+        """跨局 step_id 互不相同"""
+        recorder = DataRecorder("test", self.test_dir)
+
+        game1 = recorder.new_game()
+        recorder.record_move(game1, [0] * 226, [0] * 225, (7, 7))
+        recorder.save_game_result(game1, 1, [0] * 226)
+
+        game2 = recorder.new_game()
+        recorder.record_move(game2, [1] * 226, [1] * 225, (7, 8))
+        recorder.save_game_result(game2, 2, [0] * 226)
+
+        round_dir = recorder.get_round_dir()
+
+        with open(os.path.join(round_dir, "1", "record.json"), 'r') as f:
+            data1 = json.load(f)
+        with open(os.path.join(round_dir, "2", "record.json"), 'r') as f:
+            data2 = json.load(f)
+
+        sid1 = data1["history"][0]["step_id"]
+        sid2 = data2["history"][0]["step_id"]
+        self.assertNotEqual(sid1, sid2, "跨局 step_id 不应相同")
+
+    def test_step_id_first_field_in_json(self):
+        """step_id 在 JSON entry 中为第一个字段"""
+        recorder = DataRecorder("test", self.test_dir)
+        game_id = recorder.new_game()
+
+        recorder.record_move(game_id, [0] * 226, [0] * 225, (7, 7))
+        recorder.save_game_result(game_id, 1, [0] * 226)
+
+        round_dir = recorder.get_round_dir()
+        record_file = os.path.join(round_dir, "1", "record.json")
+        with open(record_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        move = data["history"][0]
+        # Python 3.7+ dict 保证插入顺序
+        first_key = next(iter(move))
+        self.assertEqual(first_key, "step_id")
+
 
 if __name__ == "__main__":
     unittest.main()

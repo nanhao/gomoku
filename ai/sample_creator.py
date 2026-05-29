@@ -108,12 +108,13 @@ class SampleCreator:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _build_sample(input_vector: list, position: list) -> Dict:
+    def _build_sample(input_vector: list, position: list, step_id: str = None) -> Dict:
         """构造单个 sample：output 落子位=1.0（行/列任一越界则保持全 0），mask 全 1
 
         Args:
             input_vector: 226 维棋盘+玩家向量
             position: [x, y] 落子坐标
+            step_id: 全局唯一步标识，从 record.json 透传；None 时不写入（向后兼容）
 
         Returns:
             sample 字典
@@ -128,16 +129,21 @@ class SampleCreator:
         if 0 <= r < 15 and 0 <= c < 15:
             output[r * 15 + c] = 1.0
         mask = [1] * 225
-        return {
+        sample = {
             "input": input_vector,
             "output": output,
             "mask": mask,
         }
+        # step_id 透传：仅当 record.json 中含 step_id 时写入样本
+        if step_id is not None:
+            sample["step_id"] = step_id
+        return sample
 
     def _build_winning_move_samples(self, history: list) -> List[Dict]:
         """winning_move 模式：仅取最后一步"""
         last_step = history[-1]
-        return [self._build_sample(last_step["input"], last_step["position"])]
+        step_id = last_step.get("step_id")
+        return [self._build_sample(last_step["input"], last_step["position"], step_id)]
 
     def _build_winner_path_samples(self, winner: int, history: list) -> List[Dict]:
         """winner_path 模式：取获胜方每一步
@@ -166,6 +172,9 @@ class SampleCreator:
                 "output": output,
                 "mask": [1] * 225,
             })
+            # step_id 透传：仅当 record.json 中含 step_id 时写入样本
+            if "step_id" in step:
+                samples[-1]["step_id"] = step["step_id"]
         return samples
 
     @staticmethod
@@ -307,8 +316,11 @@ class SampleCreator:
             augmented.append({
                 "input": new_board + [player],
                 "output": new_output,
-                "mask": new_mask
+                "mask": new_mask,
             })
+            # step_id 透传：D4 增强变体共享原始 step_id
+            if "step_id" in sample:
+                augmented[-1]["step_id"] = sample["step_id"]
         return augmented
 
     def create_from_round_dir(self, round_dir: str) -> List[Dict]:
