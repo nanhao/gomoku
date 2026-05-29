@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>create_samples 验收工具 — UI原型</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: "Microsoft YaHei", "SimHei", sans-serif; background: #f5f5f5; color: #333; }
+.app-header { background: #2c3e50; color: #ecf0f1; padding: 12px 24px; font-size: 18px; font-weight: bold; }
+.app-main { display: flex; gap: 16px; padding: 16px; height: calc(100vh - 52px); }
+.left-panel { width: 320px; display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+
+/* 参数区 */
+.param-section { background: #fff; border-radius: 6px; padding: 16px; border: 1px solid #ddd; }
+.param-section h2 { font-size: 15px; margin-bottom: 12px; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 6px; }
+.param-row { display: flex; align-items: center; margin-bottom: 8px; gap: 8px; }
+.param-row label { width: 110px; font-size: 13px; text-align: right; color: #555; flex-shrink: 0; }
+.param-row input[type="text"], .param-row input[type="number"], .param-row select { flex: 1; padding: 4px 8px; border: 1px solid #ccc; border-radius: 3px; font-size: 13px; }
+.param-row .switch-wrap { flex: 1; display: flex; align-items: center; gap: 6px; }
+.param-row .switch-wrap input[type="checkbox"] { width: 16px; height: 16px; }
+.param-row .switch-wrap .switch-label { font-size: 13px; color: #666; }
+.param-row .error-msg { font-size: 12px; color: #e74c3c; display: none; }
+.btn-run { display: block; width: 100%; padding: 8px; margin-top: 12px; background: #3498db; color: #fff; border: none; border-radius: 4px; font-size: 14px; font-weight: bold; cursor: pointer; }
+.btn-run:hover { background: #2980b9; }
+
+/* 温度信息区 */
+.temp-info-section { background: #fff; border-radius: 6px; padding: 12px 16px; border: 1px solid #ddd; }
+.temp-info-section h2 { font-size: 15px; margin-bottom: 8px; color: #2c3e50; border-bottom: 2px solid #e67e22; padding-bottom: 6px; }
+.temp-info-grid { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 13px; }
+.temp-info-grid .info-label { color: #888; text-align: right; }
+.temp-info-grid .info-value { color: #333; font-weight: bold; }
+.temp-info-grid .info-value.highlight { color: #e67e22; }
+
+/* 对局列表区 */
+.game-list-section { background: #fff; border-radius: 6px; padding: 12px; border: 1px solid #ddd; flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+.game-list-section h2 { font-size: 15px; margin-bottom: 8px; color: #2c3e50; border-bottom: 2px solid #27ae60; padding-bottom: 6px; }
+.game-list { flex: 1; overflow-y: auto; list-style: none; }
+.game-item { display: flex; align-items: center; padding: 8px 10px; margin-bottom: 4px; border-radius: 4px; border: 1px solid #ddd; cursor: pointer; font-size: 13px; transition: background 0.2s; }
+.game-item:hover { background: #ecf0f1; }
+.game-item.selected { background: #d5f5e3; border-color: #27ae60; }
+.game-item.draw { opacity: 0.55; }
+.game-item .game-num { width: 40px; font-weight: bold; color: #2c3e50; }
+.game-item .game-winner { width: 60px; }
+.game-item .game-winner.black-win { color: #333; }
+.game-item .game-winner.white-win { color: #7f8c8d; }
+.game-item .game-winner.draw-result { color: #999; }
+.game-item .game-temp-side { flex: 1; text-align: right; font-size: 12px; color: #888; }
+
+/* 热力图区 */
+.right-panel { flex: 1; background: #fff; border-radius: 6px; padding: 16px; border: 1px solid #ddd; display: flex; flex-direction: column; overflow: hidden; }
+.right-panel h2 { font-size: 15px; margin-bottom: 12px; color: #2c3e50; border-bottom: 2px solid #e67e22; padding-bottom: 6px; }
+.heatmap-container { flex: 1; overflow-x: auto; overflow-y: hidden; }
+.heatmap-grid { display: inline-flex; flex-direction: column; }
+.heatmap-row { display: flex; align-items: center; gap: 4px; }
+.row-label { width: 80px; text-align: right; font-size: 13px; font-weight: bold; color: #555; flex-shrink: 0; }
+.heatmap-cells-row { display: flex; gap: 4px; }
+.step-labels-row { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; }
+.step-label { width: 180px; text-align: center; font-size: 12px; color: #888; }
+
+/* canvas棋盘 */
+.board-canvas-wrap { width: 180px; height: 180px; border: 1px solid #bbb; border-radius: 2px; }
+.board-canvas-wrap canvas { width: 180px; height: 180px; display: block; }
+
+/* 占位图 */
+.placeholder-board { width: 180px; height: 180px; background: #D0D0D0; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #999; font-weight: bold; border: 1px solid #bbb; border-radius: 2px; }
+
+/* 图例 */
+.legend-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; color: #666; flex-wrap: wrap; }
+.legend-swatch { width: 16px; height: 16px; border-radius: 2px; border: 1px solid #999; }
+.legend-swatch.board-bg { background: #DEB887; }
+.legend-swatch.green-border { background: transparent; border: 3px solid #2ecc71; }
+.legend-swatch.stone-black { background: #222; border-radius: 50%; }
+.legend-swatch.stone-white { background: #fff; border-radius: 50%; border: 1px solid #333; }
+.legend-gradient { height: 16px; width: 80px; background: linear-gradient(to right, #fff, #ffee00, #ff8c00, #ff0000); border: 1px solid #999; border-radius: 2px; }
+
+.prototype-note { background: #fef9e7; border: 1px solid #f9e79f; padding: 8px 12px; border-radius: 4px; font-size: 12px; color: #7d6608; margin-bottom: 8px; }
+
+@media (max-width: 800px) { .app-main { flex-direction: column; } .left-panel { width: 100%; max-height: 40vh; } }
+</style>
+</head>
+<body>
+
+<div class="app-header">create_samples 验收工具</div>
+
+<div class="app-main">
+    <!-- ===== 左侧面板 ===== -->
+    <div class="left-panel">
+        <!-- 参数区 -->
+        <div class="param-section">
+            <h2>参数配置</h2>
+            <div class="param-row">
+                <label>model</label>
+                <select id="modelSelect">
+                    <option value="" disabled selected>— 请选择模型 —</option>
+                    <option value="random">random</option>
+                    <option value="fc_v1">fc_v1</option>
+                    <option value="cnn_v1">cnn_v1</option>
+                    <option value="cnn_v2">cnn_v2</option>
+                    <option value="cnn_v3.1">cnn_v3.1</option>
+                    <option value="cnn_v3.2">cnn_v3.2</option>
+                    <option value="cnn_v3.3">cnn_v3.3</option>
+                </select>
+                <span class="error-msg">必选</span>
+            </div>
+            <div class="param-row"><label>mode</label><select><option value="winning_move" selected>winning_move</option><option value="winner_path">winner_path</option></select></div>
+            <div class="param-row"><label>games</label><input type="number" value="100"></div>
+            <div class="param-row"><label>output</label><input type="text" value="ai/train_data/samples.json"></div>
+            <div class="param-row"><label>数据增强</label><div class="switch-wrap"><input type="checkbox"><span class="switch-label">禁用 (--no-augment)</span></div></div>
+            <div class="param-row"><label>温度采样</label><div class="switch-wrap"><input type="checkbox"><span class="switch-label">禁用 (--no-temp-sampling)</span></div></div>
+            <div class="param-row"><label>temperature</label><input type="number" value="1.0" step="0.1" min="0.01"></div>
+            <div class="param-row"><label>temp-moves</label><input type="number" value="12" min="0"></div>
+            <div class="param-row"><label>temp-side</label><select><option value="both" selected>both</option><option value="black">black</option><option value="white">white</option><option value="random">random</option></select></div>
+            <div class="param-row"><label>temp-seed</label><input type="number" placeholder="可选，用于复现"></div>
+            <button class="btn-run">▶ 执行</button>
+        </div>
+
+        <!-- 温度信息区 -->
+        <div class="temp-info-section">
+            <h2>温度采样信息</h2>
+            <div class="temp-info-grid">
+                <span class="info-label">温度值</span><span class="info-value highlight">T = 1.0</span>
+                <span class="info-label">采样步数阈值</span><span class="info-value">前 12 步</span>
+                <span class="info-label">采样方</span><span class="info-value">双方</span>
+                <span class="info-label">采样步数统计</span><span class="info-value highlight">12 / 15 步</span>
+            </div>
+        </div>
+
+        <!-- 对局列表区 -->
+        <div class="game-list-section">
+            <h2>对局列表 <span style="font-size:12px;color:#888">(10局)</span></h2>
+            <ul class="game-list">
+                <li class="game-item selected"><span class="game-num">#1</span><span class="game-winner black-win">黑胜</span><span class="game-temp-side">双方采样</span></li>
+                <li class="game-item"><span class="game-num">#2</span><span class="game-winner white-win">白胜</span><span class="game-temp-side">黑方采样</span></li>
+                <li class="game-item"><span class="game-num">#3</span><span class="game-winner black-win">黑胜</span><span class="game-temp-side">双方采样</span></li>
+                <li class="game-item"><span class="game-num">#4</span><span class="game-winner white-win">白胜</span><span class="game-temp-side">白方采样</span></li>
+                <li class="game-item draw"><span class="game-num">#5</span><span class="game-winner draw-result">平局</span><span class="game-temp-side">双方采样</span></li>
+                <li class="game-item"><span class="game-num">#6</span><span class="game-winner black-win">黑胜</span><span class="game-temp-side">双方采样</span></li>
+                <li class="game-item"><span class="game-num">#7</span><span class="game-winner white-win">白胜</span><span class="game-temp-side">双方采样</span></li>
+                <li class="game-item"><span class="game-num">#8</span><span class="game-winner black-win">黑胜</span><span class="game-temp-side">无(argmax)</span></li>
+                <li class="game-item"><span class="game-num">#9</span><span class="game-winner white-win">白胜</span><span class="game-temp-side">双方采样</span></li>
+                <li class="game-item"><span class="game-num">#10</span><span class="game-winner black-win">黑胜</span><span class="game-temp-side">黑方采样</span></li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- ===== 热力图区 ===== -->
+    <div class="right-panel">
+        <h2>热力图对比 — 第1局（黑胜 · 双方采样 · T=1.0）</h2>
+        <div class="legend-row">
+            <span class="legend-gradient"></span><span>热力图（白→黄→橙→红）</span>
+            <span class="legend-swatch green-border"></span><span>落子位（粗绿框，不画棋子）</span>
+            <span class="legend-swatch stone-black"></span><span>黑棋</span>
+            <span class="legend-swatch stone-white"></span><span>白棋</span>
+            <span class="legend-swatch board-bg"></span><span>棋盘底色</span>
+        </div>
+        <div class="prototype-note">
+            原型说明：模拟数据。每步棋盘用15×15网格渲染热力图，颜色为白→黄→橙→红渐变叠加在空位上。落子位用粗绿框标记且不画棋子。argmax步Row 2和不在样本中的Row 3为灰色占位图。
+        </div>
+        <div class="heatmap-container" id="heatmapContainer"></div>
+    </div>
+</div>
+
+<script>
+// ===== 模拟数据 =====
+const BOARD_SIZE = 15;
+const NUM_STEPS = 15;
+const TEMP_MOVES = 12;
+
+// 色板: 白→黄→橙→红 (与项目 heatmap_color.py DEFAULT_COLOR_STOPS 一致)
+const COLOR_STOPS = [
+    [1.0, 1.0, 1.0],   // 白
+    [1.0, 0.94, 0.0],   // 黄
+    [1.0, 0.55, 0.0],   // 橙
+    [1.0, 0.0, 0.0],    // 红
+];
+
+function valueToRGB(v) {
+    v = Math.max(0, Math.min(1, v));
+    const n = COLOR_STOPS.length;
+    const seg = 1.0 / (n - 1);
+    let idx = Math.floor(v / seg);
+    if (idx >= n - 1) idx = n - 2;
+    const t = (v - idx * seg) / seg;
+    const c1 = COLOR_STOPS[idx], c2 = COLOR_STOPS[idx + 1];
+    return [
+        c1[0] + (c2[0] - c1[0]) * t,
+        c1[1] + (c2[1] - c1[1]) * t,
+        c1[2] + (c2[2] - c1[2]) * t,
+    ];
+}
+
+// 星位点 (标准五子棋9个星位)
+const STAR_POINTS = [[3,3],[3,7],[3,11],[7,3],[7,7],[7,11],[11,3],[11,7],[11,11]];
+
+// 模拟棋盘状态 (逐步递增落子)
+function makeBoardState(step) {
+    // 模拟对局落子序列: 黑白交替，从天元开始
+    const board = new Array(225).fill(0);
+    const moves = [
+        [7,7], [7,8], [6,7], [8,6], [6,6], [8,8], [5,5], [9,9],
+        [5,7], [8,5], [6,8], [7,6], [4,4], [9,10], [4,7]
+    ];
+    for (let s = 0; s < step; s++) {
+        const [r, c] = moves[s];
+        board[r * 15 + c] = (s % 2 === 0) ? 1 : 2; // 1=黑, 2=白
+    }
+    return { board, movePos: moves[step - 1] || null };
+}
+
+// 模拟原始输出概率分布 (每步不同)
+function makeRawOutput(step) {
+    const probs = new Array(225).fill(0.01);
+    // 在落子位附近概率较高
+    const moveR = [7,7,8,6,6,8,5,9,7,5,8,6,4,10,7][step - 1] || 7;
+    const moveC = [7,8,7,6,6,8,5,9,7,5,8,6,4,10,7][step - 1] || 7;
+    // 落子位概率最高
+    probs[moveR * 15 + moveC] = 0.6;
+    // 周围概率较高
+    for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+            const nr = moveR + dr, nc = moveC + dc;
+            if (nr >= 0 && nr < 15 && nc >= 0 && nc < 15) {
+                probs[nr * 15 + nc] = Math.max(probs[nr * 15 + nc], 0.15);
+            }
+        }
+    }
+    return probs;
+}
+
+// 模拟温度处理分布 (与原始分布形状相似但更平滑)
+function makeTempOutput(step) {
+    const raw = makeRawOutput(step);
+    const temp = new Array(225);
+    for (let i = 0; i < 225; i++) {
+        // T=1.0 时温度分布与原始相近，但稍微更均匀
+        temp[i] = raw[i] * 0.8 + 0.02;
+    }
+    return temp;
+}
+
+// ===== Canvas 渲染函数 =====
+function drawBoard(canvas, boardState, probs, isMoveStep, movePos) {
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    const cellW = W / BOARD_SIZE, cellH = H / BOARD_SIZE;
+
+    // 清空
+    ctx.clearRect(0, 0, W, H);
+
+    // 1) 棋盘底色
+    ctx.fillStyle = '#DEB887';
+    ctx.fillRect(0, 0, W, H);
+
+    // 2) 热力图色块 (仅在空位上, 不覆盖已落子位和落子位)
+    if (probs) {
+        const maxProb = Math.max(...probs);
+        for (let r = 0; r < BOARD_SIZE; r++) {
+            for (let c = 0; c < BOARD_SIZE; c++) {
+                const idx = r * 15 + c;
+                if (boardState[idx] !== 0 && !(isMoveStep && movePos && r === movePos[0] && c === movePos[1])) continue; // 已落子位不画热力图；落子位虽然是"已落子"但视为空位，需要画热力图
+                const normalized = probs[idx] / Math.max(maxProb, 0.001);
+                const rgb = valueToRGB(normalized);
+                ctx.fillStyle = `rgba(${Math.round(rgb[0]*255)},${Math.round(rgb[1]*255)},${Math.round(rgb[2]*255)},0.65)`;
+                ctx.fillRect(c * cellW, r * cellH, cellW, cellH);
+            }
+        }
+    }
+
+    // 3) 网格线 (在热力图之后绘制，确保可见)
+    ctx.strokeStyle = '#8B7355';
+    ctx.lineWidth = 0.5;
+    for (let i = 0; i <= BOARD_SIZE; i++) {
+        ctx.beginPath(); ctx.moveTo(i * cellW, 0); ctx.lineTo(i * cellW, H); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, i * cellH); ctx.lineTo(W, i * cellH); ctx.stroke();
+    }
+
+    // 4) 星位点 (跳过落子位，避免遮挡热力图)
+    ctx.fillStyle = '#5D4037';
+    for (const [sr, sc] of STAR_POINTS) {
+        if (isMoveStep && movePos && sr === movePos[0] && sc === movePos[1]) continue;
+        ctx.beginPath();
+        ctx.arc(sc * cellW + cellW/2, sr * cellH + cellH/2, 2, 0, Math.PI*2);
+        ctx.fill();
+    }
+
+    // 5) 棋子 (非落子位)
+    const stoneR = cellW * 0.35;
+    for (let r = 0; r < BOARD_SIZE; r++) {
+        for (let c = 0; c < BOARD_SIZE; c++) {
+            const idx = r * 15 + c;
+            if (boardState[idx] === 0) continue; // 空位跳过
+            // 落子位不画棋子
+            if (isMoveStep && movePos && r === movePos[0] && c === movePos[1]) continue;
+            const cx = c * cellW + cellW/2, cy = r * cellH + cellH/2;
+            if (boardState[idx] === 1) {
+                // 黑棋
+                ctx.fillStyle = '#222';
+                ctx.beginPath(); ctx.arc(cx, cy, stoneR, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#555';
+                ctx.beginPath(); ctx.arc(cx - 1, cy - 1, stoneR*0.4, 0, Math.PI*2); ctx.fill();
+            } else {
+                // 白棋
+                ctx.fillStyle = '#fff';
+                ctx.beginPath(); ctx.arc(cx, cy, stoneR, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = '#999';
+                ctx.lineWidth = 0.5;
+                ctx.beginPath(); ctx.arc(cx, cy, stoneR, 0, Math.PI*2); ctx.stroke();
+            }
+        }
+    }
+
+    // 6) 落子位绿色边框 (1.5px细线，不遮挡格子内部颜色)
+    if (isMoveStep && movePos) {
+        const [mr, mc] = movePos;
+        ctx.strokeStyle = '#0d6b2e';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(mc * cellW, mr * cellH, cellW, cellH);
+    }
+}
+
+// ===== 占位图渲染 =====
+function drawPlaceholder(canvas, text) {
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    ctx.fillStyle = '#D0D0D0';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#999';
+    ctx.font = 'bold 14px "Microsoft YaHei"';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, W/2, H/2);
+}
+
+// ===== 构建热力图DOM =====
+function buildHeatmapGrid() {
+    const container = document.getElementById('heatmapContainer');
+    container.innerHTML = '';
+
+    const grid = document.createElement('div');
+    grid.className = 'heatmap-grid';
+
+    // 步数标注行
+    const stepRow = document.createElement('div');
+    stepRow.className = 'step-labels-row';
+    const stepLabelSpacer = document.createElement('div');
+    stepLabelSpacer.className = 'row-label';
+    stepRow.appendChild(stepLabelSpacer);
+    const stepCells = document.createElement('div');
+    stepCells.className = 'heatmap-cells-row';
+    for (let s = 1; s <= NUM_STEPS; s++) {
+        const label = document.createElement('div');
+        label.className = 'step-label';
+        label.textContent = `Step ${s}`;
+        stepCells.appendChild(label);
+    }
+    stepRow.appendChild(stepCells);
+    grid.appendChild(stepRow);
+
+    // 三行数据
+    const rowLabels = ['原始输出', '温度分布', '样本分布'];
+
+    for (let row = 0; row < 3; row++) {
+        const rowDiv = document.createElement('div');
+        rowDiv.className = 'heatmap-row';
+        const labelDiv = document.createElement('div');
+        labelDiv.className = 'row-label';
+        labelDiv.textContent = rowLabels[row];
+        rowDiv.appendChild(labelDiv);
+        const cellsDiv = document.createElement('div');
+        cellsDiv.className = 'heatmap-cells-row';
+
+        for (let s = 1; s <= NUM_STEPS; s++) {
+            const wrap = document.createElement('div');
+            wrap.className = 'board-canvas-wrap';
+            const canvas = document.createElement('canvas');
+            canvas.width = 180;
+            canvas.height = 180;
+            wrap.appendChild(canvas);
+            cellsDiv.appendChild(wrap);
+
+            const { board, movePos } = makeBoardState(s);
+            const isMoveStep = true; // 每步都标记落子位
+
+            if (row === 0) {
+                // Row 1: 原始输出 (每步都有)
+                drawBoard(canvas, board, makeRawOutput(s), isMoveStep, movePos);
+            } else if (row === 1) {
+                // Row 2: 温度分布 (仅采样步有)
+                if (s <= TEMP_MOVES) {
+                    drawBoard(canvas, board, makeTempOutput(s), isMoveStep, movePos);
+                } else {
+                    drawPlaceholder(canvas, 'argmax');
+                }
+            } else if (row === 2) {
+                // Row 3: 样本分布 (仅最后一步有, winning_move模式)
+                if (s === NUM_STEPS) {
+                    // 样本分布: winning_move模式, 最后一步output=1.0在落子位,其余0
+                    const sampleProbs = new Array(225).fill(0);
+                    if (movePos) {
+                        sampleProbs[movePos[0] * 15 + movePos[1]] = 1.0;
+                    }
+                    drawBoard(canvas, board, sampleProbs, isMoveStep, movePos);
+                } else {
+                    drawPlaceholder(canvas, '无样本');
+                }
+            }
+        }
+
+        rowDiv.appendChild(cellsDiv);
+        grid.appendChild(rowDiv);
+    }
+
+    container.appendChild(grid);
+}
+
+// ===== 初始化 =====
+buildHeatmapGrid();
+</script>
+
+</body>
+</html>
