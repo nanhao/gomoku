@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>create_samples 验收工具 — 空状态原型</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: "Microsoft YaHei", "SimHei", sans-serif; background: #f5f5f5; color: #333; }
+.app-header { background: #2c3e50; color: #ecf0f1; padding: 12px 24px; font-size: 18px; font-weight: bold; }
+.app-main { display: flex; gap: 16px; padding: 16px; min-height: calc(100vh - 52px); }
+.left-panel { width: 320px; display: flex; flex-direction: column; gap: 12px; }
+
+/* 参数区 */
+.param-section { background: #fff; border-radius: 6px; padding: 16px; border: 1px solid #ddd; }
+.param-section h2 { font-size: 15px; margin-bottom: 12px; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 6px; }
+.param-row { display: flex; align-items: center; margin-bottom: 8px; gap: 8px; }
+.param-row label { width: 110px; font-size: 13px; text-align: right; color: #555; flex-shrink: 0; }
+.param-row input[type="text"], .param-row input[type="number"], .param-row select { flex: 1; padding: 4px 8px; border: 1px solid #ccc; border-radius: 3px; font-size: 13px; }
+.param-row .switch-wrap { flex: 1; display: flex; align-items: center; gap: 6px; }
+.param-row .switch-wrap input[type="checkbox"] { width: 16px; height: 16px; }
+.param-row .switch-wrap .switch-label { font-size: 13px; color: #666; }
+.btn-run { display: block; width: 100%; padding: 8px; margin-top: 12px; background: #3498db; color: #fff; border: none; border-radius: 4px; font-size: 14px; font-weight: bold; cursor: pointer; }
+.btn-run:hover { background: #2980b9; }
+
+/* 脚本输出区 */
+.script-output-section { background: #1e1e1e; border-radius: 6px; padding: 12px 16px; border: 1px solid #444; min-height: 80px; }
+.script-output-section h2 { font-size: 15px; margin-bottom: 8px; color: #9cdcfe; border-bottom: 2px solid #4ec9b0; padding-bottom: 6px; }
+
+/* 温度信息区 */
+.temp-info-section { background: #fff; border-radius: 6px; padding: 12px 16px; border: 1px solid #ddd; }
+.temp-info-section h2 { font-size: 15px; margin-bottom: 8px; color: #2c3e50; border-bottom: 2px solid #e67e22; padding-bottom: 6px; }
+
+/* 对局列表区 */
+.game-list-section { background: #fff; border-radius: 6px; padding: 12px; border: 1px solid #ddd; min-height: 200px; max-height: 300px; display: flex; flex-direction: column; }
+.game-list-section h2 { font-size: 15px; margin-bottom: 8px; color: #2c3e50; border-bottom: 2px solid #27ae60; padding-bottom: 6px; }
+
+/* 热力图区 */
+.right-panel { flex: 1; background: #fff; border-radius: 6px; padding: 16px; border: 1px solid #ddd; display: flex; flex-direction: column; }
+.right-panel h2 { font-size: 15px; margin-bottom: 12px; color: #2c3e50; border-bottom: 2px solid #e67e22; padding-bottom: 6px; }
+
+/* 空状态通用样式 */
+.empty-state { display: flex; align-items: center; justify-content: center; min-height: 40px; color: #999; font-size: 13px; font-style: italic; }
+
+@media (max-width: 800px) { .app-main { flex-direction: column; } .left-panel { width: 100%; } }
+</style>
+</head>
+<body>
+
+<div class="app-header">create_samples 验收工具</div>
+
+<div class="app-main">
+    <!-- ===== 左侧面板 ===== -->
+    <div class="left-panel">
+        <!-- 参数区 -->
+        <div class="param-section">
+            <h2>参数配置</h2>
+            <div class="param-row">
+                <label>model</label>
+                <select id="modelSelect">
+                    <option value="" disabled selected>— 请选择模型 —</option>
+                    <option value="random">random</option>
+                    <option value="fc_v1">fc_v1</option>
+                    <option value="cnn_v1">cnn_v1</option>
+                    <option value="cnn_v2">cnn_v2</option>
+                    <option value="cnn_v3.1">cnn_v3.1</option>
+                    <option value="cnn_v3.2">cnn_v3.2</option>
+                    <option value="cnn_v3.3">cnn_v3.3</option>
+                </select>
+            </div>
+            <div class="param-row"><label>mode</label><select><option value="winning_move" selected>winning_move</option><option value="winner_path">winner_path</option></select></div>
+            <div class="param-row"><label>games</label><input type="number" value="100"></div>
+            <div class="param-row"><label>output</label><input type="text" placeholder="必填，如 ai/train_data/samples.json"></div>
+            <div class="param-row"><label>数据增强</label><div class="switch-wrap"><input type="checkbox"><span class="switch-label">禁用 (--no-augment)</span></div></div>
+            <div class="param-row"><label>温度采样</label><div class="switch-wrap"><input type="checkbox"><span class="switch-label">禁用 (--no-temp-sampling)</span></div></div>
+            <div class="param-row"><label>temperature</label><input type="number" value="1.0" step="0.1" min="0.01"></div>
+            <div class="param-row"><label>temp-moves</label><input type="number" value="12" min="0"></div>
+            <div class="param-row"><label>temp-side</label><select><option value="both" selected>both</option><option value="black">black</option><option value="white">white</option><option value="random">random</option></select></div>
+            <div class="param-row"><label>temp-seed</label><input type="number" placeholder="可选，用于复现"></div>
+            <button class="btn-run">▶ 执行</button>
+        </div>
+
+        <!-- 脚本输出区（空状态） -->
+        <div class="script-output-section">
+            <h2>脚本输出</h2>
+            <div class="empty-state">请先执行脚本</div>
+        </div>
+
+        <!-- 温度信息区（空状态） -->
+        <div class="temp-info-section">
+            <h2>温度采样信息</h2>
+            <div class="empty-state">请先执行脚本</div>
+        </div>
+
+        <!-- 对局列表区（空状态） -->
+        <div class="game-list-section">
+            <h2>对局列表</h2>
+            <div class="empty-state" style="flex:1;">请先执行脚本</div>
+        </div>
+    </div>
+
+    <!-- ===== 热力图区（空状态） ===== -->
+    <div class="right-panel">
+        <h2>热力图对比</h2>
+        <div class="empty-state" style="flex:1;">无数据</div>
+    </div>
+</div>
+
+</body>
+</html>

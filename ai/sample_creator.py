@@ -108,12 +108,13 @@ class SampleCreator:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _build_sample(input_vector: list, position: list) -> Dict:
+    def _build_sample(input_vector: list, position: list, step_id: str = None) -> Dict:
         """构造单个 sample：output 落子位=1.0（行/列任一越界则保持全 0），mask 全 1
 
         Args:
             input_vector: 226 维棋盘+玩家向量
             position: [x, y] 落子坐标
+            step_id: 全局唯一步标识，从 record.json 透传；None 时不写入（向后兼容）
 
         Returns:
             sample 字典
@@ -128,16 +129,20 @@ class SampleCreator:
         if 0 <= r < 15 and 0 <= c < 15:
             output[r * 15 + c] = 1.0
         mask = [1] * 225
-        return {
-            "input": input_vector,
-            "output": output,
-            "mask": mask,
-        }
+        sample = {}
+        # step_id 首字段：仅当 record.json 中含 step_id 时写入样本
+        if step_id is not None:
+            sample["step_id"] = step_id
+        sample["input"] = input_vector
+        sample["output"] = output
+        sample["mask"] = mask
+        return sample
 
     def _build_winning_move_samples(self, history: list) -> List[Dict]:
         """winning_move 模式：仅取最后一步"""
         last_step = history[-1]
-        return [self._build_sample(last_step["input"], last_step["position"])]
+        step_id = last_step.get("step_id")
+        return [self._build_sample(last_step["input"], last_step["position"], step_id)]
 
     def _build_winner_path_samples(self, winner: int, history: list) -> List[Dict]:
         """winner_path 模式：取获胜方每一步
@@ -161,11 +166,14 @@ class SampleCreator:
             output = self._build_winner_path_output(
                 step["output"], step["position"]
             )
-            samples.append({
-                "input": step["input"],
-                "output": output,
-                "mask": [1] * 225,
-            })
+            # 构造样本，step_id 为首字段
+            s = {}
+            if "step_id" in step:
+                s["step_id"] = step["step_id"]
+            s["input"] = step["input"]
+            s["output"] = output
+            s["mask"] = [1] * 225
+            samples.append(s)
         return samples
 
     @staticmethod
@@ -304,11 +312,14 @@ class SampleCreator:
             new_board = SampleCreator._apply_transform(board, tid)
             new_output = SampleCreator._apply_transform(output, tid)
             new_mask = SampleCreator._apply_transform(mask, tid)
-            augmented.append({
-                "input": new_board + [player],
-                "output": new_output,
-                "mask": new_mask
-            })
+            # 构造增强变体，step_id 为首字段
+            aug = {}
+            if "step_id" in sample:
+                aug["step_id"] = sample["step_id"]
+            aug["input"] = new_board + [player]
+            aug["output"] = new_output
+            aug["mask"] = new_mask
+            augmented.append(aug)
         return augmented
 
     def create_from_round_dir(self, round_dir: str) -> List[Dict]:

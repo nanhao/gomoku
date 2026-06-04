@@ -1,0 +1,104 @@
+@startuml game_click_flow
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+title 点击对局查看热力图交互流程
+
+actor 用户 as User
+participant "前端\n(对局列表区)" as GL
+participant "前端\n(热力图区)" as HM
+participant "Flask 后端" as BE
+participant "data_parser.py\n(数据解析)" as DP
+participant "文件系统" as FS
+
+== 初始状态：对局列表已加载 ==
+
+User -> GL: 点击第3局元素
+activate GL
+
+GL -> GL: 第3局高亮选中\n其他局取消高亮
+
+GL -> BE: GET /api/create-samples/games/3/steps?round_dir=xxx&sample_path=xxx
+activate BE
+
+BE -> DP: parse_game_steps(round_dir, game_id=3, sample_path)
+activate DP
+
+DP -> FS: 读取 {round_dir}/3/record.json
+activate FS
+FS --> DP: record JSON
+deactivate FS
+
+DP -> DP: 解析 history\n提取 board, raw_output,\nsampling_probs, strategy, position
+
+DP -> FS: 读取样本输出文件\n({output_path})
+activate FS
+FS --> DP: 样本 JSON 列表
+deactivate FS
+
+DP -> DP: 样本匹配\n用 step_id 查找\n匹配成功的步 → sample_output
+
+DP --> BE: StepData 列表
+deactivate DP
+
+BE --> GL: 200 OK\n{game_id, winner, steps: [...]}
+deactivate BE
+
+GL -> HM: 传递 steps 数据
+activate HM
+
+HM -> HM: 清空热力图区
+
+HM -> HM: 更新标题\n"热力图对比 — 第3局（黑胜）"
+
+loop 遍历 steps
+    HM -> HM: 创建步数列\n标注 "Step N"
+
+    alt Row 1: raw_output 存在（始终为真）
+        HM -> HM: Canvas 绘制热力图\n棋盘底色/热力图色块/棋子/绿框
+    end
+
+    alt Row 2: sampling_probs != null
+        HM -> HM: Canvas 绘制温度分布热力图\n(同上渲染流程)
+    else Row 2: sampling_probs == null
+        HM -> HM: 绘制占位图\n- 浅灰底色 (#D0D0D0)\n- 居中文字 "argmax"
+    end
+
+    alt Row 3: sample_output != null
+        HM -> HM: Canvas 绘制样本分布热力图\n(同上渲染流程)
+    else Row 3: sample_output == null
+        HM -> HM: 绘制占位图\n- 浅灰底色 (#D0D0D0)\n- 居中文字 "无样本"
+    end
+end
+
+HM --> User: 显示第3局三行热力图
+
+deactivate HM
+deactivate GL
+
+== 平局对局点击 ==
+
+User -> GL: 点击第5局（平局，灰化）
+GL -> GL: 第5局高亮选中
+GL -> BE: GET /api/create-samples/games/5/steps?round_dir=xxx&sample_path=xxx
+BE -> DP: parse_game_steps(round_dir, game_id=5)
+DP -> FS: 读取 record.json
+FS --> DP: record JSON (winner=3)
+DP -> FS: 读取样本文件
+FS --> DP: 样本列表
+DP -> DP: 匹配 → 无匹配\n(平局无样本，step_id 无对应)
+DP --> BE: StepData 列表\n(所有步 sample_output=null)
+BE --> GL: {game_id:5, winner:3, steps:[...]}
+
+GL -> HM: 传递 steps 数据
+HM -> HM: 标题追加 "平局无样本"
+HM -> HM: Row 3 全部为占位图
+HM --> User: 显示第5局热力图\n(Row 3 全"无样本"占位)
+
+== Hover 交互 ==
+
+User -> HM: 鼠标悬停某热力图位置
+HM -> HM: 计算悬停的 (row, col)\n查找对应的概率值
+HM --> User: 显示 Tooltip\n"位置(7,8): 0.623"
+
+@enduml

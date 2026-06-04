@@ -300,5 +300,42 @@ class TestWinnerPathFromRoundDir(unittest.TestCase):
             self.assertEqual(len(samples), 9)
 
 
+class TestWinnerPathStepId(unittest.TestCase):
+    """winner_path 模式 step_id 透传测试"""
+
+    def test_step_id_passthrough(self):
+        """record.json 中含 step_id 时，winner_path 样本透传该字段"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # 黑胜、3 步：获胜方步 = [0, 2]
+            history = [
+                {"step_id": "sid-0", "input": [0.0] * 226, "output": [0.0] * 225, "position": [0, 0]},
+                {"step_id": "sid-1", "input": [1.0] * 226, "output": [0.0] * 225, "position": [0, 1]},
+                {"step_id": "sid-2", "input": [2.0] * 226, "output": [0.0] * 225, "position": [0, 2]},
+            ]
+            record = {"winner": 1, "history": history}
+            path = _write_record(tmpdir, record)
+
+            creator = SampleCreator(mode="winner_path")
+            samples = creator.create([path])
+
+            # 获胜方步 = [0, 2]
+            self.assertEqual(len(samples), 2)
+            self.assertEqual(samples[0]["step_id"], "sid-0")
+            self.assertEqual(samples[1]["step_id"], "sid-2")
+
+    def test_no_step_id_no_field_in_sample(self):
+        """旧格式 record.json 无 step_id 时，winner_path 样本也不含该字段"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            record = {"winner": 1, "history": _make_history(3)}
+            path = _write_record(tmpdir, record)
+
+            creator = SampleCreator(mode="winner_path")
+            samples = creator.create([path])
+
+            self.assertGreater(len(samples), 0)
+            for s in samples:
+                self.assertNotIn("step_id", s)
+
+
 if __name__ == '__main__':
     unittest.main()

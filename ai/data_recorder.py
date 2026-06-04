@@ -7,6 +7,7 @@
 import os
 import json
 import logging
+import uuid
 from typing import List, Tuple
 
 from ai.constants import AI_DATA_DIR
@@ -118,6 +119,7 @@ class DataRecorder:
         self._ensure_game_id(game_id)
 
         entry = {
+            "step_id": str(uuid.uuid4()),
             "input": input_vector,
             "output": output_vector,
             "position": list(position)
