@@ -41,3 +41,5 @@ temp/
 tests/app/edge/_test_saves/
 tests/game/save/
 tests/app/primary/_test_saves/
+
+.qoder/repowiki
