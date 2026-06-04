@@ -5,8 +5,8 @@
 - POST /api/create-samples/execute:        同步执行子进程
 - GET  /api/create-samples/games/<id>/steps: 获取步数据
 
-零耦合：不 import 任何 ai/ 包模块。
-模型列表通过子进程调用 registry 获取。
+UI 层职责：仅负责调用业务代码（通过子进程）和渲染界面，禁止包含任何业务逻辑。
+模型列表通过子进程调用 ai.registry 获取。
 """
 
 import json

@@ -1,24 +1,22 @@
 """executor 模块 — 子进程同步执行与 round_dir 发现
 
 负责：
-1. build_cli_command: 将前端参数构造为 CLI 命令字符串
+1. build_cli_command: 将前端参数构造为 CLI 命令参数列表
 2. execute: 同步阻塞执行子进程，收集输出，发现 round_dir
 3. discover_round_dir: 通过差集 S_after - S_before 发现本轮数据目录
-
-零耦合：不 import 任何 ai/ 包模块，仅使用标准库 subprocess。
 """
 
 import os
 import subprocess
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 
 # ------------------------------------------------------------------
 # CLI 命令构造
 # ------------------------------------------------------------------
 
-def build_cli_command(params: Dict) -> str:
-    """将前端参数构造为 CLI 命令字符串
+def build_cli_command(params: Dict) -> List[str]:
+    """将前端参数构造为 CLI 命令参数列表（shell=False 安全调用）
 
     规则：
     - 必填参数（model、output）始终追加
@@ -30,19 +28,19 @@ def build_cli_command(params: Dict) -> str:
         params: 前端传入的参数字典
 
     Returns:
-        完整 CLI 命令字符串
+        CLI 命令参数列表（可直接传给 subprocess.Popen）
     """
     parts = ["python", "ai/create_samples.py"]
 
     # 必填参数
-    parts.append(f"--model {params['model']}")
-    parts.append(f"--output {params['output']}")
+    parts.extend(["--model", str(params["model"])])
+    parts.extend(["--output", str(params["output"])])
 
     # 有默认值的参数
     if "mode" in params:
-        parts.append(f"--mode {params['mode']}")
+        parts.extend(["--mode", str(params["mode"])])
     if "games" in params:
-        parts.append(f"--games {params['games']}")
+        parts.extend(["--games", str(params["games"])])
 
     # 布尔开关：仅 true 时追加
     if params.get("no_augment"):
@@ -52,17 +50,17 @@ def build_cli_command(params: Dict) -> str:
 
     # 温度参数
     if "temperature" in params:
-        parts.append(f"--temperature {params['temperature']}")
+        parts.extend(["--temperature", str(params["temperature"])])
     if "temp_moves" in params:
-        parts.append(f"--temp-moves {params['temp_moves']}")
+        parts.extend(["--temp-moves", str(params["temp_moves"])])
     if "temp_side" in params:
-        parts.append(f"--temp-side {params['temp_side']}")
+        parts.extend(["--temp-side", str(params["temp_side"])])
 
     # 可选数值：仅非 null 时追加
     if params.get("temp_seed") is not None:
-        parts.append(f"--temp-seed {params['temp_seed']}")
+        parts.extend(["--temp-seed", str(params["temp_seed"])])
 
-    return " ".join(parts)
+    return parts
 
 
 # ------------------------------------------------------------------
@@ -70,15 +68,13 @@ def build_cli_command(params: Dict) -> str:
 # ------------------------------------------------------------------
 
 def execute(params: Dict, project_root: str = None,
-            ai_data_dir: str = None,
-            command_override: str = None) -> Dict:
+            ai_data_dir: str = None) -> Dict:
     """同步阻塞执行子进程，收集输出，发现 round_dir
 
     Args:
         params: 前端传入的参数字典
         project_root: 项目根目录（cwd），默认当前工作目录
         ai_data_dir: ai_data 目录路径，默认 'ai/ai_data'
-        command_override: 覆盖命令字符串（测试用，替代 build_cli_command 产出）
 
     Returns:
         ExecuteResult 字典，含 status、command、output、returncode、
@@ -92,18 +88,18 @@ def execute(params: Dict, project_root: str = None,
     # 记录执行前的目录集合
     s_before = _scan_dir_names(ai_data_dir)
 
-    # 构造命令
-    command = command_override or build_cli_command(params)
+    # 构造命令参数列表
+    cmd_parts = build_cli_command(params)
 
-    # 启动子进程（强制 UTF-8 输出，避免 Windows 中文乱码）
+    # 启动子进程（shell=False 避免注入；强制 UTF-8 输出，避免 Windows 中文乱码）
     env = os.environ.copy()
     env["PYTHONIOENCODING"] = "utf-8"
     process = subprocess.Popen(
-        command,
+        cmd_parts,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         cwd=project_root,
-        shell=True,
+        shell=False,
         env=env,
     )
 
@@ -111,9 +107,12 @@ def execute(params: Dict, project_root: str = None,
     output_bytes, _ = process.communicate()
     output_text = output_bytes.decode("utf-8", errors="replace")
 
+    # 用于展示的命令字符串
+    command_display = " ".join(cmd_parts)
+
     if process.returncode == 0:
         # 成功路径：发现 round_dir
-        round_dir_rel = discover_round_dir(ai_data_dir, s_before)
+        round_dir_rel = discover_round_dir(ai_data_dir, s_before, project_root)
 
         # 扫描 round_dir 获取对局列表
         games = []
@@ -127,7 +126,7 @@ def execute(params: Dict, project_root: str = None,
 
         return {
             "status": "completed",
-            "command": command,
+            "command": command_display,
             "output": output_text,
             "returncode": 0,
             "round_dir": round_dir_rel,
@@ -138,7 +137,7 @@ def execute(params: Dict, project_root: str = None,
         # 失败路径
         return {
             "status": "error",
-            "command": command,
+            "command": command_display,
             "output": output_text,
             "returncode": process.returncode,
             "round_dir": None,
@@ -168,12 +167,14 @@ def _scan_dir_names(ai_data_dir: str) -> set:
     }
 
 
-def discover_round_dir(ai_data_dir: str, s_before: set) -> Optional[str]:
+def discover_round_dir(ai_data_dir: str, s_before: set,
+                       project_root: str = None) -> Optional[str]:
     """通过差集 S_after - S_before 发现本轮数据目录
 
     Args:
         ai_data_dir: ai_data 目录路径
         s_before: 执行前的子目录名集合
+        project_root: 项目根目录，用于计算相对路径
 
     Returns:
         发现的 round_dir 相对路径（相对于 project_root），
@@ -185,12 +186,9 @@ def discover_round_dir(ai_data_dir: str, s_before: set) -> Optional[str]:
     if not diff:
         return None
 
-    # 取排序后最后一个（最新创建的目录）
+    # 取差集中任意一个目录名，拼接完整路径后计算相对路径
     newest = sorted(diff)[-1]
-    # 返回相对于 project_root 的路径
-    # ai_data_dir 是 project_root/ai/ai_data
-    # round_dir 相对路径 = ai/ai_data/{newest}
-    # 通过 ai_data_dir 路径计算相对部分
-    parent = os.path.basename(ai_data_dir)  # "ai_data"
-    grandparent = os.path.basename(os.path.dirname(ai_data_dir))  # "ai"
-    return os.path.join(grandparent, parent, newest)
+    full_path = os.path.join(ai_data_dir, newest)
+    if project_root:
+        return os.path.relpath(full_path, project_root)
+    return newest

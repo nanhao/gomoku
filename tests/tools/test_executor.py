@@ -9,6 +9,7 @@ discover_round_dir（差集发现）。
 import os
 import tempfile
 import subprocess
+from unittest import mock
 
 import pytest
 
@@ -30,8 +31,10 @@ class TestBuildCliCommand:
         """必填参数始终追加"""
         params = {"model": "cnn_v1", "output": "ai/train_data/samples.json"}
         cmd = build_cli_command(params)
-        assert "--model cnn_v1" in cmd
-        assert "--output ai/train_data/samples.json" in cmd
+        assert "--model" in cmd
+        assert "cnn_v1" in cmd
+        assert "--output" in cmd
+        assert "ai/train_data/samples.json" in cmd
 
     def test_default_values(self):
         """默认值参数追加"""
@@ -45,11 +48,11 @@ class TestBuildCliCommand:
             "temp_side": "both",
         }
         cmd = build_cli_command(params)
-        assert "--mode winning_move" in cmd
-        assert "--games 100" in cmd
-        assert "--temperature 1.0" in cmd
-        assert "--temp-moves 12" in cmd
-        assert "--temp-side both" in cmd
+        assert "--mode" in cmd and "winning_move" in cmd
+        assert "--games" in cmd and "100" in cmd
+        assert "--temperature" in cmd and "1.0" in cmd
+        assert "--temp-moves" in cmd and "12" in cmd
+        assert "--temp-side" in cmd and "both" in cmd
 
     def test_boolean_flags_true_only(self):
         """布尔开关仅 true 时追加 flag"""
@@ -93,13 +96,21 @@ class TestBuildCliCommand:
             "temp_seed": 42,
         }
         cmd = build_cli_command(params)
-        assert "--temp-seed 42" in cmd
+        assert "--temp-seed" in cmd
+        assert "42" in cmd
 
     def test_command_starts_with_python(self):
         """命令以 'python ai/create_samples.py' 开头"""
         params = {"model": "cnn_v1", "output": "test.json"}
         cmd = build_cli_command(params)
-        assert cmd.startswith("python ai/create_samples.py")
+        assert cmd[0] == "python"
+        assert cmd[1] == "ai/create_samples.py"
+
+    def test_returns_list_not_string(self):
+        """返回值为 list，用于 shell=False 安全调用"""
+        params = {"model": "cnn_v1", "output": "test.json"}
+        cmd = build_cli_command(params)
+        assert isinstance(cmd, list)
 
 
 # ------------------------------------------------------------------
@@ -111,24 +122,26 @@ class TestExecute:
 
     def test_success_path(self, tmp_path):
         """T3: 子进程成功 → status=completed + returncode=0"""
-        # 创建一个简单的 Python 脚本作为"子进程"
+        # 创建一个简单的 Python 脚本作为 mock 子进程
         script = os.path.join(tmp_path, "mock_script.py")
         with open(script, "w", encoding="utf-8") as f:
             f.write("import sys; print('OK'); sys.exit(0)\n")
 
-        # 创建临时 ai_data_dir
         ai_data_dir = os.path.join(tmp_path, "ai_data")
         os.makedirs(ai_data_dir)
 
         params = {"model": "test", "output": "test.json"}
-        # 使用 mock 脚本替代真实 create_samples.py
-        # 通过修改命令前缀来测试
-        result = execute(
-            params,
-            project_root=str(tmp_path),
-            ai_data_dir=ai_data_dir,
-            command_override=f"python {script}",
-        )
+        mock_cmd = ["python", script]
+
+        with mock.patch(
+            "tools.create_samples_tool.executor.build_cli_command",
+            return_value=mock_cmd,
+        ):
+            result = execute(
+                params,
+                project_root=str(tmp_path),
+                ai_data_dir=ai_data_dir,
+            )
 
         assert result["status"] == "completed"
         assert result["returncode"] == 0
@@ -144,22 +157,26 @@ class TestExecute:
         os.makedirs(ai_data_dir)
 
         params = {"model": "bad_model", "output": "test.json"}
-        result = execute(
-            params,
-            project_root=str(tmp_path),
-            ai_data_dir=ai_data_dir,
-            command_override=f"python {script}",
-        )
+        mock_cmd = ["python", script]
+
+        with mock.patch(
+            "tools.create_samples_tool.executor.build_cli_command",
+            return_value=mock_cmd,
+        ):
+            result = execute(
+                params,
+                project_root=str(tmp_path),
+                ai_data_dir=ai_data_dir,
+            )
 
         assert result["status"] == "error"
         assert result["returncode"] == 1
         assert "Error occurred" in result["output"]
-        # error 时 round_dir 和 output_path 为 null
         assert result["round_dir"] is None
         assert result["output_path"] is None
 
     def test_command_recorded(self, tmp_path):
-        """execute 结果包含实际执行的命令"""
+        """execute 结果包含实际执行的命令（展示用字符串）"""
         script = os.path.join(tmp_path, "mock_script.py")
         with open(script, "w", encoding="utf-8") as f:
             f.write("import sys; print('OK'); sys.exit(0)\n")
@@ -168,15 +185,19 @@ class TestExecute:
         os.makedirs(ai_data_dir)
 
         params = {"model": "test", "output": "test.json"}
-        override_cmd = f"python {script}"
-        result = execute(
-            params,
-            project_root=str(tmp_path),
-            ai_data_dir=ai_data_dir,
-            command_override=override_cmd,
-        )
+        mock_cmd = ["python", script]
 
-        assert result["command"] == override_cmd
+        with mock.patch(
+            "tools.create_samples_tool.executor.build_cli_command",
+            return_value=mock_cmd,
+        ):
+            result = execute(
+                params,
+                project_root=str(tmp_path),
+                ai_data_dir=ai_data_dir,
+            )
+
+        assert result["command"] == f"python {script}"
 
 
 # ------------------------------------------------------------------
@@ -190,17 +211,15 @@ class TestDiscoverRoundDir:
         """差集为单个目录 → 返回该目录路径"""
         ai_data_dir = os.path.join(tmp_path, "ai_data")
         os.makedirs(ai_data_dir)
-        # 模拟执行前：空目录
         s_before = set()
-        # 执行后：新增一个目录
         os.makedirs(os.path.join(ai_data_dir, "cnn_v1_battle_1"))
 
-        result = discover_round_dir(ai_data_dir, s_before)
+        result = discover_round_dir(ai_data_dir, s_before, project_root=str(tmp_path))
         assert result is not None
         assert "cnn_v1_battle_1" in result
 
-    def test_multiple_new_dirs_returns_first(self, tmp_path):
-        """差集为多个目录时 → 返回排序后最后一个（最新创建）"""
+    def test_multiple_new_dirs_returns_one(self, tmp_path):
+        """差集为多个目录时 → 返回排序后最后一个"""
         ai_data_dir = os.path.join(tmp_path, "ai_data")
         os.makedirs(ai_data_dir)
         s_before = set()
@@ -208,16 +227,14 @@ class TestDiscoverRoundDir:
         os.makedirs(os.path.join(ai_data_dir, "model_1"))
         os.makedirs(os.path.join(ai_data_dir, "model_2"))
 
-        result = discover_round_dir(ai_data_dir, s_before)
+        result = discover_round_dir(ai_data_dir, s_before, project_root=str(tmp_path))
         assert result is not None
-        # 差集不唯一时仍返回一个（选最后排序的）
         assert "model_2" in result
 
     def test_empty_diff_returns_none(self, tmp_path):
         """差集为空 → 返回 None"""
         ai_data_dir = os.path.join(tmp_path, "ai_data")
         os.makedirs(ai_data_dir)
-        # 执行前已有目录，执行后无新增
         os.makedirs(os.path.join(ai_data_dir, "existing_dir"))
         s_before = {"existing_dir"}
 

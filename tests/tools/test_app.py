@@ -12,6 +12,7 @@
 import json
 import os
 import tempfile
+from unittest import mock
 
 import pytest
 
@@ -104,26 +105,59 @@ class TestPostExecute:
     """测试执行端点"""
 
     def test_execute_returns_result(self, client):
-        """T3: 执行返回完整结果结构"""
-        # 注意：真实执行会调用 create_samples.py 子进程
-        # 在测试环境中，模型列表获取可能失败
-        # 这里仅测试 API 端点是否可达、参数是否被接收
+        """T3: 执行返回完整结果结构（mock 子进程，避免真实执行）"""
+        mock_result = {
+            "status": "completed",
+            "command": "python ai/create_samples.py --model random --output test.json --games 1",
+            "output": "mock output",
+            "returncode": 0,
+            "round_dir": "ai/ai_data/mock_round",
+            "output_path": "test.json",
+        }
         params = {
             "model": "random",
-            "output": "ai/train_data/test_samples.json",
+            "output": "test.json",
             "games": 1,
         }
-        resp = client.post(
-            "/api/create-samples/execute",
-            json=params,
-        )
-        # 无论子进程是否成功，API 都应返回 200
+        with mock.patch(
+            "tools.create_samples_tool.app.execute",
+            return_value=mock_result,
+        ):
+            resp = client.post(
+                "/api/create-samples/execute",
+                json=params,
+            )
         assert resp.status_code == 200
         data = resp.get_json()
-        assert "status" in data
-        assert "command" in data
-        assert "output" in data
-        assert "returncode" in data
+        assert data["status"] == "completed"
+        assert data["command"] is not None
+        assert data["output"] is not None
+        assert data["returncode"] == 0
+
+    def test_execute_error_result(self, client):
+        """执行返回错误状态时 API 仍正确传递结果"""
+        mock_result = {
+            "status": "error",
+            "command": "python ai/create_samples.py --model bad --output x.json",
+            "output": "Model not found",
+            "returncode": 1,
+            "round_dir": None,
+            "output_path": None,
+            "games": None,
+        }
+        params = {"model": "bad_model", "output": "x.json"}
+        with mock.patch(
+            "tools.create_samples_tool.app.execute",
+            return_value=mock_result,
+        ):
+            resp = client.post(
+                "/api/create-samples/execute",
+                json=params,
+            )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["status"] == "error"
+        assert data["returncode"] == 1
 
 
 # ------------------------------------------------------------------

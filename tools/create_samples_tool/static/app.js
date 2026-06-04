@@ -309,8 +309,13 @@ function renderHeatmap(gameData) {
     // 每行占位文字
     const placeholderTexts = [null, 'argmax', '无样本'];
 
-    // 存储每步的概率数据用于 hover
-    state.currentProbsData = [];
+    // 收集每步的概率数据用于 hover（在渲染循环之前收集，确保所有行可用）
+    state.currentProbsData = steps.map(step => ({
+        stepIndex: step.step_index,
+        raw_output: step.raw_output,
+        sampling_probs: step.sampling_probs,
+        sample_output: step.sample_output,
+    }));
 
     for (let row = 0; row < 3; row++) {
         const rowDiv = document.createElement('div');
@@ -325,16 +330,6 @@ function renderHeatmap(gameData) {
         for (let s = 0; s < steps.length; s++) {
             const step = steps[s];
             const probs = rowGetters[row](step);
-
-            // 收集概率数据用于 hover（仅 Row 1）
-            if (row === 0) {
-                state.currentProbsData.push({
-                    stepIndex: step.step_index,
-                    raw_output: step.raw_output,
-                    sampling_probs: step.sampling_probs,
-                    sample_output: step.sample_output,
-                });
-            }
 
             const wrap = document.createElement('div');
             wrap.className = 'board-canvas-wrap';

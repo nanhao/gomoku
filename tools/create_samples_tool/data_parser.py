@@ -6,7 +6,7 @@
 3. match_samples: 用 step_id 匹配样本到 history 各步
 4. infer_temp_side: 从 history 推断采样方
 
-零耦合：不 import 任何 ai/ 包模块。
+UI 层职责：仅负责数据解析和渲染，禁止包含任何业务逻辑。
 """
 
 import json
@@ -153,7 +153,8 @@ def match_samples(history: List[Dict], samples: List[Dict]) -> Dict[int, List[fl
     """用 step_id 将样本匹配到 history 各步
 
     匹配算法：构建 step_id → sample_output 映射，O(1) 查找。
-    D4 增强产生的 8 个同 step_id 变体，仅首次写入（恒等变换 tid=0）。
+    D4 增强产生的 8 个同 step_id 变体，仅首次写入生效（依赖 SampleCreator
+    的生成顺序：恒等变换最先写入，其余变体被 "not in" 跳过）。
     旧格式数据（无 step_id）自动跳过。
 
     Args:
