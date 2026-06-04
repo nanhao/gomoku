@@ -23,7 +23,7 @@
             </div>
             <div class="param-row"><label>mode</label><select id="modeSelect"><option value="winning_move" selected>winning_move</option><option value="winner_path">winner_path</option></select></div>
             <div class="param-row"><label>games</label><input id="gamesInput" type="number" value="100"></div>
-            <div class="param-row"><label>output</label><input id="outputInput" type="text" placeholder="必填，如 ai/train_data/samples.json"></div>
+            <div class="param-row"><label>output <span class="required-mark">*</span></label><input id="outputInput" type="text" placeholder="必填，如 ai/train_data/samples.json" required></div>
             <div class="param-row"><label>数据增强</label><div class="switch-wrap"><input id="noAugmentCheck" type="checkbox"><span class="switch-label">禁用 (--no-augment)</span></div></div>
             <div class="param-row"><label>温度采样</label><div class="switch-wrap"><input id="noTempSamplingCheck" type="checkbox"><span class="switch-label">禁用 (--no-temp-sampling)</span></div></div>
             <div class="param-row"><label>temperature</label><input id="temperatureInput" type="number" value="1.0" step="0.1" min="0.01"></div>

@@ -14,6 +14,7 @@ gomoku/
 │   ├── ai_data/      # AI 对战记录数据
 │   ├── train_data/   # 训练样本数据
 │   └── merge_samples/# 合并后的训练样本
+├── tools/            # 验收与辅助工具
 ├── tests/            # 测试脚本
 ├── design/           # 设计文档
 └── temp/             # 临时分析脚本等
@@ -111,6 +112,18 @@ python ai/create_samples.py --model cnn_v3.1 --mode winner_path --games 200 --ou
 ```
 
 > **提示**：运行结束后可用 `--train-from-dir` 加载生成的 `.json` 文件继续训练。
+
+#### 样本可视化验收
+
+基于 Flask 的 Web 工具，可视化验收 `create_samples.py` 生成的训练样本（热力图对比 + 对局浏览）。
+
+```bash
+# 启动验收工具
+python -m tools.create_samples_tool.app
+# 浏览器访问 http://127.0.0.1:5000
+```
+
+> 详细使用手册见 [tools/create_samples_tool/README.md](tools/create_samples_tool/README.md)。
 
 #### 从已有数据训练
 
@@ -413,6 +426,7 @@ python tests/run_tests.py
 | `ai/ai_data/loss_logs/` | 训练 loss 日志和曲线图 |
 | `ai/train_data/` | 训练样本（sample.json） |
 | `ai/merge_samples/` | 合并后的训练样本大文件 |
+| `tools/create_samples_tool/` | create_samples 验收工具 |
 
 ---
 

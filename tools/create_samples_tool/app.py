@@ -27,7 +27,7 @@ def create_app():
     app = Flask(
         __name__,
         static_folder=os.path.join(os.path.dirname(__file__), "static"),
-        static_url_path="/static",
+        static_url_path="",
     )
 
     # 项目根目录（app.py 的父目录的父目录的父目录）

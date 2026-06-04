@@ -94,13 +94,23 @@ async function onExecute() {
     const btn = document.getElementById('btnRun');
     const output = document.getElementById('scriptOutput');
 
+    // 前端必填校验
+    const params = collectParams();
+    if (!params.model) {
+        alert('请先选择模型');
+        return;
+    }
+    if (!params.output || !params.output.trim()) {
+        alert('output 为必填项，请填写输出路径（如 ai/train_data/samples.json）');
+        return;
+    }
+
     // 按钮灰化
     btn.disabled = true;
     btn.textContent = '执行中...';
     output.textContent = '执行中...\n';
 
     try {
-        const params = collectParams();
         const resp = await fetch('/api/create-samples/execute', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

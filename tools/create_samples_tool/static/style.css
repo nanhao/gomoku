@@ -15,6 +15,7 @@ body { font-family: "Microsoft YaHei", "SimHei", sans-serif; background: #f5f5f5
 .param-section h2 { font-size: 15px; margin-bottom: 12px; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 6px; }
 .param-row { display: flex; align-items: center; margin-bottom: 8px; gap: 8px; }
 .param-row label { width: 110px; font-size: 13px; text-align: right; color: #555; flex-shrink: 0; }
+.required-mark { color: #e74c3c; font-weight: bold; }
 .param-row input[type="text"], .param-row input[type="number"], .param-row select { flex: 1; padding: 4px 8px; border: 1px solid #ccc; border-radius: 3px; font-size: 13px; }
 .param-row .switch-wrap { flex: 1; display: flex; align-items: center; gap: 6px; }
 .param-row .switch-wrap input[type="checkbox"] { width: 16px; height: 16px; }
@@ -58,9 +59,9 @@ body { font-family: "Microsoft YaHei", "SimHei", sans-serif; background: #f5f5f5
 .game-list-hint { color: #888; font-style: italic; font-size: 13px; padding: 8px; }
 
 /* ---------- 热力图区 ---------- */
-.right-panel { flex: 1; background: #fff; border-radius: 6px; padding: 16px; border: 1px solid #ddd; display: flex; flex-direction: column; }
+.right-panel { flex: 1; background: #fff; border-radius: 6px; padding: 16px; border: 1px solid #ddd; display: flex; flex-direction: column; overflow-y: auto; }
 .right-panel h2 { font-size: 15px; margin-bottom: 12px; color: #2c3e50; border-bottom: 2px solid #e67e22; padding-bottom: 6px; }
-.heatmap-container { flex: 1; overflow-x: auto; overflow-y: hidden; }
+.heatmap-container { overflow-x: auto; }
 .heatmap-grid { display: inline-flex; flex-direction: column; }
 .heatmap-row { display: flex; align-items: center; gap: 4px; }
 .row-label { width: 80px; text-align: right; font-size: 13px; font-weight: bold; color: #555; flex-shrink: 0; }

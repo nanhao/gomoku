@@ -95,13 +95,16 @@ def execute(params: Dict, project_root: str = None,
     # 构造命令
     command = command_override or build_cli_command(params)
 
-    # 启动子进程
+    # 启动子进程（强制 UTF-8 输出，避免 Windows 中文乱码）
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"
     process = subprocess.Popen(
         command,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         cwd=project_root,
         shell=True,
+        env=env,
     )
 
     # 阻塞等待并收集输出
