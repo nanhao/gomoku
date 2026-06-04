@@ -10,6 +10,8 @@ import os
 import subprocess
 from typing import Dict, List, Optional
 
+from tools.create_samples_tool.data_parser import scan_round_dir
+
 
 # ------------------------------------------------------------------
 # CLI 命令构造
@@ -119,7 +121,6 @@ def execute(params: Dict, project_root: str = None,
         if round_dir_rel is not None:
             round_dir_abs = os.path.join(project_root, round_dir_rel)
             try:
-                from tools.create_samples_tool.data_parser import scan_round_dir
                 games = scan_round_dir(round_dir_abs)
             except FileNotFoundError:
                 pass

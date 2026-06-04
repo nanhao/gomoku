@@ -49,7 +49,7 @@ activate HM
 
 HM -> HM: 清空热力图区
 
-HM -> HM: 更新标题\n"热力图对比 — 第3局（黑胜 · 双方采样 · T=1.0）"
+HM -> HM: 更新标题\n"热力图对比 — 第3局（黑胜）"
 
 loop 遍历 steps
     HM -> HM: 创建步数列\n标注 "Step N"

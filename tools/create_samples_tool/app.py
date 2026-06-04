@@ -15,11 +15,8 @@ import subprocess
 
 from flask import Flask, request, jsonify
 
-from tools.create_samples_tool.executor import build_cli_command, execute
-from tools.create_samples_tool.data_parser import (
-    scan_round_dir,
-    parse_game_steps,
-)
+from tools.create_samples_tool.executor import execute
+from tools.create_samples_tool.data_parser import parse_game_steps
 
 
 def create_app():
@@ -95,15 +92,6 @@ def create_app():
         ai_data_dir = os.path.join(_project_root, "ai", "ai_data")
 
         result = execute(params, project_root=_project_root, ai_data_dir=ai_data_dir)
-
-        # 成功时扫描对局列表
-        if result["status"] == "completed" and result.get("round_dir"):
-            try:
-                games = scan_round_dir(result["round_dir"])
-                result["games"] = games
-                result["output_path"] = params.get("output")
-            except Exception:
-                result["games"] = []
 
         return jsonify(result)
 

@@ -134,11 +134,6 @@ async function onExecute() {
 
             // 渲染对局列表
             renderGameList(state.games);
-
-            // 默认选中第一局
-            if (state.games.length > 0) {
-                selectGame(state.games[0].game_id);
-            }
         } else {
             // 执行失败
             state.games = [];
