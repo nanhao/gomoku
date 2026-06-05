@@ -13,7 +13,7 @@
 
 import os
 import json
-from typing import Callable, List, Dict, Tuple
+from typing import List, Dict, Tuple
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from concurrent.futures.process import BrokenProcessPool
 
@@ -221,8 +221,7 @@ class Evaluator:
         
         return sample_file
     
-    def evaluate_round(self, round_dir: str, max_workers: int = None,
-                       record_filter: Callable = None) -> dict:
+    def evaluate_round(self, round_dir: str, max_workers: int = None) -> dict:
         """
         评价整个轮次的所有对局，支持多进程并行
 
@@ -232,8 +231,6 @@ class Evaluator:
         Args:
             round_dir: 轮次目录路径（如 ai_data/random_1）
             max_workers: 本次调用的进程数，覆盖实例的 max_workers
-            record_filter: 可选的记录过滤函数（预留扩展点，当前未使用）。
-                接收 record 字典，返回 True 保留、False 跳过。
 
         Returns:
             dict: {"sample_files": [成功生成的 sample 路径],

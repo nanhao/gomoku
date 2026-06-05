@@ -8,7 +8,7 @@ import os
 import json
 import logging
 import uuid
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from ai.constants import AI_DATA_DIR
 
@@ -75,7 +75,7 @@ class DataRecorder:
         self.current_game_data = {
             "history": [],
             "winner": 0,
-            "temp_side_this_game": None,   # 修订2：与 winner 统一"先初始化后覆盖"策略
+            "temp_side_this_game": None,   # 与 winner 统一"先初始化后覆盖"策略
             "end_board": []
         }
         return self.current_game_id
@@ -141,7 +141,7 @@ class DataRecorder:
         self.current_game_data["history"].append(entry)
     
     def save_game_result(self, game_id: int, winner: int, end_board: List[int],
-                         temp_side_this_game: str = None):
+                         temp_side_this_game: Optional[str] = None):
         """
         保存游戏结果到文件
         

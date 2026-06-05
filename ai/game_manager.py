@@ -17,7 +17,7 @@ class SingleGameResult(NamedTuple):
     """单局对弈结果
 
     Attributes:
-        winner: 获胜方（1=黑, 2=白, 3=平局）
+        winner: 获胜方（0=未结束, 1=黑, 2=白, 3=平局）
         temp_side_this_game: 该局实际采样方
             - "black" / "white"：单方采样
             - "both"：双方采样

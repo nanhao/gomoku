@@ -14,6 +14,9 @@
 from typing import Optional
 
 
+__all__ = ["should_keep_game"]
+
+
 def should_keep_game(record: dict) -> bool:
     """判定单局对弈是否应保留用于样本生成。
 

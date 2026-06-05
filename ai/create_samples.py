@@ -192,7 +192,7 @@ def main():
     print(f"  样本数:     {len(samples)}")
     print(f"  输出路径:   {args.output}")
 
-    # 过滤统计输出（修订1：复用 should_keep_game 消除重复逻辑和类型比较 bug）
+    # 过滤统计输出（复用 should_keep_game 消除重复逻辑和类型比较 bug）
     filter_active = (
         temp_config is not None
         and temp_config.temp_side in ("black", "white", "random")
@@ -200,6 +200,8 @@ def main():
     if filter_active:
         # 复用 should_keep_game 而非手写类型比较，
         # 避免 str("black") == int(1) 的类型比较 bug
+        # results 字段与 record.json 同构（winner/temp_side_this_game），
+        # 可复用 should_keep_game 判定过滤
         kept = sum(1 for r in results if should_keep_game(r))
         filtered_out = len(results) - kept
         print(f"\n样本过滤: 启用 (采样方获胜过滤)")

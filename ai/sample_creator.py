@@ -88,6 +88,8 @@ class SampleCreator:
                 continue
 
             # 外部过滤：调用方注入的自定义过滤逻辑
+            # 注意：此过滤在"平局/空history跳过"之后执行，
+            # 即使 record_filter 保留某对局，若其 history 为空仍会被跳过
             if record_filter is not None and not record_filter(record):
                 continue
 
