@@ -135,7 +135,7 @@ class AIGameManager:
         return self.controller.make_move(x, y)
     
     @staticmethod
-    def _play_single_game(
+    def play_single_game(
         engine_black: AIEngine,
         engine_white: AIEngine,
         recorder: DataRecorder,
@@ -299,7 +299,7 @@ class AIGameManager:
     
         for game_num in range(1, num_games + 1):
             # 固定执方：engine1 执黑，engine2 执白
-            result = AIGameManager._play_single_game(
+            result = AIGameManager.play_single_game(
                 engine1, engine2, recorder, game_num,
                 name_prefix="ai_vs_ai",
                 temp_config=temp_config,
@@ -359,7 +359,7 @@ class AIGameManager:
             engine_black = engine1 if ai1_color == 1 else engine2
             engine_white = engine2 if ai1_color == 1 else engine1
     
-            result = AIGameManager._play_single_game(
+            result = AIGameManager.play_single_game(
                 engine_black, engine_white, recorder, game_num,
                 name_prefix="ai_vs_ai_rnd",
                 temp_config=temp_config,

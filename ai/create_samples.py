@@ -26,6 +26,8 @@ def is_sample_game(result: dict) -> bool:
 
     样本局需同时满足：
     1. winner ∈ {1, 2}（非平局、非未结束）
+       — 此前置检查与 SampleCreator.create 的 winner 过滤对齐，
+         确保计数与最终样本生成的一致性。
     2. should_keep_game(result) 返回 True
 
     此判定逻辑与 SampleCreator.create 的过滤逻辑保持一致，
@@ -49,11 +51,14 @@ def print_sample_progress(sample_count: int, target: int, total_games: int) -> N
 
     纯输出函数，不负责触发判定（触发判定在调用方主循环中）。
 
+    前置条件: target > 0（由 CLI 参数校验保证）
+
     Args:
         sample_count: 当前已收集的样本局数
-        target: 目标样本局数
+        target: 目标样本局数（必须 > 0）
         total_games: 已完成的原始对弈总数
     """
+    assert target > 0, f"target 必须 > 0，实际为 {target}"
     pct = sample_count * 100 // target
     print(f"进度: 样本局 {sample_count}/{target} ({pct}%), 已对弈 {total_games} 局")
 
@@ -168,6 +173,11 @@ def main():
         print("错误: --sample_games 的值必须大于0", file=sys.stderr)
         sys.exit(1)
 
+    # --games 值校验
+    if args.games is not None and args.games <= 0:
+        print("错误: --games 的值必须大于0", file=sys.stderr)
+        sys.exit(1)
+
     # 两者都不指定时，默认 --games 100
     if args.games is None and args.sample_games is None:
         args.games = 100
@@ -230,7 +240,7 @@ def main():
         try:
             while sample_count < target:
                 total_games += 1
-                result = AIGameManager._play_single_game(
+                result = AIGameManager.play_single_game(
                     engine, engine, recorder, total_games,
                     name_prefix="ai_vs_ai", temp_config=temp_config,
                 )
@@ -254,6 +264,9 @@ def main():
             print(f"\n[中断] 检测到 Ctrl+C，正在整理已有数据...")
             print(f"[中断] 已收集样本局 {sample_count}/{target} ({pct}%), "
                   f"已完成原始对弈 {total_games} 局")
+            if total_games == 0:
+                print("[中断] 未完成任何对弈，退出")
+                sys.exit(0)
     else:
         # ---- --games 模式：原有行为不变 ----
         def on_progress(current, total):

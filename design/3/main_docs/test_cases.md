@@ -9,6 +9,8 @@
 | A-03 | sample_games为负数 | `--sample_games -5` | 报错"值必须大于0"，exit code ≠ 0 |
 | A-04 | 仅指定games | `--games 10` | 行为与未修改前完全一致 |
 | A-05 | 两者都不指定 | 无games无sample_games | 默认 `--games 100`，行为不变 |
+| A-06 | games为0 | `--games 0` | 报错"值必须大于0"，exit code ≠ 0 |
+| A-07 | games为负数 | `--games -5` | 报错"值必须大于0"，exit code ≠ 0 |
 
 ## 2. is_sample_game 函数 (B)
 
@@ -40,7 +42,7 @@
 |------|--------|----------|----------|
 | D-01 | 无过滤场景达标 | `--sample_games 10 --no-temp-sampling` | 精确10局对弈，样本局=10 |
 | D-02 | 单方过滤场景达标 | `--sample_games 10 --temp-side black` | 原始对弈>10局，样本局=10 |
-| D-03 | 计数与SampleCreator一致 | `--sample_games 10 --temp-side black` | is_sample_game 计数 = SampleCreator 实际产出样本数（依赖假设：_play_single_game 保证 history 非空，见设计文档 D2） |
+| D-03 | 计数与SampleCreator一致 | `--sample_games 10 --temp-side black` | is_sample_game 计数 = SampleCreator 实际产出样本数（依赖假设：play_single_game 保证 history 非空，见设计文档 D2） |
 | D-04 | winning_move+增强 | `--sample_games 50 --mode winning_move` | 最终样本数 = 50×8 |
 | D-05 | winning_move+禁用增强 | `--sample_games 50 --no-augment --mode winning_move` | 最终样本数 = 50 |
 | D-06 | winner_path模式 | `--sample_games 10 --mode winner_path` | 样本局=10，最终样本数≥10 |
@@ -82,16 +84,16 @@
 
 ### H-2: collectParams 字段
 
-| 编号 | 用例名 | 前置状态 | 期望结果 |
-|------|--------|----------|----------|
-| H-06 | gamesInput有值 | games=100, sampleGamesInput为空 | `games: 100, sample_games: null` |
-| H-07 | sampleGamesInput有值 | sampleGamesInput=10, gamesInput为空 | `games: null, sample_games: 10` |
-| H-08 | 两者均为空 | gamesInput和sampleGamesInput都为空 | `games: null, sample_games: null` |
+| 编号 | 用例名 | 前置状态 | 期望结果 | 测试方式 |
+|------|--------|----------|----------|----------|
+| H-06 | gamesInput有值 | games=100, sampleGamesInput为空 | `games: 100, sample_games: null` | 手动测试 |
+| H-07 | sampleGamesInput有值 | sampleGamesInput=10, gamesInput为空 | `games: null, sample_games: 10` | 手动测试 |
+| H-08 | 两者均为空 | gamesInput和sampleGamesInput都为空 | `games: null, sample_games: null` | 手动测试 |
 
 ### H-3: 前端互斥交互
 
-| 编号 | 用例名 | 操作 | 期望结果 |
-|------|--------|------|----------|
-| H-09 | 输入games清空sample_games | sampleGamesInput=10 → 在gamesInput输入100 | sampleGamesInput 被清空 |
-| H-10 | 输入sample_games清空games | gamesInput=100 → 在sampleGamesInput输入10 | gamesInput 被清空 |
-| H-11 | 清空games不影响sample_games | gamesInput=100, sampleGamesInput为空 → 清空gamesInput | sampleGamesInput 保持为空（不变） |
+| 编号 | 用例名 | 操作 | 期望结果 | 测试方式 |
+|------|--------|------|----------|----------|
+| H-09 | 输入games清空sample_games | sampleGamesInput=10 → 在gamesInput输入100 | sampleGamesInput 被清空 | 手动测试 |
+| H-10 | 输入sample_games清空games | gamesInput=100 → 在sampleGamesInput输入10 | gamesInput 被清空 | 手动测试 |
+| H-11 | 清空games不影响sample_games | gamesInput=100, sampleGamesInput为空 → 清空gamesInput | sampleGamesInput 保持为空（不变） | 手动测试 |

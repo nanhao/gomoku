@@ -1,7 +1,7 @@
 """create_samples --sample_games 集成测试
 
 覆盖设计文档 test_cases.md:
-- A 组: 参数互斥与校验 (A-01 ~ A-05)
+- A 组: 参数互斥与校验 (A-01 ~ A-07)
 - D 组: 对弈循环 (D-01 ~ D-06)
 - E 组: 进度输出时机 (E-01 ~ E-03)
 - F 组: Ctrl+C 中断 (F-01 ~ F-03)
@@ -25,7 +25,7 @@ def _setup_common_mocks(tmpdir, mock_get_model, mock_engine_cls,
     """为 CLI 集成测试批量装配公共 mocks
 
     关键点：create_samples 使用 AIGameManager 静态方法调用，
-    需要 mock _play_single_game 和 start_ai_vs_ai 的类级别返回值。
+    需要 mock play_single_game 和 start_ai_vs_ai 的类级别返回值。
     """
     mock_model = MagicMock()
     mock_model.name = "test_model"
@@ -179,6 +179,42 @@ class TestArgMutualExclusion(unittest.TestCase):
             call_kwargs = mock_manager_cls.start_ai_vs_ai.call_args
             self.assertEqual(call_kwargs[0][2], 100)
 
+    @patch('ai.create_samples.DataRecorder')
+    @patch('ai.create_samples.AIGameManager')
+    @patch('ai.create_samples.AIEngine')
+    @patch('ai.create_samples.get_model')
+    def test_games_zero_exits(self, mock_get_model, mock_engine_cls,
+                              mock_manager_cls, mock_recorder_cls):
+        """A-06: --games 0 → 报错退出"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = os.path.join(tmpdir, "output.json")
+            _setup_common_mocks(tmpdir, mock_get_model, mock_engine_cls,
+                                mock_manager_cls, mock_recorder_cls)
+            argv = ['create_samples.py', '--model', 'test_model',
+                    '--games', '0', '--output', output_path]
+            with patch('sys.argv', argv):
+                with self.assertRaises(SystemExit) as ctx:
+                    main()
+                self.assertNotEqual(ctx.exception.code, 0)
+
+    @patch('ai.create_samples.DataRecorder')
+    @patch('ai.create_samples.AIGameManager')
+    @patch('ai.create_samples.AIEngine')
+    @patch('ai.create_samples.get_model')
+    def test_games_negative_exits(self, mock_get_model, mock_engine_cls,
+                                  mock_manager_cls, mock_recorder_cls):
+        """A-07: --games -5 → 报错退出"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = os.path.join(tmpdir, "output.json")
+            _setup_common_mocks(tmpdir, mock_get_model, mock_engine_cls,
+                                mock_manager_cls, mock_recorder_cls)
+            argv = ['create_samples.py', '--model', 'test_model',
+                    '--games', '-5', '--output', output_path]
+            with patch('sys.argv', argv):
+                with self.assertRaises(SystemExit) as ctx:
+                    main()
+                self.assertNotEqual(ctx.exception.code, 0)
+
 
 # =====================================================================
 # D 组: 对弈循环
@@ -201,7 +237,7 @@ class TestGameLoop(unittest.TestCase):
                                 mock_manager_cls, mock_recorder_cls)
 
             # 每局返回黑胜（无温度采样，不会被过滤）
-            mock_manager_cls._play_single_game.return_value = \
+            mock_manager_cls.play_single_game.return_value = \
                 SingleGameResult(winner=1, temp_side_this_game=None)
 
             # 为每局创建 record.json
@@ -216,7 +252,7 @@ class TestGameLoop(unittest.TestCase):
                 main()
 
             # 精确10局对弈
-            self.assertEqual(mock_manager_cls._play_single_game.call_count, 10)
+            self.assertEqual(mock_manager_cls.play_single_game.call_count, 10)
 
     @patch('ai.create_samples.DataRecorder')
     @patch('ai.create_samples.AIGameManager')
@@ -245,7 +281,7 @@ class TestGameLoop(unittest.TestCase):
                     results.append(
                         SingleGameResult(winner=2, temp_side_this_game="black")
                     )
-            mock_manager_cls._play_single_game.side_effect = results
+            mock_manager_cls.play_single_game.side_effect = results
 
             # 为每局创建 record.json
             round_dir = os.path.join(tmpdir, "round_1")
@@ -261,7 +297,7 @@ class TestGameLoop(unittest.TestCase):
 
             # 奇数局为黑胜(样本局)：第1,3,5,...,19局达标
             # 第19局时达到10个样本局，循环停止，共对弈19局
-            self.assertEqual(mock_manager_cls._play_single_game.call_count, 19)
+            self.assertEqual(mock_manager_cls.play_single_game.call_count, 19)
 
     @patch('ai.create_samples.DataRecorder')
     @patch('ai.create_samples.AIGameManager')
@@ -278,7 +314,7 @@ class TestGameLoop(unittest.TestCase):
                                 mock_manager_cls, mock_recorder_cls)
 
             # 全部黑胜 + temp_side=black → 每局都是样本局
-            mock_manager_cls._play_single_game.return_value = \
+            mock_manager_cls.play_single_game.return_value = \
                 SingleGameResult(winner=1, temp_side_this_game="black")
 
             round_dir = os.path.join(tmpdir, "round_1")
@@ -311,7 +347,7 @@ class TestGameLoop(unittest.TestCase):
             _setup_common_mocks(tmpdir, mock_get_model, mock_engine_cls,
                                 mock_manager_cls, mock_recorder_cls)
 
-            mock_manager_cls._play_single_game.return_value = \
+            mock_manager_cls.play_single_game.return_value = \
                 SingleGameResult(winner=1, temp_side_this_game=None)
 
             round_dir = os.path.join(tmpdir, "round_1")
@@ -343,7 +379,7 @@ class TestGameLoop(unittest.TestCase):
             _setup_common_mocks(tmpdir, mock_get_model, mock_engine_cls,
                                 mock_manager_cls, mock_recorder_cls)
 
-            mock_manager_cls._play_single_game.return_value = \
+            mock_manager_cls.play_single_game.return_value = \
                 SingleGameResult(winner=1, temp_side_this_game=None)
 
             round_dir = os.path.join(tmpdir, "round_1")
@@ -372,7 +408,7 @@ class TestGameLoop(unittest.TestCase):
             _setup_common_mocks(tmpdir, mock_get_model, mock_engine_cls,
                                 mock_manager_cls, mock_recorder_cls)
 
-            mock_manager_cls._play_single_game.return_value = \
+            mock_manager_cls.play_single_game.return_value = \
                 SingleGameResult(winner=1, temp_side_this_game=None)
 
             # 构造含5步黑胜的 record.json
@@ -417,7 +453,7 @@ class TestProgressTiming(unittest.TestCase):
             _setup_common_mocks(tmpdir, mock_get_model, mock_engine_cls,
                                 mock_manager_cls, mock_recorder_cls)
 
-            mock_manager_cls._play_single_game.return_value = \
+            mock_manager_cls.play_single_game.return_value = \
                 SingleGameResult(winner=1, temp_side_this_game=None)
 
             round_dir = os.path.join(tmpdir, "round_1")
@@ -450,7 +486,7 @@ class TestProgressTiming(unittest.TestCase):
             _setup_common_mocks(tmpdir, mock_get_model, mock_engine_cls,
                                 mock_manager_cls, mock_recorder_cls)
 
-            mock_manager_cls._play_single_game.return_value = \
+            mock_manager_cls.play_single_game.return_value = \
                 SingleGameResult(winner=1, temp_side_this_game=None)
 
             round_dir = os.path.join(tmpdir, "round_1")
@@ -479,7 +515,7 @@ class TestProgressTiming(unittest.TestCase):
             _setup_common_mocks(tmpdir, mock_get_model, mock_engine_cls,
                                 mock_manager_cls, mock_recorder_cls)
 
-            mock_manager_cls._play_single_game.return_value = \
+            mock_manager_cls.play_single_game.return_value = \
                 SingleGameResult(winner=1, temp_side_this_game=None)
 
             round_dir = os.path.join(tmpdir, "round_1")
@@ -520,7 +556,7 @@ class TestKeyboardInterrupt(unittest.TestCase):
 
             # 前5局正常，第6局抛 KeyboardInterrupt
             normal = SingleGameResult(winner=1, temp_side_this_game=None)
-            mock_manager_cls._play_single_game.side_effect = [
+            mock_manager_cls.play_single_game.side_effect = [
                 normal, normal, normal, normal, normal, KeyboardInterrupt()
             ]
 
@@ -553,7 +589,7 @@ class TestKeyboardInterrupt(unittest.TestCase):
                                 mock_manager_cls, mock_recorder_cls)
 
             normal = SingleGameResult(winner=1, temp_side_this_game=None)
-            mock_manager_cls._play_single_game.side_effect = [
+            mock_manager_cls.play_single_game.side_effect = [
                 normal, normal, KeyboardInterrupt()
             ]
 
@@ -591,7 +627,7 @@ class TestKeyboardInterrupt(unittest.TestCase):
                                 mock_manager_cls, mock_recorder_cls)
 
             normal = SingleGameResult(winner=1, temp_side_this_game=None)
-            mock_manager_cls._play_single_game.side_effect = [
+            mock_manager_cls.play_single_game.side_effect = [
                 normal, normal, normal, KeyboardInterrupt()
             ]
 
@@ -634,7 +670,7 @@ class TestBackwardCompatibility(unittest.TestCase):
                     '--games', '100', '--output', output_path]
             with patch('sys.argv', argv):
                 main()
-            # 验证走的是 start_ai_vs_ai，而非 _play_single_game
+            # 验证走的是 start_ai_vs_ai，而非 play_single_game
             mock_manager_cls.start_ai_vs_ai.assert_called_once()
 
     @patch('ai.create_samples.DataRecorder')

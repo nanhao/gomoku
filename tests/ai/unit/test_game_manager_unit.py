@@ -1,6 +1,6 @@
-"""AIGameManager._play_single_game 单元测试
+"""AIGameManager.play_single_game 单元测试
 
-测试提取出的私有静态方法 _play_single_game 的核心逻辑，
+测试公开静态方法 play_single_game 的核心逻辑，
 包括主流程（正常完成一局）和边界条件（棋盘已满时的 ValueError 处理）。
 """
 
@@ -24,7 +24,7 @@ from ai.data_recorder import DataRecorder
 
 
 class TestPlaySingleGameMainFlow(unittest.TestCase):
-    """_play_single_game 主流程测试"""
+    """play_single_game 主流程测试"""
 
     def setUp(self):
         """测试前准备：创建临时目录"""
@@ -53,7 +53,7 @@ class TestPlaySingleGameMainFlow(unittest.TestCase):
         engine_white = AIEngine(RandomModel())
         recorder = DataRecorder("test_unit", self.test_ai_data_dir)
 
-        result = AIGameManager._play_single_game(
+        result = AIGameManager.play_single_game(
             engine_black, engine_white, recorder, game_num=1
         )
 
@@ -68,7 +68,7 @@ class TestPlaySingleGameMainFlow(unittest.TestCase):
         engine_white = AIEngine(RandomModel())
         recorder = DataRecorder("test_unit_rec", self.test_ai_data_dir)
 
-        AIGameManager._play_single_game(
+        AIGameManager.play_single_game(
             engine_black, engine_white, recorder, game_num=1
         )
 
@@ -84,7 +84,7 @@ class TestPlaySingleGameMainFlow(unittest.TestCase):
         engine_white = AIEngine(RandomModel())
         recorder = DataRecorder("test_unit_fields", self.test_ai_data_dir)
 
-        AIGameManager._play_single_game(
+        AIGameManager.play_single_game(
             engine_black, engine_white, recorder, game_num=1
         )
 
@@ -110,7 +110,7 @@ class TestPlaySingleGameMainFlow(unittest.TestCase):
         engine_white = AIEngine(RandomModel())
         recorder = DataRecorder("test_unit_dim", self.test_ai_data_dir)
 
-        AIGameManager._play_single_game(
+        AIGameManager.play_single_game(
             engine_black, engine_white, recorder, game_num=1
         )
 
@@ -132,7 +132,7 @@ class TestPlaySingleGameMainFlow(unittest.TestCase):
 
         winners = []
         for game_num in range(1, 4):
-            result = AIGameManager._play_single_game(
+            result = AIGameManager.play_single_game(
                 engine_black, engine_white, recorder, game_num=game_num
             )
             winners.append(result.winner)
@@ -150,7 +150,7 @@ class TestPlaySingleGameMainFlow(unittest.TestCase):
 
 
 class TestPlaySingleGameEdgeCases(unittest.TestCase):
-    """_play_single_game 边界条件测试"""
+    """play_single_game 边界条件测试"""
 
     def setUp(self):
         """测试前准备：创建临时目录"""
@@ -179,7 +179,7 @@ class TestPlaySingleGameEdgeCases(unittest.TestCase):
         engine_white = AIEngine(RandomModel())
         recorder = DataRecorder("test_unit_no_cb", self.test_ai_data_dir)
 
-        result = AIGameManager._play_single_game(
+        result = AIGameManager.play_single_game(
             engine_black, engine_white, recorder, game_num=1
         )
         self.assertIn(result.winner, [1, 2, 3])
@@ -193,11 +193,11 @@ class TestPlaySingleGameEdgeCases(unittest.TestCase):
         # 初始 current_game_id 为 0（DataRecorder 初始化时）
         initial_id = recorder.current_game_id
 
-        AIGameManager._play_single_game(
+        AIGameManager.play_single_game(
             engine_black, engine_white, recorder, game_num=1
         )
 
-        # _play_single_game 内部调用 recorder.new_game()，current_game_id 应该递增
+        # play_single_game 内部调用 recorder.new_game()，current_game_id 应该递增
         self.assertEqual(recorder.current_game_id, initial_id + 1)
 
     def test_recorder_records_moves_with_correct_game_id(self):
@@ -212,8 +212,8 @@ class TestPlaySingleGameEdgeCases(unittest.TestCase):
         recorder.new_game()  # current_game_id = 1
         initial_id = recorder.current_game_id
 
-        # 再调用 _play_single_game，应该使用 new_game 递增后的 id
-        AIGameManager._play_single_game(
+        # 再调用 play_single_game，应该使用 new_game 递增后的 id
+        AIGameManager.play_single_game(
             engine_black, engine_white, recorder, game_num=1
         )
 
@@ -228,10 +228,10 @@ class TestPlaySingleGameEdgeCases(unittest.TestCase):
 
 
 class TestPlaySingleGameBoardFull(unittest.TestCase):
-    """_play_single_game 棋盘已满时的 ValueError 处理测试
+    """play_single_game 棋盘已满时的 ValueError 处理测试
 
     使用模拟引擎构造棋盘已满的场景，
-    验证 _play_single_game 能正确处理 ValueError 并返回结果。
+    验证 play_single_game 能正确处理 ValueError 并返回结果。
     """
 
     def setUp(self):
@@ -281,7 +281,7 @@ class TestPlaySingleGameBoardFull(unittest.TestCase):
         recorder = DataRecorder("test_unit_full", self.test_ai_data_dir)
 
         # 应该正常返回，不抛异常
-        result = AIGameManager._play_single_game(
+        result = AIGameManager.play_single_game(
             engine_black, engine_white, recorder, game_num=1
         )
 
@@ -302,7 +302,7 @@ class TestPlaySingleGameBoardFull(unittest.TestCase):
 
         recorder = DataRecorder("test_unit_full_save", self.test_ai_data_dir)
 
-        AIGameManager._play_single_game(
+        AIGameManager.play_single_game(
             engine_black, engine_white, recorder, game_num=1
         )
 

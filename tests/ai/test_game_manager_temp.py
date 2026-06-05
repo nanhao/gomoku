@@ -81,7 +81,7 @@ class _SpyEngine(AIEngine):
 
 
 def _make_recorder(engine=None):
-    """生成一个满足 _play_single_game 调用契约的 Mock recorder。
+    """生成一个满足 play_single_game 调用契约的 Mock recorder。
 
     关键属性：current_game_id；关键方法：new_game / record_move /
     save_game_result。不实际写盘。
@@ -109,7 +109,7 @@ def _make_recorder(engine=None):
 class _TempSaveDirTestBase(unittest.TestCase):
     """将 ai.game_manager.GomokuController 重定向到临时存档目录。
 
-    _play_single_game 内部会 new GomokuController() 并写入 game/save/，
+    play_single_game 内部会 new GomokuController() 并写入 game/save/，
     该行为在测试环境下会被 conftest 的 WRITE GUARD 拦截。本基类通过
     patch 把 save_dir 换成临时目录，保持生产代码不变。
     """
@@ -295,7 +295,7 @@ class TestTempSideRandom(_TempSaveDirTestBase):
 class TestGUIPathUnaffected(_TempSaveDirTestBase):
 
     def test_gui_path_unaffected(self):
-        """用例 27：未传 temp_config 时，_play_single_game 不触发任何 sampling 相关副作用。"""
+        """用例 27：未传 temp_config 时，play_single_game 不触发任何 sampling 相关副作用。"""
         engine = _SpyEngine()
         recorder = _make_recorder()
 
@@ -344,7 +344,7 @@ class TestRandomMatchSupportsTempConfig(_TempSaveDirTestBase):
 class _SpyRecorder:
     """记录 record_move 每次调用参数的桩 recorder。
 
-    用于验证 _play_single_game 在温度采样启用时是否正确向
+    用于验证 play_single_game 在温度采样启用时是否正确向
     DataRecorder.record_move() 传递 strategy / temperature / sampling_probs。
     """
 
@@ -378,7 +378,7 @@ class _SpyRecorder:
 
 
 class TestRecordMoveTempInfo(_TempSaveDirTestBase):
-    """验证 _play_single_game 在温度采样时向 recorder 传递正确信息。"""
+    """验证 play_single_game 在温度采样时向 recorder 传递正确信息。"""
 
     def test_record_move_with_temp_config_passes_strategy_and_temperature(self):
         """temp_config 启用时，record_move 收到 strategy="sampling" 和温度值。"""
@@ -558,7 +558,7 @@ class TestSamplingProbsOccupiedPositions(_TempSaveDirTestBase):
 
 
 class TestSingleGameResult(_TempSaveDirTestBase):
-    """SingleGameResult NamedTuple 及 _play_single_game 返回值测试"""
+    """SingleGameResult NamedTuple 及 play_single_game 返回值测试"""
 
     def test_namedtuple_attribute_access(self):
         """SN-01/SN-02: 属性访问 winner 和 temp_side_this_game"""
@@ -574,13 +574,13 @@ class TestSingleGameResult(_TempSaveDirTestBase):
         with self.assertRaises(AttributeError):
             _ = result.typo_field
 
-    def test_play_single_game_returns_result_with_temp_side_black(self):
-        """GM-01: _play_single_game 真实执行，temp_side="black" 时
+    def testplay_single_game_returns_result_with_temp_side_black(self):
+        """GM-01: play_single_game 真实执行，temp_side="black" 时
         返回 SingleGameResult 且 temp_side_this_game="black" """
         from ai.game_manager import SingleGameResult
         engine = _SpyEngine()
         recorder = _make_recorder()
-        result = AIGameManager._play_single_game(
+        result = AIGameManager.play_single_game(
             engine, engine, recorder, 1,
             temp_config=TempConfig(temperature=1.0, temp_side="black",
                                    temp_moves=999, seed=42),
@@ -589,13 +589,13 @@ class TestSingleGameResult(_TempSaveDirTestBase):
         self.assertIn(result.winner, [1, 2, 3])
         self.assertEqual(result.temp_side_this_game, "black")
 
-    def test_play_single_game_returns_result_with_temp_side_white(self):
-        """GM-02: _play_single_game 真实执行，temp_side="white" 时
+    def testplay_single_game_returns_result_with_temp_side_white(self):
+        """GM-02: play_single_game 真实执行，temp_side="white" 时
         返回 SingleGameResult 且 temp_side_this_game="white" """
         from ai.game_manager import SingleGameResult
         engine = _SpyEngine()
         recorder = _make_recorder()
-        result = AIGameManager._play_single_game(
+        result = AIGameManager.play_single_game(
             engine, engine, recorder, 1,
             temp_config=TempConfig(temperature=1.0, temp_side="white",
                                    temp_moves=999, seed=42),
@@ -604,13 +604,13 @@ class TestSingleGameResult(_TempSaveDirTestBase):
         self.assertIn(result.winner, [1, 2, 3])
         self.assertEqual(result.temp_side_this_game, "white")
 
-    def test_play_single_game_returns_result_with_temp_side_both(self):
-        """GM-03: _play_single_game 真实执行，temp_side="both" 时
+    def testplay_single_game_returns_result_with_temp_side_both(self):
+        """GM-03: play_single_game 真实执行，temp_side="both" 时
         返回 SingleGameResult 且 temp_side_this_game="both" """
         from ai.game_manager import SingleGameResult
         engine = _SpyEngine()
         recorder = _make_recorder()
-        result = AIGameManager._play_single_game(
+        result = AIGameManager.play_single_game(
             engine, engine, recorder, 1,
             temp_config=TempConfig(temperature=1.0, temp_side="both",
                                    temp_moves=999, seed=42),
@@ -619,25 +619,25 @@ class TestSingleGameResult(_TempSaveDirTestBase):
         self.assertIn(result.winner, [1, 2, 3])
         self.assertEqual(result.temp_side_this_game, "both")
 
-    def test_play_single_game_no_temp_config(self):
+    def testplay_single_game_no_temp_config(self):
         """GM-04: 无 temp_config 时 temp_side_this_game 为 None"""
         from ai.game_manager import SingleGameResult
         engine = _SpyEngine()
         recorder = _make_recorder()
-        result = AIGameManager._play_single_game(
+        result = AIGameManager.play_single_game(
             engine, engine, recorder, 1,
         )
         self.assertIsInstance(result, SingleGameResult)
         self.assertIn(result.winner, [1, 2, 3])
         self.assertIsNone(result.temp_side_this_game)
 
-    def test_play_single_game_temp_side_random(self):
-        """GM-05: _play_single_game 真实执行，temp_side="random" 时
+    def testplay_single_game_temp_side_random(self):
+        """GM-05: play_single_game 真实执行，temp_side="random" 时
         返回 SingleGameResult 且 temp_side_this_game 为 "black" 或 "white" """
         from ai.game_manager import SingleGameResult
         engine = _SpyEngine()
         recorder = _make_recorder()
-        result = AIGameManager._play_single_game(
+        result = AIGameManager.play_single_game(
             engine, engine, recorder, 1,
             temp_config=TempConfig(temperature=1.0, temp_side="random",
                                    temp_moves=999, seed=42),

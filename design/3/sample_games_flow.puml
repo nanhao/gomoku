@@ -17,7 +17,7 @@ CS -> CS: parse_args()\n互斥校验(--games vs --sample_games)
 CS -> CS: 加载model, 创建engine, 创建recorder
 
 loop sample_count < target
-    CS -> AGM: _play_single_game(engine, engine, recorder, game_num, temp_config)
+    CS -> AGM: play_single_game(engine, engine, recorder, game_num, temp_config)
     AGM --> CS: SingleGameResult(winner, temp_side_this_game)
     CS -> ISG: is_sample_game(result_dict)
     ISG -> SKG: should_keep_game(result_dict)

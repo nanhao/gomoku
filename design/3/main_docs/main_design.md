@@ -16,10 +16,10 @@
 
 ### D1: 对弈循环方式
 
-**方案**: 在 `create_samples.py` 内部循环调用 `AIGameManager._play_single_game`，逐局执行并判定。
+**方案**: 在 `create_samples.py` 内部循环调用 `AIGameManager.play_single_game`，逐局执行并判定。
 
 **理由**:
-- `_play_single_game` 是静态方法，直接可调用
+- `play_single_game` 是静态方法，直接可调用
 - 逐局执行可实现精确的样本局计数和进度输出
 - 不需要修改 `AIGameManager` 的任何接口
 - `--games` 模式保持原有 `start_ai_vs_ai` 调用不变
@@ -35,7 +35,7 @@
 
 **理由**: `SampleCreator.create` 先跳过 `winner == 0 or winner == 3`，再调用 `record_filter`。此处复用同一判定链，确保计数与最终样本生成的一致性。
 
-**依赖假设**: `SampleCreator.create` 还会跳过 `history` 为空的对局。`is_sample_game` 未覆盖此条件，因为 `_play_single_game` 保证每局至少记录一步数据，`history` 不可能为空。此假设成立时，计数与样本生成完全一致。
+**依赖假设**: `SampleCreator.create` 还会跳过 `history` 为空的对局。`is_sample_game` 未覆盖此条件，因为 `play_single_game` 保证每局至少记录一步数据，`history` 不可能为空。此假设成立时，计数与样本生成完全一致。
 
 ### D3: 进度输出阈值
 
@@ -112,7 +112,7 @@
 {"game": int, "winner": int, "temp_side_this_game": str|None}
 ```
 
-`--sample_games` 模式由 `_play_single_game` 返回 `SingleGameResult`(NamedTuple)，经手动构造为 dict 后 append；`--games` 模式由 `start_ai_vs_ai` 直接返回 dict 列表。两者类型一致，后续统计代码无需区分模式。
+`--sample_games` 模式由 `play_single_game` 返回 `SingleGameResult`(NamedTuple)，经手动构造为 dict 后 append；`--games` 模式由 `start_ai_vs_ai` 直接返回 dict 列表。两者类型一致，后续统计代码无需区分模式。
 
 ### 4.4 main() 函数变更
 
@@ -213,7 +213,7 @@ function main():
         try:
             while sample_count < target:
                 total_games += 1
-                result = AIGameManager._play_single_game(
+                result = AIGameManager.play_single_game(
                     engine, engine, recorder, total_games,
                     name_prefix="ai_vs_ai", temp_config=temp_config
                 )
