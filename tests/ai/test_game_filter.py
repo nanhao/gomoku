@@ -67,7 +67,7 @@ class TestShouldKeepGameNonSingleSide(unittest.TestCase):
         self.assertTrue(should_keep_game({"winner": 1}))
 
     def test_old_format_white_wins(self):
-        """GF-09 补充: 旧格式 + 白胜 → 不过滤"""
+        """GF-11: 旧格式 + 白胜 → 不过滤"""
         self.assertTrue(should_keep_game({"winner": 2}))
 
 

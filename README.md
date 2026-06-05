@@ -349,7 +349,7 @@ python -m pytest tests/ -v -s
 python tests/run_tests.py
 ```
 
-> 覆盖全部 1463 个测试（自动发现，无需手工维护测试列表）
+> 覆盖全部 1466 个测试（自动发现，无需手工维护测试列表）
 >
 > 附加参数示例：
 > - `python -m pytest tests/ -q` —— 静默模式

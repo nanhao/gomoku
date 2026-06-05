@@ -256,3 +256,34 @@ def evaluate_round(
 ## 测试用例
 
 参见 [game_filter_test_cases.md](file:///d:/projects/gomoku/design/2/main_docs/game_filter_test_cases.md)
+
+---
+
+## 修订记录
+
+### 修订 1（2026-06-05）：code review 修正
+
+**1. 撤销 Evaluator 变更（§9 及变更模块一览）**
+
+原设计在 §9 和"变更模块一览"表格中规划了 `Evaluator.evaluate_round` 新增
+`record_filter` 参数。经 code review 确认该变更为远期预留扩展点，当前版本
+不需要实现。以下内容作废：
+
+- "变更模块一览"表格中 `ai/evaluator.py` 行——移除（该模块未做任何修改）
+- §9（212-231 行）——`evaluate_round` 签名扩展——作废，不实装
+- "影响范围分析"表格中 `train_main.py → Evaluator` 行——移除
+
+**2. 类型注解修正（§2）**
+
+§2 中 `save_game_result` 的 `temp_side_this_game` 参数类型从 `str` 修正为
+`Optional[str]`（原设计写为 `temp_side_this_game: str = None`，类型与默认值矛盾）：
+
+```python
+def save_game_result(
+    self,
+    game_id: int,
+    winner: int,
+    end_board: List[int],
+    temp_side_this_game: Optional[str] = None,   # ← 修正
+):
+```
