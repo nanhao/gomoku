@@ -36,12 +36,14 @@
 - 脚本持续自对弈，直到收集到指定数量的可用样本局后停止
 - 10% 间隔的进度输出
 - Ctrl+C 优雅退出并保存已收集数据
+- 验收工具 `tools/create_samples_tool/` 同步支持 `--sample_games` 参数
 
 ### 3.2 范围外
 
 - 不修改 `AIGameManager`、`SampleCreator`、`should_keep_game` 等模块的核心逻辑
 - 不新增 `--max-games` 等安全上限参数（依赖 Ctrl+C 中断）
 - 不修改 `self_play_generator.py`（该模块服务于训练循环，不直接暴露此参数）
+- 不修改 `app.py` 和 `data_parser.py`（API 接口层无需变更，仅透传参数）
 
 ---
 
@@ -115,6 +117,45 @@
   输出路径:   <输出文件路径>
 ```
 
+### 5.8 验收工具更新
+
+验收工具 `tools/create_samples_tool/` 需同步支持 `--sample_games` 参数，涉及以下文件：
+
+#### 5.8.1 executor.py — build_cli_command 变更
+
+在 `build_cli_command()` 中新增 `sample_games` 参数处理：
+
+- 当 `params` 中包含 `sample_games` 键且值非空时，追加 `--sample_games <value>` 到命令参数
+- 当 `sample_games` 有值时，不追加 `--games` 参数（互斥）
+- 当 `sample_games` 无值或不存在时，保持原有 `--games` 行为
+
+#### 5.8.2 index.html — 表单新增 sample_games 输入框
+
+在 `games` 输入框下方新增 `sample_games` 输入框，标签为 `sample_games`，类型 number，placeholder 为 `可选，目标样本局数`。
+
+互斥交互规则（双输入框互斥方案）：
+- 用户在 `games` 输入框中输入值时，自动清空 `sample_games` 输入框
+- 用户在 `sample_games` 输入框中输入值时，自动清空 `games` 输入框
+- 两个输入框都不填时，后端默认 `--games 100`（与 CLI 行为一致）
+
+#### 5.8.3 app.js — collectParams 变更
+
+在 `collectParams()` 中新增 `sample_games` 字段：
+- 从 `sampleGamesInput` 读取值，为空时传 `null`
+- `games` 字段从 `gamesInput` 读取，为空时传 `null`（而非默认 100，由 CLI 侧兜底）
+
+新增 `input` 事件监听：
+- `gamesInput` 的 `input` 事件 → 清空 `sampleGamesInput`
+- `sampleGamesInput` 的 `input` 事件 → 清空 `gamesInput`
+
+#### 5.8.4 不变更的文件
+
+| 文件 | 原因 |
+|------|------|
+| `app.py` | API 层仅透传 params 到 executor，无需变更 |
+| `data_parser.py` | 数据解析逻辑与对局模式无关 |
+| `style.css` | 新增输入框复用现有 `.param-row` 样式 |
+
 ---
 
 ## 6. 命令行用法示例
@@ -177,6 +218,16 @@ python ai/create_samples.py --model cnn_v3.1 --games 100 --sample_games 100 --ou
 | E-01 | 执行不包含 `--sample_games` 的命令（现有用法）                           | 行为与未修改前完全一致                                         |
 | E-02 | 执行 `--help`                                                            | 帮助信息中包含 `--sample_games` 参数说明                      |
 
+### 7.6 验收工具验证
+
+| 编号 | 操作                                                                 | 期望结果                                                       |
+| ---- | -------------------------------------------------------------------- | -------------------------------------------------------------- |
+| F-01 | 在 games 输入框输入值                                                 | sample_games 输入框被自动清空                                  |
+| F-02 | 在 sample_games 输入框输入值                                          | games 输入框被自动清空                                         |
+| F-03 | 填写 sample_games=10 并执行，检查命令输出                             | 脚本输出中包含 `--sample_games 10`，不包含 `--games`          |
+| F-04 | 两个输入框都不填并执行                                                | 脚本输出中包含 `--games 100`（CLI 侧默认）                    |
+| F-05 | 使用 sample_games 执行成功后，对局列表和热力图正常显示                | 与使用 games 模式功能一致                                      |
+
 ---
 
 ## 8. 约束与注意事项
@@ -184,3 +235,4 @@ python ai/create_samples.py --model cnn_v3.1 --games 100 --sample_games 100 --ou
 1. **互斥硬约束**：`--games` 与 `--sample_games` 不可同时指定，违反时脚本必须报错退出
 2. **不修改下游模块**：`AIGameManager`、`SampleCreator`、`should_keep_game` 等模块的接口和行为不变
 3. **样本局计数一致性**：`--sample_games` 模式下的样本局判定逻辑必须与现有 `SampleCreator` + `should_keep_game` 的联合过滤逻辑一致，避免同一对局在计数时保留、生成样本时被丢弃的不一致
+4. **验收工具互斥前端兜底**：UI 双输入框互斥清空仅为用户友好提示，后端 `build_cli_command` 必须独立校验互斥（防御前端绕过）

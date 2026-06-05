@@ -245,3 +245,101 @@ class TestDiscoverRoundDir:
         """ai_data_dir 不存在 → 返回 None"""
         result = discover_round_dir("/nonexistent/path", set())
         assert result is None
+
+
+# ------------------------------------------------------------------
+# H: build_cli_command sample_games 互斥逻辑
+# ------------------------------------------------------------------
+
+class TestBuildCliCommandSampleGames:
+    """测试 build_cli_command 的 --sample_games / --games 互斥逻辑
+
+    覆盖设计文档 test_cases.md 中 H-01~H-05。
+    """
+
+    def test_h01_sample_games_has_value_games_skipped(self):
+        """H-01: sample_games 有值时，命令含 --sample_games，不含 --games
+
+        即使 params 中同时包含 games 和 sample_games（前端绕过场景），
+        后端也必须保证互斥：sample_games 优先。
+        """
+        params = {
+            "model": "cnn_v1",
+            "output": "test.json",
+            "sample_games": 10,
+            "games": 100,
+        }
+        cmd = build_cli_command(params)
+        assert "--sample_games" in cmd
+        assert "10" in cmd
+        # games 应被跳过（互斥兜底）
+        assert "--games" not in cmd
+
+    def test_h02_only_games_has_value(self):
+        """H-02: 仅 games 有值时，命令含 --games，不含 --sample_games"""
+        params = {
+            "model": "cnn_v1",
+            "output": "test.json",
+            "games": 100,
+        }
+        cmd = build_cli_command(params)
+        assert "--games" in cmd
+        assert "100" in cmd
+        assert "--sample_games" not in cmd
+
+    def test_h03_neither_has_value(self):
+        """H-03: 两者均无值时，命令不含 --games 和 --sample_games
+
+        CLI 侧默认 --games 100，此处仅验证 executor 不追加。
+        """
+        params = {
+            "model": "cnn_v1",
+            "output": "test.json",
+        }
+        cmd = build_cli_command(params)
+        assert "--games" not in cmd
+        assert "--sample_games" not in cmd
+
+    def test_h04_sample_games_null_falls_back_to_games(self):
+        """H-04: sample_games 为 None 时，回退到 games
+
+        collectParams() 传 sample_games: null（前端 sampleGamesInput 为空），
+        后端应正确跳过 sample_games，使用 games。
+        """
+        params = {
+            "model": "cnn_v1",
+            "output": "test.json",
+            "sample_games": None,
+            "games": 50,
+        }
+        cmd = build_cli_command(params)
+        assert "--games" in cmd
+        assert "50" in cmd
+        assert "--sample_games" not in cmd
+
+    def test_h05_sample_games_zero_value_added(self):
+        """H-05: sample_games 为 0 时，追加 --sample_games 0
+
+        0 是合法值（is not None），由 CLI 侧校验值必须大于 0。
+        """
+        params = {
+            "model": "cnn_v1",
+            "output": "test.json",
+            "sample_games": 0,
+        }
+        cmd = build_cli_command(params)
+        assert "--sample_games" in cmd
+        assert "0" in cmd
+        assert "--games" not in cmd
+
+    def test_both_null_neither_added(self):
+        """补充: games 和 sample_games 均为 None 时，两者都不追加"""
+        params = {
+            "model": "cnn_v1",
+            "output": "test.json",
+            "games": None,
+            "sample_games": None,
+        }
+        cmd = build_cli_command(params)
+        assert "--games" not in cmd
+        assert "--sample_games" not in cmd

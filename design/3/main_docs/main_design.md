@@ -56,6 +56,23 @@
 
 **补充说明**: 中断后 `results` 列表包含已完成的对弈结果，后续统计输出（黑胜/白胜/平局计数、过滤统计）均基于已有 `results` 正常计算。
 
+### D5: 验收工具 UI 双输入框互斥
+
+**方案**: 在 `index.html` 中新增 `sample_games` 输入框（与 `games` 并列），通过 `app.js` 的 `input` 事件监听实现双输入框互斥清空；`executor.py` 的 `build_cli_command()` 独立校验互斥（防御前端绕过）。
+
+**理由**:
+- 前端互斥清空是用户友好提示，降低误操作风险
+- 后端 `build_cli_command()` 必须独立校验互斥，防御前端绕过（如直接 API 调用）
+- `collectParams()` 中 `games` 和 `sample_games` 均允许为空（传 `null`），由 CLI 侧兜底默认 `--games 100`
+- `app.py` 和 `data_parser.py` 仅透传参数，无需变更
+
+**互斥规则**:
+1. 用户在 `games` 输入框输入值 → 自动清空 `sample_games` 输入框
+2. 用户在 `sample_games` 输入框输入值 → 自动清空 `games` 输入框
+3. 两个输入框都不填 → 后端不追加 `--games` 和 `--sample_games`，CLI 侧默认 `--games 100`
+
+**后端防御**: `build_cli_command()` 中 `sample_games` 有值时不追加 `--games`，即后端保证互斥；若前端绕过导致两者同时非空，`sample_games` 优先，`--games` 被跳过。
+
 ## 4. 接口设计
 
 ### 4.1 CLI 参数变更
@@ -100,6 +117,71 @@
 ### 4.4 main() 函数变更
 
 `--sample_games` 模式下，`main()` 的对弈阶段替换为逐局循环，其余阶段（样本生成、文件写入、统计输出）不变。
+
+### 4.5 验收工具接口变更
+
+#### executor.py — build_cli_command
+
+当前逻辑:
+```python
+if "games" in params:
+    parts.extend(["--games", str(params["games"])])
+```
+
+变更后:
+```python
+sample_games = params.get("sample_games")
+if sample_games is not None:
+    parts.extend(["--sample_games", str(sample_games)])
+elif params.get("games") is not None:
+    parts.extend(["--games", str(params["games"])])
+```
+
+- `sample_games` 有值时追加 `--sample_games`，不追加 `--games`（后端互斥兜底）
+- `sample_games` 无值时保持原有 `--games` 行为
+- 两者均无值时不追加任何参数，CLI 侧默认 `--games 100`
+- 使用 `params.get("games") is not None` 而非 `"games" in params`，避免 `games: None` 时追加 `--games None`
+
+#### index.html — 新增 sample_games 输入框
+
+在 `games` 输入框下方新增:
+```html
+<div class="param-row"><label>sample_games</label><input id="sampleGamesInput" type="number" placeholder="可选，目标样本局数"></div>
+```
+
+- 复用现有 `.param-row` 样式，无需修改 `style.css`
+- `games` 输入框去掉 `value="100"` 默认值，改为 `placeholder="可选，对局数（默认100）"`（与 `sample_games` 输入框风格一致）
+
+#### app.js — collectParams 和事件监听
+
+`collectParams()` 变更:
+
+```javascript
+// 变更前
+games: parseInt(document.getElementById('gamesInput').value) || 100,
+
+// 变更后
+games: document.getElementById('gamesInput').value ? parseInt(document.getElementById('gamesInput').value) : null,
+sample_games: document.getElementById('sampleGamesInput').value ? parseInt(document.getElementById('sampleGamesInput').value) : null,
+```
+
+新增 `input` 事件监听（在 `DOMContentLoaded` 回调中注册）:
+```javascript
+document.getElementById('gamesInput').addEventListener('input', function() {
+    if (this.value) document.getElementById('sampleGamesInput').value = '';
+});
+document.getElementById('sampleGamesInput').addEventListener('input', function() {
+    if (this.value) document.getElementById('gamesInput').value = '';
+});
+```
+
+#### 不变更的文件
+
+| 文件 | 原因 |
+|------|------|
+| `app.py` | API 层仅透传 params 到 executor，无需变更 |
+| `data_parser.py` | 数据解析逻辑与对局模式无关 |
+| `style.css` | 新增输入框复用现有 `.param-row` 样式 |
 
 ## 5. 主流程伪代码
 
@@ -164,6 +246,49 @@ function main():
     # 额外: --sample_games 模式下，最终输出增加"样本局数"行
 ```
 
+### 5.2 验收工具伪代码
+
+```
+# ---- executor.py: build_cli_command 变更 ----
+
+function build_cli_command(params):
+    parts = ["python", "ai/create_samples.py"]
+    parts.extend(["--model", params.model])
+    parts.extend(["--output", params.output])
+
+    # 互斥参数: sample_games 优先
+    sample_games = params.get("sample_games")
+    if sample_games is not None:
+        parts.extend(["--sample_games", str(sample_games)])
+    elif params.get("games") is not None:
+        parts.extend(["--games", str(params.games)])
+
+    # 其余参数（mode、temperature 等）不变
+    ...
+
+    return parts
+
+# ---- app.js: collectParams + 事件监听 ----
+
+function collectParams():
+    return {
+        model: modelSelect.value,
+        mode: modeSelect.value,
+        games: gamesInput.value ? parseInt(gamesInput.value) : null,
+        sample_games: sampleGamesInput.value ? parseInt(sampleGamesInput.value) : null,
+        output: outputInput.value,
+        ...
+    }
+
+// DOMContentLoaded 中注册互斥监听
+gamesInput.addEventListener('input', function() {
+    if (this.value) sampleGamesInput.value = '';
+});
+sampleGamesInput.addEventListener('input', function() {
+    if (this.value) gamesInput.value = '';
+});
+```
+
 ## 6. 交互图
 
 详见 [sample_games_flow.puml](../sample_games_flow.puml)
@@ -173,6 +298,9 @@ function main():
 | 文件 | 操作 | 变更说明 |
 |------|------|----------|
 | `ai/create_samples.py` | 修改 | 新增 `--sample_games` 参数；新增 `is_sample_game`、`print_sample_progress` 函数；`main()` 中增加样本局驱动对弈循环 |
+| `tools/create_samples_tool/executor.py` | 修改 | `build_cli_command()` 新增 `sample_games` 参数处理，互斥逻辑（sample_games 有值时不追加 --games） |
+| `tools/create_samples_tool/static/index.html` | 修改 | 新增 `sampleGamesInput` 输入框；`gamesInput` 去掉默认值改为 placeholder |
+| `tools/create_samples_tool/static/app.js` | 修改 | `collectParams()` 新增 `sample_games` 字段、`games` 改为 null 兜底；新增 input 事件互斥监听 |
 
 ## 8. 测试用例
 

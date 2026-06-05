@@ -43,6 +43,14 @@ let state = {
 document.addEventListener('DOMContentLoaded', () => {
     loadModels();
     document.getElementById('btnRun').addEventListener('click', onExecute);
+
+    // games / sample_games 双输入框互斥清空
+    document.getElementById('gamesInput').addEventListener('input', function() {
+        if (this.value) document.getElementById('sampleGamesInput').value = '';
+    });
+    document.getElementById('sampleGamesInput').addEventListener('input', function() {
+        if (this.value) document.getElementById('gamesInput').value = '';
+    });
 });
 
 /**
@@ -73,10 +81,13 @@ async function loadModels() {
  */
 function collectParams() {
     const tempSeedVal = document.getElementById('tempSeedInput').value;
+    const gamesVal = document.getElementById('gamesInput').value;
+    const sampleGamesVal = document.getElementById('sampleGamesInput').value;
     return {
         model: document.getElementById('modelSelect').value,
         mode: document.getElementById('modeSelect').value,
-        games: parseInt(document.getElementById('gamesInput').value) || 100,
+        games: gamesVal ? parseInt(gamesVal) : null,
+        sample_games: sampleGamesVal ? parseInt(sampleGamesVal) : null,
         output: document.getElementById('outputInput').value,
         no_augment: document.getElementById('noAugmentCheck').checked,
         no_temp_sampling: document.getElementById('noTempSamplingCheck').checked,

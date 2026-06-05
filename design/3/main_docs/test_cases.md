@@ -67,3 +67,31 @@
 |------|--------|------|----------|
 | G-01 | 不传sample_games | `--games 100` | 行为与未修改前完全一致 |
 | G-02 | help输出 | `--help` | 包含 `--sample_games` 参数说明 |
+
+## 8. 验收工具 (H)
+
+### H-1: build_cli_command 互斥逻辑
+
+| 编号 | 用例名 | 输入 (params) | 期望结果 |
+|------|--------|---------------|----------|
+| H-01 | sample_games有值 | `{model, output, sample_games: 10, games: 100}` | 命令含 `--sample_games 10`，不含 `--games` |
+| H-02 | 仅games有值 | `{model, output, games: 100}` | 命令含 `--games 100`，不含 `--sample_games` |
+| H-03 | 两者均无值 | `{model, output}` | 命令不含 `--games` 和 `--sample_games` |
+| H-04 | sample_games为null | `{model, output, sample_games: null, games: 50}` | 命令含 `--games 50`，不含 `--sample_games` |
+| H-05 | sample_games为0 | `{model, output, sample_games: 0}` | 命令含 `--sample_games 0`（由 CLI 侧校验值） |
+
+### H-2: collectParams 字段
+
+| 编号 | 用例名 | 前置状态 | 期望结果 |
+|------|--------|----------|----------|
+| H-06 | gamesInput有值 | games=100, sampleGamesInput为空 | `games: 100, sample_games: null` |
+| H-07 | sampleGamesInput有值 | sampleGamesInput=10, gamesInput为空 | `games: null, sample_games: 10` |
+| H-08 | 两者均为空 | gamesInput和sampleGamesInput都为空 | `games: null, sample_games: null` |
+
+### H-3: 前端互斥交互
+
+| 编号 | 用例名 | 操作 | 期望结果 |
+|------|--------|------|----------|
+| H-09 | 输入games清空sample_games | sampleGamesInput=10 → 在gamesInput输入100 | sampleGamesInput 被清空 |
+| H-10 | 输入sample_games清空games | gamesInput=100 → 在sampleGamesInput输入10 | gamesInput 被清空 |
+| H-11 | 清空games不影响sample_games | gamesInput=100, sampleGamesInput为空 → 清空gamesInput | sampleGamesInput 保持为空（不变） |
