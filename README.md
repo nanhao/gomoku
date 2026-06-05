@@ -99,6 +99,8 @@ python ai/create_samples.py --model <模型名称> --output <输出文件路径>
 - `winning_move`：仅取每局最后一步（制胜那步）作为样本，默认启用 D4 8 变换增强。
 - `winner_path`：取整局中**获胜方的每一步**作为样本，让模型拟合获胜方整条路径；由于每局已产出多条样本，**强制不做 D4 增强**以避免数据量失控。每步的 output 采用**软标签**（基于模型当步 softmax 输出，将落子位最小增强为严格 top1 后归一化），而非 one-hot，以保留模型分布、避免信号过于刚性。
 
+> **对局级过滤**：当 `--temp-side` 为单方模式（`black`/`white`/`random`）时，仅保留采样方获胜的对局用于样本生成，贪婪方获胜的对局将被丢弃。`--temp-side both`（默认）和 `--no-temp-sampling` 模式下不做过滤。运行结束会输出过滤统计（保留/过滤对局数）。
+
 ```bash
 # 示例
 # winning_move 模式（默认）
@@ -347,7 +349,7 @@ python -m pytest tests/ -v -s
 python tests/run_tests.py
 ```
 
-> 覆盖全部 1076 个测试（自动发现，无需手工维护测试列表）
+> 覆盖全部 1463 个测试（自动发现，无需手工维护测试列表）
 >
 > 附加参数示例：
 > - `python -m pytest tests/ -q` —— 静默模式
