@@ -6,11 +6,25 @@
 """
 
 import random as _stdrandom
-from typing import List, Optional, Tuple
+from typing import List, NamedTuple, Optional, Tuple
 from game import GomokuController
 from ai.engine import AIEngine, STRATEGY_ARGMAX, STRATEGY_SAMPLING
 from ai.data_recorder import DataRecorder
 from ai.move_sampler import TempConfig, resolve_temp_side, should_sample
+
+
+class SingleGameResult(NamedTuple):
+    """单局对弈结果
+
+    Attributes:
+        winner: 获胜方（1=黑, 2=白, 3=平局）
+        temp_side_this_game: 该局实际采样方
+            - "black" / "white"：单方采样
+            - "both"：双方采样
+            - None：未启用温度采样
+    """
+    winner: int
+    temp_side_this_game: Optional[str]
 
 
 class AIGameManager:
@@ -128,7 +142,7 @@ class AIGameManager:
         game_num: int,
         name_prefix: str = "ai_vs_ai",
         temp_config: Optional[TempConfig] = None,
-    ) -> int:
+    ) -> SingleGameResult:
         """执行单局 AI 内战
 
         封装完整的单局流程：创建 controller、new_game、落子循环、
@@ -144,7 +158,7 @@ class AIGameManager:
                 非 None 时按 move_count / temp_side 规则切换到 sampling。
 
         Returns:
-            winner: 获胜方（1=黑, 2=白, 3=平局）
+            SingleGameResult: 包含 winner 和 temp_side_this_game 的命名元组
         """
         import time
 
@@ -248,9 +262,11 @@ class AIGameManager:
         winner = controller.get_winner()
         end_state = controller.get_state()
         end_board = AIEngine.board_to_vector(end_state["board"], 0)
-        recorder.save_game_result(current_game_id, winner, end_board)
+        # 始终传入 temp_side_this_game（含 None 和 "both"）
+        recorder.save_game_result(current_game_id, winner, end_board,
+                                  temp_side_this_game=temp_side_this_game)
 
-        return winner
+        return SingleGameResult(winner=winner, temp_side_this_game=temp_side_this_game)
 
     @staticmethod
     def start_ai_vs_ai(
@@ -277,18 +293,22 @@ class AIGameManager:
             temp_config: 可选温度采样配置；None 时保持原有 argmax 行为
     
         Returns:
-            对战结果列表，每项为 {"game": 局数, "winner": 获胜方}
+            对战结果列表，每项为 {"game": 局数, "winner": 获胜方, "temp_side_this_game": 采样方}
         """
         results = []
     
         for game_num in range(1, num_games + 1):
             # 固定执方：engine1 执黑，engine2 执白
-            winner = AIGameManager._play_single_game(
+            result = AIGameManager._play_single_game(
                 engine1, engine2, recorder, game_num,
                 name_prefix="ai_vs_ai",
                 temp_config=temp_config,
             )
-            results.append({"game": game_num, "winner": winner})
+            results.append({
+                "game": game_num,
+                "winner": result.winner,
+                "temp_side_this_game": result.temp_side_this_game,
+            })
     
             # 跨局进度回调
             if on_progress is not None:
@@ -339,19 +359,20 @@ class AIGameManager:
             engine_black = engine1 if ai1_color == 1 else engine2
             engine_white = engine2 if ai1_color == 1 else engine1
     
-            winner = AIGameManager._play_single_game(
+            result = AIGameManager._play_single_game(
                 engine_black, engine_white, recorder, game_num,
                 name_prefix="ai_vs_ai_rnd",
                 temp_config=temp_config,
             )
     
             # 判断各方是否获胜（平局时两方都不算赢）
-            ai1_won = (winner == ai1_color)
-            ai2_won = (winner == ai2_color)
+            ai1_won = (result.winner == ai1_color)
+            ai2_won = (result.winner == ai2_color)
     
             results.append({
                 "game": game_num,
-                "winner": winner,
+                "winner": result.winner,
+                "temp_side_this_game": result.temp_side_this_game,
                 "ai1_color": ai1_color,
                 "ai2_color": ai2_color,
                 "ai1_won": ai1_won,

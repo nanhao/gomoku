@@ -48,17 +48,19 @@ class TestPlaySingleGameMainFlow(unittest.TestCase):
         shutil.rmtree(self.test_save_dir, ignore_errors=True)
 
     def test_normal_game_returns_winner(self):
-        """正常完成一局，返回有效的 winner 值（1=黑, 2=白, 3=平局）"""
+        """正常完成一局，返回有效的 SingleGameResult"""
         engine_black = AIEngine(RandomModel())
         engine_white = AIEngine(RandomModel())
         recorder = DataRecorder("test_unit", self.test_ai_data_dir)
 
-        winner = AIGameManager._play_single_game(
+        result = AIGameManager._play_single_game(
             engine_black, engine_white, recorder, game_num=1
         )
 
-        # winner 必须是有效值
-        self.assertIn(winner, [1, 2, 3])
+        # result.winner 必须是有效值
+        self.assertIn(result.winner, [1, 2, 3])
+        # temp_side_this_game 无 temp_config 时为 None
+        self.assertIsNone(result.temp_side_this_game)
 
     def test_normal_game_records_data(self):
         """正常完成一局，recorder 记录了数据文件"""
@@ -130,10 +132,10 @@ class TestPlaySingleGameMainFlow(unittest.TestCase):
 
         winners = []
         for game_num in range(1, 4):
-            winner = AIGameManager._play_single_game(
+            result = AIGameManager._play_single_game(
                 engine_black, engine_white, recorder, game_num=game_num
             )
-            winners.append(winner)
+            winners.append(result.winner)
 
         # 每局都返回有效 winner
         for winner in winners:
@@ -177,10 +179,10 @@ class TestPlaySingleGameEdgeCases(unittest.TestCase):
         engine_white = AIEngine(RandomModel())
         recorder = DataRecorder("test_unit_no_cb", self.test_ai_data_dir)
 
-        winner = AIGameManager._play_single_game(
+        result = AIGameManager._play_single_game(
             engine_black, engine_white, recorder, game_num=1
         )
-        self.assertIn(winner, [1, 2, 3])
+        self.assertIn(result.winner, [1, 2, 3])
 
     def test_recorder_game_id_incremented(self):
         """游戏完成后，recorder 的 current_game_id 应正确递增"""
@@ -279,12 +281,12 @@ class TestPlaySingleGameBoardFull(unittest.TestCase):
         recorder = DataRecorder("test_unit_full", self.test_ai_data_dir)
 
         # 应该正常返回，不抛异常
-        winner = AIGameManager._play_single_game(
+        result = AIGameManager._play_single_game(
             engine_black, engine_white, recorder, game_num=1
         )
 
-        # winner 应该是有效值
-        self.assertIn(winner, [0, 1, 2, 3])
+        # result.winner 应该是有效值
+        self.assertIn(result.winner, [0, 1, 2, 3])
 
     def test_board_full_still_saves_result(self):
         """棋盘已满时，仍然保存游戏结果"""
@@ -300,7 +302,7 @@ class TestPlaySingleGameBoardFull(unittest.TestCase):
 
         recorder = DataRecorder("test_unit_full_save", self.test_ai_data_dir)
 
-        winner = AIGameManager._play_single_game(
+        AIGameManager._play_single_game(
             engine_black, engine_white, recorder, game_num=1
         )
 

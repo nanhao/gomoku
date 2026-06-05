@@ -44,7 +44,7 @@ class TestCliCreatesOutputFile(unittest.TestCase):
             # mock 对弈结果：1局黑胜
             mock_manager = MagicMock()
             mock_manager.start_ai_vs_ai.return_value = [
-                {"game": 1, "winner": 1}
+                {"game": 1, "winner": 1, "temp_side_this_game": None}
             ]
             mock_manager_cls.return_value = mock_manager
 
@@ -105,9 +105,9 @@ class TestCliOutputHasCorrectSampleCount(unittest.TestCase):
             # 3局：黑胜、平局、白胜
             mock_manager = MagicMock()
             mock_manager.start_ai_vs_ai.return_value = [
-                {"game": 1, "winner": 1},
-                {"game": 2, "winner": 3},
-                {"game": 3, "winner": 2},
+                {"game": 1, "winner": 1, "temp_side_this_game": None},
+                {"game": 2, "winner": 3, "temp_side_this_game": None},
+                {"game": 3, "winner": 2, "temp_side_this_game": None},
             ]
             mock_manager_cls.return_value = mock_manager
 
@@ -159,7 +159,7 @@ class TestCliOutputHasCorrectSampleCount(unittest.TestCase):
 
             mock_manager = MagicMock()
             mock_manager.start_ai_vs_ai.return_value = [
-                {"game": 1, "winner": 3},
+                {"game": 1, "winner": 3, "temp_side_this_game": None},
             ]
             mock_manager_cls.return_value = mock_manager
 
@@ -210,7 +210,7 @@ class TestCliNoAugment(unittest.TestCase):
 
             mock_manager = MagicMock()
             mock_manager.start_ai_vs_ai.return_value = [
-                {"game": 1, "winner": 1},
+                {"game": 1, "winner": 1, "temp_side_this_game": None},
             ]
             mock_manager_cls.return_value = mock_manager
 
@@ -263,7 +263,7 @@ class TestCliWinnerPathMode(unittest.TestCase):
             # 1 局黑胜
             mock_manager = MagicMock()
             mock_manager.start_ai_vs_ai.return_value = [
-                {"game": 1, "winner": 1},
+                {"game": 1, "winner": 1, "temp_side_this_game": None},
             ]
             mock_manager_cls.return_value = mock_manager
 
@@ -332,7 +332,7 @@ class TestCliAugmentPrintReflectsRuntime(unittest.TestCase):
             mock_engine_cls.return_value = MagicMock()
 
             mock_manager = MagicMock()
-            mock_manager.start_ai_vs_ai.return_value = [{"game": 1, "winner": 1}]
+            mock_manager.start_ai_vs_ai.return_value = [{"game": 1, "winner": 1, "temp_side_this_game": None}]
             mock_manager_cls.return_value = mock_manager
 
             mock_recorder = MagicMock()
@@ -376,7 +376,7 @@ class TestCliAugmentPrintReflectsRuntime(unittest.TestCase):
             mock_engine_cls.return_value = MagicMock()
 
             mock_manager = MagicMock()
-            mock_manager.start_ai_vs_ai.return_value = [{"game": 1, "winner": 1}]
+            mock_manager.start_ai_vs_ai.return_value = [{"game": 1, "winner": 1, "temp_side_this_game": None}]
             mock_manager_cls.return_value = mock_manager
 
             mock_recorder = MagicMock()
@@ -424,7 +424,7 @@ def _setup_common_mocks(tmpdir, mock_get_model, mock_engine_cls,
     mock_engine_cls.return_value = MagicMock()
 
     # 关键：静态调用走到 mock_manager_cls.start_ai_vs_ai，不是 instance
-    mock_manager_cls.start_ai_vs_ai.return_value = [{"game": 1, "winner": 1}]
+    mock_manager_cls.start_ai_vs_ai.return_value = [{"game": 1, "winner": 1, "temp_side_this_game": None}]
 
     # 准备 recorder 并填一个空 round_dir，供 SampleCreator 扫描
     mock_recorder = MagicMock()

@@ -18,6 +18,7 @@ from ai.game_manager import AIGameManager
 from ai.data_recorder import DataRecorder
 from ai.sample_creator import SampleCreator
 from ai.move_sampler import TempConfig, SUPPORTED_TEMP_SIDES, TEMP_SIDE_BOTH
+from ai.game_filter import should_keep_game
 
 
 def main():
@@ -170,9 +171,9 @@ def main():
     # 获取轮次目录
     round_dir = recorder.get_round_dir()
 
-    # 生成样本
+    # 生成样本（传入 record_filter 实现对局级过滤）
     creator = SampleCreator(mode=args.mode, augment=not args.no_augment)
-    samples = creator.create_from_round_dir(round_dir)
+    samples = creator.create_from_round_dir(round_dir, record_filter=should_keep_game)
 
     # 确保输出目录存在
     output_dir = os.path.dirname(os.path.abspath(args.output))
@@ -190,6 +191,22 @@ def main():
     print(f"  数据增强:   {'启用 (8 变换)' if creator.augment else '禁用'}")
     print(f"  样本数:     {len(samples)}")
     print(f"  输出路径:   {args.output}")
+
+    # 过滤统计输出（修订1：复用 should_keep_game 消除重复逻辑和类型比较 bug）
+    filter_active = (
+        temp_config is not None
+        and temp_config.temp_side in ("black", "white", "random")
+    )
+    if filter_active:
+        # 复用 should_keep_game 而非手写类型比较，
+        # 避免 str("black") == int(1) 的类型比较 bug
+        kept = sum(1 for r in results if should_keep_game(r))
+        filtered_out = len(results) - kept
+        print(f"\n样本过滤: 启用 (采样方获胜过滤)")
+        print(f"  保留对局: {kept}")
+        print(f"  过滤对局: {filtered_out}")
+    else:
+        print(f"\n样本过滤: 未启用 (非单方采样模式)")
 
 
 if __name__ == "__main__":
