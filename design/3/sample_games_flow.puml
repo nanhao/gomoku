@@ -1,0 +1,42 @@
+@startuml sample_games_flow
+title create_samples --sample_games 流程
+
+autonumber
+
+participant "User" as U
+participant "create_samples" as CS
+participant "AIGameManager" as AGM
+participant "is_sample_game" as ISG
+participant "should_keep_game" as SKG
+participant "SampleCreator" as SC
+
+== --sample_games 模式 ==
+
+U -> CS: --sample_games N
+CS -> CS: parse_args()\n互斥校验(--games vs --sample_games)
+CS -> CS: 加载model, 创建engine, 创建recorder
+
+loop sample_count < target
+    CS -> AGM: _play_single_game(engine, engine, recorder, game_num, temp_config)
+    AGM --> CS: SingleGameResult(winner, temp_side_this_game)
+    CS -> ISG: is_sample_game(result_dict)
+    ISG -> SKG: should_keep_game(result_dict)
+    SKG --> ISG: True / False
+    ISG --> CS: winner∈{1,2} 且 SKG=True → True\n否则 → False
+    CS -> CS: sample_count++ (if True)\n百分比跨越10%整数倍 → print_sample_progress()
+end
+
+CS -> SC: create_from_round_dir(round_dir, record_filter=should_keep_game)
+SC --> CS: samples
+CS -> CS: 写入输出文件
+
+== Ctrl+C 中断场景 ==
+
+U -> CS: Ctrl+C
+CS -> CS: catch KeyboardInterrupt
+CS -> CS: 打印中断统计\n(sample_count/target, total_games)
+CS -> SC: create_from_round_dir(round_dir, record_filter=should_keep_game)
+SC --> CS: partial samples
+CS -> CS: 写入部分样本到输出文件\n统计输出基于已有results正常计算
+
+@enduml
