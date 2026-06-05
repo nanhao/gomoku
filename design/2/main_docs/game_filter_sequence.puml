@@ -1,0 +1,43 @@
+@startuml game_filter_sequence
+skinparam maxMessageSize 150
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+participant "create_samples.py" as CLI
+participant "AIGameManager" as GM
+participant "_play_single_game" as PSG
+participant "DataRecorder" as DR
+participant "SampleCreator" as SC
+participant "game_filter" as GF
+
+CLI -> GM : start_ai_vs_ai(engine, engine, games, recorder, temp_config)
+loop 每局对弈
+    GM -> PSG : _play_single_game(...)
+    note right of PSG : resolve_temp_side()\n→ temp_side_this_game
+    PSG -> DR : save_game_result(game_id, winner,\nend_board, temp_side_this_game)
+    note right of DR : 始终写入 temp_side_this_game\n"black"/"white"/"both"/null
+    PSG --> GM : {"winner": w,\n"temp_side_this_game": s}
+    GM --> CLI : results.append({"game": n,\n"winner": w, "temp_side_this_game": s})
+end
+
+CLI -> CLI : filter_active =\ntemp_config.temp_side in {black,white,random}
+alt filter_active
+    CLI -> CLI : 打印"样本过滤: 启用"
+else !filter_active
+    CLI -> CLI : 打印"样本过滤: 未启用"
+end
+
+CLI -> SC : create_from_round_dir(round_dir,\nrecord_filter=should_keep_game)
+loop 每个 record.json
+    SC -> GF : should_keep_game(record)
+    alt 返回 True
+        GF --> SC : True
+        SC -> SC : 正常生成样本
+    else 返回 False
+        GF --> SC : False
+        SC -> SC : 跳过该对局
+    end
+end
+SC --> CLI : samples[]
+
+@enduml

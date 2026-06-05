@@ -538,5 +538,129 @@ class TestDataAugmentation(unittest.TestCase):
             self.assertEqual(len(samples), 1)
 
 
+class TestRecordFilter(unittest.TestCase):
+    """SampleCreator record_filter 参数测试"""
+
+    def _make_record_file(self, tmpdir, game_id, winner, temp_side_this_game=None):
+        """辅助：创建一个 record.json 文件并返回路径"""
+        record = {
+            "winner": winner,
+            "history": [
+                {
+                    "input": [0] * 225 + [1],
+                    "output": [0.0] * 225,
+                    "position": [7, 7],
+                }
+            ],
+            "end_board": [0] * 226,
+        }
+        if temp_side_this_game is not None:
+            record["temp_side_this_game"] = temp_side_this_game
+
+        game_dir = os.path.join(tmpdir, str(game_id))
+        os.makedirs(game_dir, exist_ok=True)
+        path = os.path.join(game_dir, "record.json")
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(record, f)
+        return path
+
+    def test_filter_keeps_sampling_side_win(self):
+        """SC-01: should_keep_game 过滤生效——仅采样方获胜局保留"""
+        from ai.game_filter import should_keep_game
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # 黑胜 + 采样方=black → 保留
+            p1 = self._make_record_file(tmpdir, 1, 1, "black")
+            # 白胜 + 采样方=black → 丢弃
+            p2 = self._make_record_file(tmpdir, 2, 2, "black")
+
+            creator = SampleCreator(mode="winning_move", augment=False)
+            samples = creator.create([p1, p2], record_filter=should_keep_game)
+            # 仅黑胜局保留
+            self.assertEqual(len(samples), 1)
+
+    def test_filter_both_side_not_filtered(self):
+        """SC-02: temp_side_this_game="both" → 不过滤"""
+        from ai.game_filter import should_keep_game
+        with tempfile.TemporaryDirectory() as tmpdir:
+            p1 = self._make_record_file(tmpdir, 1, 1, "both")
+            p2 = self._make_record_file(tmpdir, 2, 2, "both")
+
+            creator = SampleCreator(mode="winning_move", augment=False)
+            samples = creator.create([p1, p2], record_filter=should_keep_game)
+            self.assertEqual(len(samples), 2)
+
+    def test_filter_none_not_filtered(self):
+        """SC-03: temp_side_this_game=None → 不过滤"""
+        from ai.game_filter import should_keep_game
+        with tempfile.TemporaryDirectory() as tmpdir:
+            p1 = self._make_record_file(tmpdir, 1, 1, None)
+
+            creator = SampleCreator(mode="winning_move", augment=False)
+            samples = creator.create([p1], record_filter=should_keep_game)
+            self.assertEqual(len(samples), 1)
+
+    def test_no_filter_default(self):
+        """SC-04: 不传 record_filter → 不过滤"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            p1 = self._make_record_file(tmpdir, 1, 1, "black")
+
+            creator = SampleCreator(mode="winning_move", augment=False)
+            samples = creator.create([p1])
+            self.assertEqual(len(samples), 1)
+
+    def test_custom_filter_all_discard(self):
+        """SC-05: 自定义过滤函数全丢弃"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            p1 = self._make_record_file(tmpdir, 1, 1, "black")
+
+            creator = SampleCreator(mode="winning_move", augment=False)
+            samples = creator.create([p1], record_filter=lambda r: False)
+            self.assertEqual(len(samples), 0)
+
+    def test_create_from_round_dir_with_filter(self):
+        """SR-01/SR-02: create_from_round_dir 透传 record_filter"""
+        from ai.game_filter import should_keep_game
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # 黑胜 + 采样方=black → 保留
+            self._make_record_file(tmpdir, 1, 1, "black")
+            # 白胜 + 采样方=black → 丢弃
+            self._make_record_file(tmpdir, 2, 2, "black")
+
+            creator = SampleCreator(mode="winning_move", augment=False)
+            samples = creator.create_from_round_dir(tmpdir, record_filter=should_keep_game)
+            self.assertEqual(len(samples), 1)
+
+    def test_create_from_round_dir_no_filter(self):
+        """SR-04: create_from_round_dir 不传 record_filter → 不过滤"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._make_record_file(tmpdir, 1, 1, "black")
+            self._make_record_file(tmpdir, 2, 2, "black")
+
+            creator = SampleCreator(mode="winning_move", augment=False)
+            samples = creator.create_from_round_dir(tmpdir)
+            self.assertEqual(len(samples), 2)
+
+    def test_filter_draw_game_skipped(self):
+        """SC-06: 平局（winner=3）+ record_filter → 0 样本"""
+        from ai.game_filter import should_keep_game
+        with tempfile.TemporaryDirectory() as tmpdir:
+            p1 = self._make_record_file(tmpdir, 1, 3, "black")
+
+            creator = SampleCreator(mode="winning_move", augment=False)
+            samples = creator.create([p1], record_filter=should_keep_game)
+            # 平局本身被 SampleCreator 跳过，should_keep_game 也返回 False
+            self.assertEqual(len(samples), 0)
+
+    def test_create_from_round_dir_both_side_not_filtered(self):
+        """SR-03: create_from_round_dir + temp_side_this_game="both" + 白胜 → 不过滤"""
+        from ai.game_filter import should_keep_game
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._make_record_file(tmpdir, 1, 2, "both")
+
+            creator = SampleCreator(mode="winning_move", augment=False)
+            samples = creator.create_from_round_dir(tmpdir, record_filter=should_keep_game)
+            self.assertEqual(len(samples), 1)
+
+
 if __name__ == '__main__':
     unittest.main()

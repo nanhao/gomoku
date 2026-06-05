@@ -466,5 +466,77 @@ class TestDataRecorder(unittest.TestCase):
         self.assertEqual(first_key, "step_id")
 
 
+class TestDataRecorderTempSideThisGame(unittest.TestCase):
+    """temp_side_this_game 字段写入测试"""
+
+    def setUp(self):
+        """测试前准备：创建临时测试目录"""
+        self.test_dir = tempfile.mkdtemp(prefix="test_ai_data_")
+
+    def tearDown(self):
+        """测试后清理：删除临时测试目录"""
+        if os.path.exists(self.test_dir):
+            shutil.rmtree(self.test_dir)
+
+    def _get_record_data(self, recorder, game_id):
+        """辅助：读取指定 game_id 的 record.json"""
+        game_dir = os.path.join(recorder.round_dir, str(game_id))
+        record_file = os.path.join(game_dir, "record.json")
+        with open(record_file, 'r', encoding='utf-8') as f:
+            return json.load(f)
+
+    def test_new_game_initializes_temp_side_this_game(self):
+        """DR-01: new_game() 初始化 temp_side_this_game 为 None"""
+        recorder = DataRecorder(ai_name="test_init", ai_data_dir=self.test_dir)
+        game_id = recorder.new_game()
+        self.assertIsNone(recorder.current_game_data["temp_side_this_game"])
+
+    def test_save_game_result_temp_side_black(self):
+        """DR-02: 单方采样 temp_side_this_game="black" 写入 record.json"""
+        recorder = DataRecorder(ai_name="test_black", ai_data_dir=self.test_dir)
+        game_id = recorder.new_game()
+        board = [0] * 226
+        recorder.save_game_result(game_id, 1, board, temp_side_this_game="black")
+        data = self._get_record_data(recorder, game_id)
+        self.assertEqual(data["temp_side_this_game"], "black")
+
+    def test_save_game_result_temp_side_white(self):
+        """DR-03: 单方采样 temp_side_this_game="white" 写入 record.json"""
+        recorder = DataRecorder(ai_name="test_white", ai_data_dir=self.test_dir)
+        game_id = recorder.new_game()
+        board = [0] * 226
+        recorder.save_game_result(game_id, 2, board, temp_side_this_game="white")
+        data = self._get_record_data(recorder, game_id)
+        self.assertEqual(data["temp_side_this_game"], "white")
+
+    def test_save_game_result_temp_side_both(self):
+        """DR-04: 双方采样 temp_side_this_game="both" 写入 record.json"""
+        recorder = DataRecorder(ai_name="test_both", ai_data_dir=self.test_dir)
+        game_id = recorder.new_game()
+        board = [0] * 226
+        recorder.save_game_result(game_id, 1, board, temp_side_this_game="both")
+        data = self._get_record_data(recorder, game_id)
+        self.assertEqual(data["temp_side_this_game"], "both")
+
+    def test_save_game_result_temp_side_none(self):
+        """DR-05: 无温度采样 temp_side_this_game=None 写入 record.json 为 null"""
+        recorder = DataRecorder(ai_name="test_none", ai_data_dir=self.test_dir)
+        game_id = recorder.new_game()
+        board = [0] * 226
+        recorder.save_game_result(game_id, 1, board, temp_side_this_game=None)
+        data = self._get_record_data(recorder, game_id)
+        self.assertIsNone(data["temp_side_this_game"])
+
+    def test_save_game_result_default_no_temp_side(self):
+        """DR-06: 不传 temp_side_this_game 时，默认值为 None，record.json 含 null"""
+        recorder = DataRecorder(ai_name="test_default", ai_data_dir=self.test_dir)
+        game_id = recorder.new_game()
+        board = [0] * 226
+        # 不传 temp_side_this_game，使用默认值 None
+        recorder.save_game_result(game_id, 1, board)
+        data = self._get_record_data(recorder, game_id)
+        self.assertIsNone(data["temp_side_this_game"])
+
+
 if __name__ == "__main__":
     unittest.main()

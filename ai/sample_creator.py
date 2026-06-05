@@ -14,7 +14,7 @@
 
 import json
 import os
-from typing import List, Dict
+from typing import Callable, List, Dict, Optional
 
 
 # ----------------------------------------------------------------------
@@ -57,7 +57,8 @@ class SampleCreator:
         # winner_path 模式强制禁用增强（设计决策，详见设计文档）
         self.augment = augment and mode != "winner_path"
 
-    def create(self, record_files: List[str]) -> List[Dict]:
+    def create(self, record_files: List[str],
+               record_filter: Optional[Callable[[dict], bool]] = None) -> List[Dict]:
         """从 record.json 文件列表生成 sample 列表
 
         按 ``self.mode`` 分派到对应的处理路径：
@@ -66,6 +67,8 @@ class SampleCreator:
 
         Args:
             record_files: record.json 文件路径列表
+            record_filter: 可选的记录过滤函数。接收 record 字典，
+                返回 True 保留、False 跳过。None 表示不过滤。
 
         Returns:
             sample 数据列表，每个元素为 {"input": [...], "output": [...], "mask": [...]}
@@ -82,6 +85,12 @@ class SampleCreator:
 
             history = record.get("history", [])
             if not history:
+                continue
+
+            # 外部过滤：调用方注入的自定义过滤逻辑
+            # 注意：此过滤在"平局/空history跳过"之后执行，
+            # 即使 record_filter 保留某对局，若其 history 为空仍会被跳过
+            if record_filter is not None and not record_filter(record):
                 continue
 
             # 按 mode 分派：每种模式返回"本局待产出的 sample 原型列表"（未增强）
@@ -322,11 +331,13 @@ class SampleCreator:
             augmented.append(aug)
         return augmented
 
-    def create_from_round_dir(self, round_dir: str) -> List[Dict]:
+    def create_from_round_dir(self, round_dir: str,
+                              record_filter: Optional[Callable[[dict], bool]] = None) -> List[Dict]:
         """从轮次目录自动发现所有 record.json 并生成 sample
 
         Args:
             round_dir: 轮次目录路径（含子目录如 1/record.json, 2/record.json）
+            record_filter: 可选的记录过滤函数，透传给 create()
 
         Returns:
             sample 数据列表
@@ -342,4 +353,4 @@ class SampleCreator:
                 if os.path.exists(record_path):
                     record_files.append(record_path)
 
-        return self.create(record_files)
+        return self.create(record_files, record_filter=record_filter)

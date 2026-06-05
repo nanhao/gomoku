@@ -8,7 +8,7 @@ import os
 import json
 import logging
 import uuid
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from ai.constants import AI_DATA_DIR
 
@@ -75,6 +75,7 @@ class DataRecorder:
         self.current_game_data = {
             "history": [],
             "winner": 0,
+            "temp_side_this_game": None,   # 与 winner 统一"先初始化后覆盖"策略
             "end_board": []
         }
         return self.current_game_id
@@ -139,7 +140,8 @@ class DataRecorder:
 
         self.current_game_data["history"].append(entry)
     
-    def save_game_result(self, game_id: int, winner: int, end_board: List[int]):
+    def save_game_result(self, game_id: int, winner: int, end_board: List[int],
+                         temp_side_this_game: Optional[str] = None):
         """
         保存游戏结果到文件
         
@@ -147,12 +149,19 @@ class DataRecorder:
             game_id: 游戏编号
             winner: 获胜方（1=黑胜, 2=白胜, 3=平局, 0=未结束）
             end_board: 最终棋盘状态（226 维向量）
+            temp_side_this_game: 该局实际启用温度采样的一方。
+                始终写入 record.json。取值：
+                - "black" / "white"：单方采样
+                - "both"：双方采样
+                - None：未启用温度采样（JSON 中为 null）
         """
         # 校验游戏编号一致性
         self._ensure_game_id(game_id)
 
         self.current_game_data["winner"] = winner
         self.current_game_data["end_board"] = end_board
+        # 始终写入 temp_side_this_game（含 None 值，JSON 中为 null）
+        self.current_game_data["temp_side_this_game"] = temp_side_this_game
         
         # 创建局数子目录
         game_dir = os.path.join(self.round_dir, str(game_id))
