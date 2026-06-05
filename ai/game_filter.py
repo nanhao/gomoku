@@ -11,10 +11,13 @@
 通过 :class:`~ai.sample_creator.SampleCreator` 的 ``record_filter`` 参数注入。
 """
 
+import logging
 from typing import Optional
 
 
 __all__ = ["should_keep_game"]
+
+_logger = logging.getLogger(__name__)
 
 
 def should_keep_game(record: dict) -> bool:
@@ -37,7 +40,13 @@ def should_keep_game(record: dict) -> bool:
     """
     # 使用 get() 兼容旧格式 record.json（无 temp_side_this_game 字段）
     temp_side: Optional[str] = record.get("temp_side_this_game")
-    winner: int = record.get("winner", 0)
+    raw_winner = record.get("winner", 0)
+    # 防御性类型转换：确保 winner 为 int（旧数据或异常写入可能为 str）
+    try:
+        winner: int = int(raw_winner)
+    except (TypeError, ValueError):
+        _logger.warning("Invalid winner value in record: %r, treating as 0", raw_winner)
+        winner = 0
 
     # 非单方采样模式：不过滤
     if temp_side is None or temp_side == "both":
@@ -48,6 +57,12 @@ def should_keep_game(record: dict) -> bool:
         return True
     if temp_side == "white" and winner == 2:
         return True
+
+    # 非法 temp_side_this_game 值：记录 warning 以便排查
+    if temp_side not in ("black", "white"):
+        _logger.warning(
+            "Unexpected temp_side_this_game value: %r, discarding game", temp_side
+        )
 
     # 贪婪方胜、平局、未结束等
     return False

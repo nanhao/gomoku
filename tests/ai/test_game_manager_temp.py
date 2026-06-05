@@ -557,7 +557,7 @@ class TestSamplingProbsOccupiedPositions(_TempSaveDirTestBase):
             )
 
 
-class TestSingleGameResult(unittest.TestCase):
+class TestSingleGameResult(_TempSaveDirTestBase):
     """SingleGameResult NamedTuple 及 _play_single_game 返回值测试"""
 
     def test_namedtuple_attribute_access(self):
@@ -574,85 +574,133 @@ class TestSingleGameResult(unittest.TestCase):
         with self.assertRaises(AttributeError):
             _ = result.typo_field
 
-    def test_play_single_game_returns_result_with_temp_side(self):
-        """GM-01: _play_single_game 返回 SingleGameResult，
-        temp_side_this_game="black" 正确传递（使用 mock）"""
+    def test_play_single_game_returns_result_with_temp_side_black(self):
+        """GM-01: _play_single_game 真实执行，temp_side="black" 时
+        返回 SingleGameResult 且 temp_side_this_game="black" """
         from ai.game_manager import SingleGameResult
-        # 使用 mock 避免真实对弈写入受保护目录
-        with patch('ai.game_manager.AIGameManager._play_single_game') as mock_play:
-            mock_play.return_value = SingleGameResult(winner=1, temp_side_this_game="black")
-            from ai.data_recorder import DataRecorder
-            tmpdir = tempfile.mkdtemp()
-            try:
-                recorder = DataRecorder(ai_name="test_sgr", ai_data_dir=tmpdir)
-                result = AIGameManager._play_single_game(
-                    None, None, recorder, 1,
-                    temp_config=TempConfig(temp_side="black", temp_moves=12, seed=42),
-                )
-                self.assertIsInstance(result, SingleGameResult)
-                self.assertEqual(result.winner, 1)
-                self.assertEqual(result.temp_side_this_game, "black")
-            finally:
-                shutil.rmtree(tmpdir, ignore_errors=True)
+        engine = _SpyEngine()
+        recorder = _make_recorder()
+        result = AIGameManager._play_single_game(
+            engine, engine, recorder, 1,
+            temp_config=TempConfig(temperature=1.0, temp_side="black",
+                                   temp_moves=999, seed=42),
+        )
+        self.assertIsInstance(result, SingleGameResult)
+        self.assertIn(result.winner, [1, 2, 3])
+        self.assertEqual(result.temp_side_this_game, "black")
+
+    def test_play_single_game_returns_result_with_temp_side_white(self):
+        """GM-02: _play_single_game 真实执行，temp_side="white" 时
+        返回 SingleGameResult 且 temp_side_this_game="white" """
+        from ai.game_manager import SingleGameResult
+        engine = _SpyEngine()
+        recorder = _make_recorder()
+        result = AIGameManager._play_single_game(
+            engine, engine, recorder, 1,
+            temp_config=TempConfig(temperature=1.0, temp_side="white",
+                                   temp_moves=999, seed=42),
+        )
+        self.assertIsInstance(result, SingleGameResult)
+        self.assertIn(result.winner, [1, 2, 3])
+        self.assertEqual(result.temp_side_this_game, "white")
+
+    def test_play_single_game_returns_result_with_temp_side_both(self):
+        """GM-03: _play_single_game 真实执行，temp_side="both" 时
+        返回 SingleGameResult 且 temp_side_this_game="both" """
+        from ai.game_manager import SingleGameResult
+        engine = _SpyEngine()
+        recorder = _make_recorder()
+        result = AIGameManager._play_single_game(
+            engine, engine, recorder, 1,
+            temp_config=TempConfig(temperature=1.0, temp_side="both",
+                                   temp_moves=999, seed=42),
+        )
+        self.assertIsInstance(result, SingleGameResult)
+        self.assertIn(result.winner, [1, 2, 3])
+        self.assertEqual(result.temp_side_this_game, "both")
 
     def test_play_single_game_no_temp_config(self):
-        """GM-04: 无 temp_config 时 temp_side_this_game 为 None（使用 mock）"""
+        """GM-04: 无 temp_config 时 temp_side_this_game 为 None"""
         from ai.game_manager import SingleGameResult
-        with patch('ai.game_manager.AIGameManager._play_single_game') as mock_play:
-            mock_play.return_value = SingleGameResult(winner=2, temp_side_this_game=None)
-            from ai.data_recorder import DataRecorder
-            tmpdir = tempfile.mkdtemp()
-            try:
-                recorder = DataRecorder(ai_name="test_no_temp", ai_data_dir=tmpdir)
-                result = AIGameManager._play_single_game(
-                    None, None, recorder, 1,
-                )
-                self.assertIsInstance(result, SingleGameResult)
-                self.assertEqual(result.winner, 2)
-                self.assertIsNone(result.temp_side_this_game)
-            finally:
-                shutil.rmtree(tmpdir, ignore_errors=True)
+        engine = _SpyEngine()
+        recorder = _make_recorder()
+        result = AIGameManager._play_single_game(
+            engine, engine, recorder, 1,
+        )
+        self.assertIsInstance(result, SingleGameResult)
+        self.assertIn(result.winner, [1, 2, 3])
+        self.assertIsNone(result.temp_side_this_game)
+
+    def test_play_single_game_temp_side_random(self):
+        """GM-05: _play_single_game 真实执行，temp_side="random" 时
+        返回 SingleGameResult 且 temp_side_this_game 为 "black" 或 "white" """
+        from ai.game_manager import SingleGameResult
+        engine = _SpyEngine()
+        recorder = _make_recorder()
+        result = AIGameManager._play_single_game(
+            engine, engine, recorder, 1,
+            temp_config=TempConfig(temperature=1.0, temp_side="random",
+                                   temp_moves=999, seed=42),
+        )
+        self.assertIsInstance(result, SingleGameResult)
+        self.assertIn(result.winner, [1, 2, 3])
+        self.assertIn(result.temp_side_this_game, ("black", "white"))
 
 
-class TestStartAiVsAiResultFormat(unittest.TestCase):
-    """start_ai_vs_ai 结果列表测试"""
+class TestStartAiVsAiResultFormat(_TempSaveDirTestBase):
+    """start_ai_vs_ai 结果列表测试（真实执行）"""
 
-    def test_start_ai_vs_ai_result_has_temp_side(self):
-        """SA-01: start_ai_vs_ai 结果含 temp_side_this_game 键（使用 mock）"""
-        with patch('ai.game_manager.AIGameManager._play_single_game') as mock_play:
-            from ai.game_manager import SingleGameResult
-            mock_play.return_value = SingleGameResult(winner=1, temp_side_this_game="black")
-            from ai.data_recorder import DataRecorder
-            tmpdir = tempfile.mkdtemp()
-            try:
-                recorder = DataRecorder(ai_name="test_sa01", ai_data_dir=tmpdir)
-                results = AIGameManager.start_ai_vs_ai(
-                    None, None, 2, recorder,
-                    temp_config=TempConfig(temp_side="black", temp_moves=12, seed=42),
-                )
-                for r in results:
-                    self.assertIn("temp_side_this_game", r)
-                    self.assertEqual(r["temp_side_this_game"], "black")
-            finally:
-                shutil.rmtree(tmpdir, ignore_errors=True)
+    def test_start_ai_vs_ai_result_has_temp_side_black(self):
+        """SA-01: start_ai_vs_ai 真实执行，temp_side="black" →
+        每项含 temp_side_this_game="black" """
+        engine = _SpyEngine()
+        recorder = _make_recorder()
+        results = AIGameManager.start_ai_vs_ai(
+            engine, engine, 2, recorder,
+            temp_config=TempConfig(temperature=1.0, temp_side="black",
+                                   temp_moves=999, seed=42),
+        )
+        for r in results:
+            self.assertIn("temp_side_this_game", r)
+            self.assertEqual(r["temp_side_this_game"], "black")
 
     def test_start_ai_vs_ai_no_temp_result_has_none(self):
-        """SA-02: 无 temp_config 时结果 temp_side_this_game 为 None（使用 mock）"""
-        with patch('ai.game_manager.AIGameManager._play_single_game') as mock_play:
-            from ai.game_manager import SingleGameResult
-            mock_play.return_value = SingleGameResult(winner=1, temp_side_this_game=None)
-            from ai.data_recorder import DataRecorder
-            tmpdir = tempfile.mkdtemp()
-            try:
-                recorder = DataRecorder(ai_name="test_sa02", ai_data_dir=tmpdir)
-                results = AIGameManager.start_ai_vs_ai(
-                    None, None, 2, recorder,
-                )
-                for r in results:
-                    self.assertIn("temp_side_this_game", r)
-                    self.assertIsNone(r["temp_side_this_game"])
-            finally:
-                shutil.rmtree(tmpdir, ignore_errors=True)
+        """SA-02: 无 temp_config 时结果 temp_side_this_game 为 None"""
+        engine = _SpyEngine()
+        recorder = _make_recorder()
+        results = AIGameManager.start_ai_vs_ai(
+            engine, engine, 2, recorder,
+        )
+        for r in results:
+            self.assertIn("temp_side_this_game", r)
+            self.assertIsNone(r["temp_side_this_game"])
+
+    def test_start_ai_vs_ai_result_has_temp_side_both(self):
+        """SA-03: temp_side="both" → 每项含 temp_side_this_game="both" """
+        engine = _SpyEngine()
+        recorder = _make_recorder()
+        results = AIGameManager.start_ai_vs_ai(
+            engine, engine, 2, recorder,
+            temp_config=TempConfig(temperature=1.0, temp_side="both",
+                                   temp_moves=999, seed=42),
+        )
+        for r in results:
+            self.assertIn("temp_side_this_game", r)
+            self.assertEqual(r["temp_side_this_game"], "both")
+
+    def test_start_ai_vs_ai_result_has_temp_side_random(self):
+        """SA-04: temp_side="random" → 每项含 temp_side_this_game="black"/"white" """
+        engine = _SpyEngine()
+        recorder = _make_recorder()
+        results = AIGameManager.start_ai_vs_ai(
+            engine, engine, 5, recorder,
+            temp_config=TempConfig(temperature=1.0, temp_side="random",
+                                   temp_moves=999, seed=2026),
+        )
+        temp_sides = {r["temp_side_this_game"] for r in results}
+        # 每项应为 "black" 或 "white"
+        for ts in temp_sides:
+            self.assertIn(ts, ("black", "white"))
 
 
 if __name__ == "__main__":

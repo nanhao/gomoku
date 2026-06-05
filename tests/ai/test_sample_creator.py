@@ -640,6 +640,27 @@ class TestRecordFilter(unittest.TestCase):
             samples = creator.create_from_round_dir(tmpdir)
             self.assertEqual(len(samples), 2)
 
+    def test_filter_draw_game_skipped(self):
+        """SC-06: 平局（winner=3）+ record_filter → 0 样本"""
+        from ai.game_filter import should_keep_game
+        with tempfile.TemporaryDirectory() as tmpdir:
+            p1 = self._make_record_file(tmpdir, 1, 3, "black")
+
+            creator = SampleCreator(mode="winning_move", augment=False)
+            samples = creator.create([p1], record_filter=should_keep_game)
+            # 平局本身被 SampleCreator 跳过，should_keep_game 也返回 False
+            self.assertEqual(len(samples), 0)
+
+    def test_create_from_round_dir_both_side_not_filtered(self):
+        """SR-03: create_from_round_dir + temp_side_this_game="both" + 白胜 → 不过滤"""
+        from ai.game_filter import should_keep_game
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._make_record_file(tmpdir, 1, 2, "both")
+
+            creator = SampleCreator(mode="winning_move", augment=False)
+            samples = creator.create_from_round_dir(tmpdir, record_filter=should_keep_game)
+            self.assertEqual(len(samples), 1)
+
 
 if __name__ == '__main__':
     unittest.main()

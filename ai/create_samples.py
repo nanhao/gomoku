@@ -193,6 +193,17 @@ def main():
     print(f"  输出路径:   {args.output}")
 
     # 过滤统计输出（复用 should_keep_game 消除重复逻辑和类型比较 bug）
+    _print_filter_stats(results, temp_config)
+
+
+def _print_filter_stats(results, temp_config):
+    """输出对局级过滤统计信息。
+
+    Args:
+        results: start_ai_vs_ai() 返回的对局结果列表，
+            每项字典含 winner / temp_side_this_game 键。
+        temp_config: 温度采样配置，None 表示未启用。
+    """
     filter_active = (
         temp_config is not None
         and temp_config.temp_side in ("black", "white", "random")
@@ -200,8 +211,6 @@ def main():
     if filter_active:
         # 复用 should_keep_game 而非手写类型比较，
         # 避免 str("black") == int(1) 的类型比较 bug
-        # results 来自 start_ai_vs_ai()（L159），其每项字典与 record.json 同构
-        # （均含 winner/temp_side_this_game），可复用 should_keep_game 判定过滤
         kept = sum(1 for r in results if should_keep_game(r))
         filtered_out = len(results) - kept
         print(f"\n样本过滤: 启用 (采样方获胜过滤)")

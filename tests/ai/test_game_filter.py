@@ -8,8 +8,11 @@
 - 无温度采样 → 不过滤
 - 旧格式 record.json 兼容
 - 未结束对局 → 丢弃
+- 非法 temp_side_this_game 值 → 丢弃并 warning
+- winner 类型为 str 时的防御性转换
 """
 
+import logging
 import sys
 import os
 import unittest
@@ -89,6 +92,45 @@ class TestShouldKeepGameEdgeCases(unittest.TestCase):
     def test_empty_record(self):
         """空 record → 不过滤（get() 返回默认值 None/0）"""
         self.assertTrue(should_keep_game({}))
+
+    def test_unexpected_temp_side_value(self):
+        """GF-12: 非法 temp_side_this_game 值 → 丢弃"""
+        self.assertFalse(should_keep_game({"temp_side_this_game": "red", "winner": 1}))
+
+    def test_unexpected_temp_side_empty_string(self):
+        """GF-13: temp_side_this_game 为空字符串 → 丢弃"""
+        self.assertFalse(should_keep_game({"temp_side_this_game": "", "winner": 1}))
+
+    def test_unexpected_temp_side_logs_warning(self):
+        """GF-14: 非法 temp_side_this_game 值时记录 warning"""
+        with self.assertLogs("ai.game_filter", level="WARNING") as cm:
+            should_keep_game({"temp_side_this_game": "invalid", "winner": 1})
+        self.assertTrue(
+            any("Unexpected temp_side_this_game" in msg for msg in cm.output)
+        )
+
+
+class TestShouldKeepGameWinnerTypeDefense(unittest.TestCase):
+    """winner 类型防御性转换测试"""
+
+    def test_winner_as_string_int(self):
+        """GF-15: winner 为字符串 "1" 时能正确转换为 int 并判定"""
+        self.assertTrue(should_keep_game({"temp_side_this_game": "black", "winner": "1"}))
+
+    def test_winner_as_string_invalid(self):
+        """GF-16: winner 为非数字字符串时记 warning 并视为 0 → 丢弃"""
+        with self.assertLogs("ai.game_filter", level="WARNING") as cm:
+            result = should_keep_game({"temp_side_this_game": "black", "winner": "abc"})
+        self.assertFalse(result)
+        self.assertTrue(
+            any("Invalid winner value" in msg for msg in cm.output)
+        )
+
+    def test_winner_as_none(self):
+        """GF-17: winner 为 None 时记 warning 并视为 0 → 丢弃"""
+        with self.assertLogs("ai.game_filter", level="WARNING") as cm:
+            result = should_keep_game({"temp_side_this_game": "black", "winner": None})
+        self.assertFalse(result)
 
 
 if __name__ == "__main__":

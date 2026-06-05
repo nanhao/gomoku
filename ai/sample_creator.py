@@ -14,7 +14,7 @@
 
 import json
 import os
-from typing import Callable, List, Dict
+from typing import Callable, List, Dict, Optional
 
 
 # ----------------------------------------------------------------------
@@ -58,7 +58,7 @@ class SampleCreator:
         self.augment = augment and mode != "winner_path"
 
     def create(self, record_files: List[str],
-               record_filter: Callable[[dict], bool] = None) -> List[Dict]:
+               record_filter: Optional[Callable[[dict], bool]] = None) -> List[Dict]:
         """从 record.json 文件列表生成 sample 列表
 
         按 ``self.mode`` 分派到对应的处理路径：
@@ -332,7 +332,7 @@ class SampleCreator:
         return augmented
 
     def create_from_round_dir(self, round_dir: str,
-                              record_filter: Callable[[dict], bool] = None) -> List[Dict]:
+                              record_filter: Optional[Callable[[dict], bool]] = None) -> List[Dict]:
         """从轮次目录自动发现所有 record.json 并生成 sample
 
         Args:
