@@ -25,6 +25,7 @@ def build_cli_command(params: Dict) -> List[str]:
     - 有默认值的参数追加（mode、games、temperature 等）
     - 布尔开关仅 true 时追加 flag（--no-augment、--no-temp-sampling）
     - temp_seed 仅非 null 时追加
+    - sample_games 与 games 互斥：sample_games 有值时不追加 --games
 
     Args:
         params: 前端传入的参数字典
@@ -41,7 +42,12 @@ def build_cli_command(params: Dict) -> List[str]:
     # 有默认值的参数
     if "mode" in params:
         parts.extend(["--mode", str(params["mode"])])
-    if "games" in params:
+
+    # 互斥参数: sample_games 优先，有值时不追加 --games
+    sample_games = params.get("sample_games")
+    if sample_games is not None:
+        parts.extend(["--sample_games", str(sample_games)])
+    elif params.get("games") is not None:
         parts.extend(["--games", str(params["games"])])
 
     # 布尔开关：仅 true 时追加
