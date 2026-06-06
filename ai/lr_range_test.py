@@ -172,7 +172,8 @@ def run_lr_range_test(
     initial_state = copy.deepcopy(model.network.state_dict())
 
     # 执行 range test
-    criterion = nn.KLDivLoss(reduction='none')
+    # log_target=False: target 为概率值（非 log），与 sample.json output 格式一致
+    criterion = nn.KLDivLoss(reduction='none', log_target=False)
     lrs = []
     losses = []
 

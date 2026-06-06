@@ -98,7 +98,8 @@ class BaseTrainer(ABC):
             self.optimizer = None
 
         # 损失函数使用 KLDivLoss（KL 散度）
-        self.criterion = nn.KLDivLoss(reduction='none')
+        # log_target=False: target 为概率值（非 log），与 sample.json output 格式一致
+        self.criterion = nn.KLDivLoss(reduction='none', log_target=False)
 
         # LossLogger 支持依赖注入（测试时可传入 mock，None 则内部自动创建）
         self.loss_logger = loss_logger

@@ -250,9 +250,9 @@ class SampleLoader:
         targets_tensor = targets_tensor.to(self.device)
         masks_tensor = masks_tensor.to(self.device)
 
-        # 注意：targets 已经是 Softmax 概率分布（由 Evaluator 生成）
+        # 注意：targets 已经是概率分布（由 Evaluator 的 masked_softmax 生成）
         # 值域 (0, 1)，所有 mask=1 位置的概率和为 1
-        # 不需要额外的归一化操作
+        # KLDivLoss(log_target=False) 直接使用概率值作为 target，不需要取 log
 
         # mask 和 targets 都是 225 维，直接返回
         return inputs_tensor, targets_tensor, masks_tensor
