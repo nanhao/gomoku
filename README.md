@@ -87,7 +87,8 @@ python ai/create_samples.py --model <模型名称> --output <输出文件路径>
 | `--model` | 模型指定（如 cnn_v3.1、fc_v1） | 必填 |
 | `--output` | 输出 `.json` 文件路径 | 必填 |
 | `--mode` | sample_creator 模式，可选 `winning_move` / `winner_path` | `winning_move` |
-| `--games` | 对局数 | 100 |
+| `--games` | 对局数（与 `--sample_games` 互斥，两者都不传则默认 100） | 100 |
+| `--sample_games` | 目标样本局数（与 `--games` 互斥）；持续对弈直到收集到足够样本局后停止 | None |
 | `--no-augment` | 禁用数据增强（默认启用 D4 群 8 变换；`winner_path` 模式下强制不增强，该开关无作用） | - |
 | `--no-temp-sampling` | 关闭温度采样，全程 argmax 贪婪落子 | - |
 | `--temperature` | 温度采样温度 T（越大越探索） | 1.0 |
@@ -98,6 +99,10 @@ python ai/create_samples.py --model <模型名称> --output <输出文件路径>
 **模式说明**：
 - `winning_move`：仅取每局最后一步（制胜那步）作为样本，默认启用 D4 8 变换增强。
 - `winner_path`：取整局中**获胜方的每一步**作为样本，让模型拟合获胜方整条路径；由于每局已产出多条样本，**强制不做 D4 增强**以避免数据量失控。每步的 output 采用**软标签**（基于模型当步 softmax 输出，将落子位最小增强为严格 top1 后归一化），而非 one-hot，以保留模型分布、避免信号过于刚性。
+
+**运行模式**：
+- **`--games` 模式**（默认）：固定对局数，打完即停。
+- **`--sample_games` 模式**：以"样本局数量"为目标驱动，持续对弈直到收集到目标数量的有效样本局；适合需要精确控制样本量的场景。支持 Ctrl+C 中断并保留已收集数据。
 
 > **对局级过滤**：当 `--temp-side` 为单方模式（`black`/`white`/`random`）时，仅保留采样方获胜的对局用于样本生成，贪婪方获胜的对局将被丢弃。`--temp-side both`（默认）和 `--no-temp-sampling` 模式下不做过滤。运行结束会输出过滤统计（保留/过滤对局数）。
 
@@ -111,6 +116,9 @@ python ai/create_samples.py --model random  --output ai/merge_samples/winning/wi
 
 # winner_path 模式：获胜方整条路径
 python ai/create_samples.py --model cnn_v3.1 --mode winner_path --games 200 --output ai/train_data/winner_path_samples.json
+
+# sample_games 模式：以样本局数量为目标驱动
+python ai/create_samples.py --model cnn_v3.1 --sample_games 50 --output ai/train_data/win_samples.json
 ```
 
 > **提示**：运行结束后可用 `--train-from-dir` 加载生成的 `.json` 文件继续训练。
