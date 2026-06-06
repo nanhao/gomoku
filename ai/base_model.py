@@ -1,7 +1,7 @@
 """AI 模型基类模块
 
 定义所有 AI 模型必须实现的接口。
-所有模型输出统一为 Softmax 概率分布。
+所有模型输出层使用 LogSoftmax，predict 返回 Softmax 概率分布。
 
 类层次结构：
 - BaseModel                    —— 抽象基类，定义通用接口
@@ -47,7 +47,7 @@ class BaseModel(ABC):
         Returns:
             225 维列表，格式为 [prob(0,0), prob(0,1), ..., prob(14,14)]
             元素索引 i 对应棋盘位置 (i//15, i%15)，概率范围：0 <= prob <= 1
-            所有概率之和为 1（Softmax 概率分布）
+            所有概率之和为 1（LogSoftmax + exp 还原）
         """
         pass
     
@@ -208,7 +208,7 @@ class NeuralNetworkModel(BaseModel):
         Returns:
             225 维列表，格式为 [prob(0,0), prob(0,1), ..., prob(14,14)]
             索引 i 对应位置 (i//15, i%15)，概率范围：0 < prob < 1
-            所有概率之和为 1（Softmax 输出）
+            所有概率之和为 1（LogSoftmax + exp 还原）
         """
         # 获取设备（与网络所在设备一致）
         device = next(self.network.parameters()).device
@@ -221,8 +221,8 @@ class NeuralNetworkModel(BaseModel):
         with torch.no_grad():
             output_tensor = self.network(input_tensor)
             
-        # 将输出转换为列表 (值域 (0, 1)，Softmax 概率)
-        output_values = output_tensor.squeeze(0).tolist()
+        # 将输出转换为列表 (值域 (0, 1)，exp(log-probability) 还原为概率)
+        output_values = output_tensor.squeeze(0).exp().tolist()
             
         # 构建 225 维结果，索引 i 对应位置 (i//15, i%15)
         result = [float(prob) for prob in output_values]

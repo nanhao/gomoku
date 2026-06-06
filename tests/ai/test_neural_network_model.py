@@ -26,12 +26,12 @@ from ai.base_model import NeuralNetworkModel, board_vector_to_cnn_tensor, BaseMo
 # ========== 测试用具体子类 ==========
 
 class DummyNetwork(nn.Module):
-    """测试用简单网络，1 层线性变换 + Softmax"""
+    """测试用简单网络，1 层线性变换 + LogSoftmax"""
     
     def __init__(self):
         super().__init__()
         self.fc = nn.Linear(226, 225)
-        self.softmax = nn.Softmax(dim=1)
+        self.softmax = nn.LogSoftmax(dim=1)
     
     def forward(self, x):
         return self.softmax(self.fc(x))
@@ -243,6 +243,40 @@ class TestNeuralNetworkModelPredict(unittest.TestCase):
         result1 = model.predict(board_vector)
         result2 = model.predict(board_vector)
         self.assertEqual(result1, result2)
+
+    def test_exp_log_softmax_equals_softmax(self):
+        """T5-02: exp(log_softmax) = softmax，predict 返回值与直接 Softmax 一致"""
+        model = DummyModel(fresh=True)
+        board_vector = [0] * 225 + [1]
+
+        # 获取网络直接输出（log-probability）
+        device = next(model.network.parameters()).device
+        input_tensor = torch.tensor(board_vector, dtype=torch.float32,
+                                    device=device).unsqueeze(0)
+        model.network.eval()
+        with torch.no_grad():
+            log_prob_output = model.network(input_tensor)
+
+        # 用 Softmax 直接计算
+        softmax_output = torch.softmax(model.network.fc(input_tensor), dim=1)
+
+        # predict 返回值（exp 还原后的概率分布）
+        predict_result = model.predict(board_vector)
+
+        # exp(log_softmax) 应与 softmax 一致（1e-5 内）
+        exp_log_prob = log_prob_output.exp()
+        for i in range(225):
+            self.assertAlmostEqual(exp_log_prob[0, i].item(),
+                                   softmax_output[0, i].item(),
+                                   places=5,
+                                   msg=f"exp(log_softmax) 应等于 softmax，位置 {i} 不一致")
+
+        # predict 返回值应与 softmax 一致
+        for i in range(225):
+            self.assertAlmostEqual(predict_result[i],
+                                   softmax_output[0, i].item(),
+                                   places=5,
+                                   msg=f"predict 返回值应与 softmax 一致，位置 {i} 不一致")
 
 
 class TestNeuralNetworkModelSaveLoad(unittest.TestCase):

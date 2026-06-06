@@ -25,7 +25,7 @@ FC v1（Fully Connected v1）是五子棋 AI 系统的第一个深度学习模�
 | 激活函数 | ReLU |
 | 输入维度 | 226（225 位棋盘 + 1 位落子方） |
 | 输出维度 | 225（225 个位置的 reward） |
-| 损失函数 | L1 Loss（mask 当前全为 1，等价于对所有 225 个位置求平均） |
+| 损失函数 | KL 散度（KLDivLoss，mask 当前全为 1，等价于对所有 225 个位置求平均） |
 | 优化器 | Adam (lr=0.001) |
 
 ---
@@ -38,8 +38,8 @@ ai/fc_v1/
 ├── model.py             # 神经网络模型定义（FCv1Network + FCv1Model）
 ├── trainer.py           # 训练器实现（FCv1Trainer）
 ├── train.py             # 训练入口脚本（命令行接口）
-├── sample_inspector.py  # 样本检视器（SampleInspector）
-├── inspect_main.py      # 检视入口脚本（命令行接口）
+├── sample_inspector.py  # 样本检视器（**已废弃，intention 4 删除**）
+├── inspect_main.py      # 检视入口脚本（**已废弃，intention 4 删除**）
 └── fc_v1.pth            # 模型参数文件（训练后生成）
 ```
 
@@ -187,7 +187,7 @@ class FCv1Trainer:
             self.model = FCv1Model()
         
         self.optimizer = optim.Adam(self.model.network.parameters(), lr=0.001)
-        self.criterion = nn.L1Loss(reduction='none')
+        self.criterion = nn.KLDivLoss(reduction='none')
     
     def train_single(self, sample_dir: str, epochs: int = 10, verbose: bool = False) -> float:
         """单轮次训练（单个 sample 文件）"""
@@ -355,13 +355,13 @@ targets_tensor = targets_tensor / REWARD_NORMALIZE_FACTOR  # [-1000000,1000000] 
 ### 6.3 实现细节
 
 ```python
-# 使用 PyTorch L1Loss
-self.criterion = nn.L1Loss(reduction='none')
+# 使用 PyTorch KLDivLoss
+self.criterion = nn.KLDivLoss(reduction='none')
 
-# 计算损失（targets 已在 _prepare_tensors 中归一化到 [-1, 1]）
-loss = self.criterion(outputs, targets_tensor)  # 计算每个元素的 L1 损失 (N, 225)
-loss = loss * masks_tensor                       # 应用 mask（当前 mask 全为 1，乘以 1 等价于不屏蔽）
-loss = loss.sum() / masks_tensor.sum()           # 对 mask=1 的位置求平均（全部 225 位置）
+# 计算损失（targets 为 Softmax 概率分布）
+loss = self.criterion(outputs, targets_tensor)  # 计算每个元素的 KL 散度 (N, 225)
+loss = loss * masks_tensor                       # 应用 mask
+loss = loss.sum() / masks_tensor.sum()           # 对 mask=1 的位置求平均
 ```
 
 ### 6.4 Mask 语义说明
@@ -595,17 +595,21 @@ class TestFCv1Trainer(unittest.TestCase):
 
 ---
 
-## 12. SampleInspector（样本检视器）
+## 12. SampleInspector（样本检视器）**[已废弃]**
 
-### 12.1 职责
+> **注意**: SampleInspector 及其入口脚本 inspect_main.py 已在 intention 4（KL 散度迁移）中删除。
+> 该工具的 `_compute_loss` 功能不再需要，删除后无需适配 KL 散度。
+> 相关测试文件 `test_fc_v1_inspect.py` 也已同步删除。
+
+### 12.1 职责 **[已废弃]**
 
 读取 sample.json，逐步调用模型 predict，将模型输出与 sample output 做对比并格式化打印。
 
-### 12.2 类设计
+### 12.2 类设计 **[已废弃]**
 
-**文件**: `ai/fc_v1/sample_inspector.py`
+**文件**: `ai/fc_v1/sample_inspector.py` **[已删除]**
 
-**类**: `SampleInspector`
+**类**: `SampleInspector` **[已删除]**
 
 > 注意：文件命名为 `sample_inspector.py` 而非 `inspect.py`，以避免与 Python 标准库 `inspect` 模块命名冲突。
 
@@ -705,6 +709,7 @@ class TestSampleInspector(unittest.TestCase):
 | v1.2 | 2026-04-03 | mask 语义变更：从有效性标志（空位=0/有棋子=1）改为恒为 1（所有位置均参与 loss 计算）；输出维度从 675 维修正为 225 维；移除 mask 扩展到 675 维的逻辑 |
 | v1.3 | 2026-04-03 | 训练时对 target reward 做归一化（[-1000000,1000000]→[-1,1]），仅在 _prepare_tensors 内部生效，sample.json 原始值不变 |
 | v1.4 | 2026-04-03 | 新增 SampleInspector（sample_inspector.py）和 inspect_main.py，支持将 sample.json 喂给模型并逐步打印模型输出与 target 的对比 |
+| v1.5 | 2026-06-06 | 损失函数从 L1 Loss 迁移到 KL 散度；网络输出层从 Softmax 改为 LogSoftmax；predict 方法 exp 还原；删除 SampleInspector |
 
 ---
 

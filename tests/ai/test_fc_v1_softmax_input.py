@@ -81,13 +81,13 @@ class TestSoftmaxProbabilityInput(unittest.TestCase):
                                msg="Softmax 概率总和应为 1")
 
     def test_loss_scale_with_softmax_input(self):
-        """[primary] Softmax 输入时 loss 的量级应在合理范围内"""
+        """[primary] LogSoftmax 输出 + Softmax target 时 KL 散度 loss 的量级应在合理范围内"""
         # 使用 Softmax 概率作为输入
         output = [0.0] * 225
         output[0] = 0.9  # 高概率位置
         for i in range(1, 225):
             output[i] = 0.1 / 224  # 其余位置均分剩余概率
-        
+
         sample_data = [
             {
                 "input": [0] * 225 + [1],
@@ -97,15 +97,16 @@ class TestSoftmaxProbabilityInput(unittest.TestCase):
         ]
         inputs_tensor, targets_tensor, masks_tensor = self.trainer._sample_loader.prepare_tensors(sample_data)
 
-        # 模型输出和 target 都是 Softmax 概率，loss 应在合理范围内
+        # 模型输出是 LogSoftmax（log-probability），target 是 Softmax 概率
+        # KLDivLoss 计算 KL 散度，loss 应在合理范围内
         self.trainer.model.network.train()
         outputs = self.trainer.model.network(inputs_tensor)
         loss = self.trainer._masked_loss(outputs, targets_tensor, masks_tensor)
 
         loss_value = loss.item()
-        self.assertGreater(loss_value, 0, "loss 应大于 0")
-        self.assertLess(loss_value, 2, 
-                        f"loss 应小于 2，实际为 {loss_value:.4f}")
+        self.assertGreater(loss_value, 0, "KL 散度 loss 应大于 0")
+        self.assertLess(loss_value, 5,
+                        f"KL 散度 loss 应小于 5，实际为 {loss_value:.4f}")
 
     def test_original_sample_data_unchanged(self):
         """[primary] _prepare_tensors 不应修改原始 sample_data 列表"""
@@ -154,13 +155,13 @@ class TestSoftmaxProbabilityInput(unittest.TestCase):
         self.assertEqual(masks_tensor[0][3].item(), 0.0)
 
     def test_training_converges_with_softmax(self):
-        """[edge] 使用 Softmax 概率训练，loss 应能收敛"""
+        """[edge] 使用 Softmax 概率 + KLDivLoss 训练，loss 应能收敛"""
         # 创建一个有明确信号的 sample（Softmax 概率）
         output = [0.0] * 225
         output[0] = 0.9  # 位置 0 高概率
         for i in range(1, 225):
             output[i] = 0.1 / 224
-        
+
         sample_data = [
             {
                 "input": [0] * 225 + [1],
@@ -178,16 +179,16 @@ class TestSoftmaxProbabilityInput(unittest.TestCase):
             trainer.loss_logger = MagicMock()
             trainer.loss_logger.dense_log = False
             loss_epoch1 = trainer.train_single(tmpdir, epochs=1)
-            
+
             trainer2 = FCv1Trainer(fresh=True)
             # 注入 mock logger 避免污染真实 loss_logs 目录
             trainer2.loss_logger = MagicMock()
             trainer2.loss_logger.dense_log = False
             loss_epoch50 = trainer2.train_single(tmpdir, epochs=50)
 
-        # 50 epoch 的平均 loss 应小于 1 epoch
+        # KL 散度 loss 应随训练递减
         self.assertLess(loss_epoch50, loss_epoch1,
-                        f"50 epoch 平均 loss({loss_epoch50:.6f}) 应小于 1 epoch loss({loss_epoch1:.6f})")
+                        f"50 epoch 平均 KL散度 loss({loss_epoch50:.6f}) 应小于 1 epoch loss({loss_epoch1:.6f})")
 
 
 if __name__ == '__main__':

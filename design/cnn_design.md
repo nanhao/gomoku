@@ -111,10 +111,10 @@ Linear(28800, 150) → ReLU
 Linear(150, 225)
   │
   ▼
-Softmax
+LogSoftmax
   │
   ▼
-输出: (batch_size, 225) 概率分布，值域 (0, 1)，总和为 1
+输出: (batch_size, 225) log-probability 分布，值域 (-inf, 0]，exp 后总和为 1
 ```
 
 ### 3.3 参数量估算
@@ -214,7 +214,7 @@ def test_model_predict_shape():
     assert len(result) == 225
 
 def test_model_predict_prob_range():
-    """测试输出为 Softmax 概率，值域 (0, 1)，总和为 1"""
+    """测试输出为 LogSoftmax + exp 还原的概率，值域 (0, 1)，总和为 1"""
     model = CNNModel()
     board_vector = [0] * 225 + [1]
     result = model.predict(board_vector)

@@ -97,8 +97,8 @@ class BaseTrainer(ABC):
         else:
             self.optimizer = None
 
-        # 损失函数使用 L1Loss（MAE）
-        self.criterion = nn.L1Loss(reduction='none')
+        # 损失函数使用 KLDivLoss（KL 散度）
+        self.criterion = nn.KLDivLoss(reduction='none')
 
         # LossLogger 支持依赖注入（测试时可传入 mock，None 则内部自动创建）
         self.loss_logger = loss_logger
@@ -676,11 +676,11 @@ class BaseTrainer(ABC):
         return torch.tensor(inputs, dtype=torch.float32)
     
     def _masked_loss(self, outputs, targets_tensor, masks_tensor):
-        """计算 masked L1 loss
+        """计算 masked KL 散度 loss
         
         Args:
-            outputs: 模型输出张量 (N, 225)
-            targets_tensor: 目标张量 (N, 225)
+            outputs: 模型输出张量 (N, 225)，log-probability（LogSoftmax 输出）
+            targets_tensor: 目标张量 (N, 225)，Softmax 概率分布
             masks_tensor: 225 维 mask 张量 (N, 225)
             
         Returns:
@@ -691,6 +691,12 @@ class BaseTrainer(ABC):
         
         mask_sum = masks_tensor.sum()
         if mask_sum > 0:
+            # 防御：当 mask=1 位置的 target 总和为 0 时返回零损失
+            # 避免 KL 散度在全零 target 下的数值不稳定（设计§4.5）
+            # 使用 outputs 连接 autograd 图，确保 backward() 不报 "no grad_fn" 错误
+            target_sum = (targets_tensor * masks_tensor).sum()
+            if target_sum == 0:
+                return outputs.sum() * 0.0
             loss = loss.sum() / mask_sum
         else:
             loss = loss.sum()

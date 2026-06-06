@@ -45,23 +45,28 @@ class CNNNetworkSharedMixin:
         output = network(input_tensor)
         self.assertEqual(output.shape, (4, 225))
 
-    def test_network_softmax_output_range(self):
-        """[primary] Softmax 输出严格在 (0, 1) 范围内"""
+    def test_network_log_softmax_output_range(self):
+        """[primary] LogSoftmax 输出值 <= 0（log-probability 特征），exp 后在 (0, 1) 范围内"""
         network = self.NETWORK_CLS()
         input_tensor = torch.randn(4, 3, 15, 15)
         output = network(input_tensor)
-        self.assertTrue(torch.all(output > 0), "Softmax 输出应大于 0")
-        self.assertTrue(torch.all(output < 1), "Softmax 输出应小于 1")
+        # LogSoftmax 输出应全部 <= 0
+        self.assertTrue(torch.all(output <= 0), "LogSoftmax 输出应全部 <= 0")
+        # exp 后的值应在 (0, 1)
+        prob = output.exp()
+        self.assertTrue(torch.all(prob > 0), "exp(log-probability) 应大于 0")
+        self.assertTrue(torch.all(prob < 1), "exp(log-probability) 应小于 1")
 
-    def test_network_softmax_row_sum(self):
-        """[primary] Softmax 每行概率和为 1"""
+    def test_network_log_softmax_row_sum(self):
+        """[primary] LogSoftmax 输出的 exp 值每行和为 1"""
         network = self.NETWORK_CLS()
         input_tensor = torch.randn(4, 3, 15, 15)
         output = network(input_tensor)
-        row_sums = output.sum(dim=1)
+        # exp 后每行总和应为 1
+        row_sums = output.exp().sum(dim=1)
         self.assertTrue(
             torch.allclose(row_sums, torch.ones(4), atol=1e-5),
-            "Softmax 每行概率和应接近 1"
+            "exp(LogSoftmax) 每行概率和应接近 1"
         )
 
     def test_network_forward_single(self):

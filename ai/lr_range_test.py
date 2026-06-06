@@ -172,7 +172,7 @@ def run_lr_range_test(
     initial_state = copy.deepcopy(model.network.state_dict())
 
     # 执行 range test
-    criterion = nn.L1Loss(reduction='none')
+    criterion = nn.KLDivLoss(reduction='none')
     lrs = []
     losses = []
 

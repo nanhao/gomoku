@@ -5,7 +5,7 @@
 CNN v3 是纯卷积神经网络模型，追求结构最简化：
 - 纯卷积网络，无 FC 层、无 BatchNorm、无 Dropout
 - 用 1×1 卷积替代 FC 层，直接输出 15×15 空间概率图
-- 全程保持空间结构，Conv → ReLU → 1×1 Conv → Softmax
+- 全程保持空间结构，Conv → ReLU → 1×1 Conv → LogSoftmax
 
 ### 1.1 设计动机
 
@@ -24,7 +24,7 @@ CNN v3 是纯卷积神经网络模型，追求结构最简化：
 | Conv2 | 64→64 + BN + ReLU | **32→32 + ReLU** | **通道减半，去 BN** |
 | Conv3 | 64→64 + BN + ReLU | **32→32 + ReLU** | **通道减半，去 BN** |
 | 输出层 | FC1(14400→64) + FC_out(64→225) | **Conv1×1(32→1)** | **1×1 卷积替代 FC** |
-| Softmax | dim=1 | dim=1 | 不变 |
+| LogSoftmax | dim=1 | dim=1 | 不变 |
 
 ### 2.2 参数量对比
 
@@ -86,11 +86,11 @@ from .cnn_v3 import CNNV3Model, CNNV3Trainer
 def test_network_structure():
     """前向传播输出形状为 (batch, 225)"""
 
-def test_network_softmax_output_range():
-    """[primary] Softmax 输出值域 (0, 1)"""
+def test_network_log_softmax_output_range():
+    """[primary] LogSoftmax 输出值域 (-inf, 0]，exp 后总和为 1"""
 
-def test_network_softmax_row_sum():
-    """[primary] Softmax 每行概率和为 1"""
+def test_network_log_softmax_row_sum():
+    """[primary] LogSoftmax 每行 exp 值和为 1"""
 
 def test_network_forward_single():
     """单样本前向传播"""

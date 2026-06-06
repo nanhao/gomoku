@@ -3,6 +3,7 @@
 从 base_trainer.py 提取，统一负责从 sample.json 到 PyTorch 张量的全链路转换。
 """
 
+import math
 import json
 import os
 from typing import List, Tuple, Callable, Optional
@@ -11,24 +12,42 @@ import random
 import torch
 
 
-def compute_masked_l1_loss(estimated: List[float], sample: List[float], mask: List[int]) -> float:
-    """纯 Python 实现的 masked L1 loss（供单元测试使用）
+def compute_masked_kl_loss(log_estimated: List[float], target: List[float], mask: List[int]) -> float:
+    """纯 Python 实现的 masked KL 散度 loss（供单元测试使用）
 
-    计算 mask=1 的位置的平均绝对误差。
+    计算 mask=1 位置的平均 KL 散度。
+    KL 散度公式: Σ target[i] * (log(target[i]) - log_estimated[i]) / count
+
+    **注意**: log_estimated 参数应为网络 LogSoftmax 输出的 log-probability（值 <= 0），
+    而非 Softmax 概率值（值 > 0）。误传概率值会导致计算结果完全错误。
 
     Args:
-        estimated: 模型预测的 reward 列表（225维）
-        sample: sample.json 中的 reward 列表（225维）
-        mask: mask 列表（225维）
+        log_estimated: 模型输出的 log-probability 列表（225维），值域 (-inf, 0]
+        target: sample.json 中的概率分布列表（225维），值域 [0, 1]
+        mask: mask 列表（225维），1 表示空位，0 表示已占位
 
     Returns:
-        mask=1 位置的平均绝对误差；若 mask 全为 0 则返回 0.0
+        mask=1 位置的平均 KL 散度；若 mask 全为 0 则返回 0.0
+
+    Raises:
+        ValueError: log_estimated 中存在 > 0 的元素（应为 log-probability 而非概率值）
     """
+    # 运行时防御：检查 log_estimated 是否误传概率值
+    for val in log_estimated:
+        if val > 0:
+            raise ValueError(
+                "log_estimated 中存在 > 0 的元素（值={val}），"
+                "应传入 log-probability 而非概率值。"
+                "请确保传入的是网络 LogSoftmax 输出。"
+            )
+
     total_loss = 0.0
     mask_sum = 0
     for i in range(225):
         if mask[i] == 1:
-            total_loss += abs(estimated[i] - sample[i])
+            # target[i]==0 时跳过 log(0) 计算，该位置贡献为 0
+            if target[i] > 0:
+                total_loss += target[i] * (math.log(target[i]) - log_estimated[i])
             mask_sum += 1
     return total_loss / mask_sum if mask_sum > 0 else 0.0
 

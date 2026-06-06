@@ -266,17 +266,6 @@ python ai/merge_samples.py ai/train_data/cnn_v2_self_play_1 -o ai/merge_samples/
 python ai/merge_samples.py ai/train_data/cnn_v2_cycle_1_1 ai/train_data/cnn_v2_cycle_1_2 -o ai/merge_samples/merge_cnn_v2_all.json
 ```
 
-### 样本检视
-
-```bash
-python ai/models/fc_v1/inspect_main.py --sample <sample.json路径> [--model-path <模型路径>]
-```
-
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `--sample` | sample.json 文件路径 | 必填 |
-| `--model-path` | 模型文件路径 | 默认加载 `ai/models/fc_v1/fc_v1.pth` |
-
 ### 样本可视化
 
 将样本可视化为 PNG（棋盘 + 棋子 + attack 标记 + 热力图）。兼容新格式（`sample_generator` 输出，含 `_attack_positions`/`_shape`/`mask`）与旧 `winning_move` 格式：

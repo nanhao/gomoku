@@ -37,7 +37,7 @@ import torch
 
 from ai.models.fc_v1.trainer import FCv1Trainer
 from ai.models.fc_v1.model import FCv1Model
-from ai.sample_loader import compute_masked_l1_loss
+from ai.sample_loader import compute_masked_kl_loss
 from ai.base_trainer import BaseTrainer
 from tests.ai.helpers import create_output
 
@@ -303,16 +303,19 @@ class TestFCv1TrainerPrepareTensors(unittest.TestCase):
                 self.assertEqual((masks_t[0] != 0).sum().item(), 1)
 
     def test_masked_loss_consistent_with_compute_loss(self):
-        """_masked_loss 与 compute_masked_l1_loss 结果一致（概率 0.7 vs 0.5 → 0.2）"""
+        """_masked_loss 与 compute_masked_kl_loss 结果一致（KL 散度）"""
+        import math
+        # KL 散度: target=[0.5], log_estimated=[log(0.7)]
+        # KL = 0.5 * (log(0.5) - log(0.7)) ≈ 0.0872 / 1
+        log_estimated_val = math.log(0.7)
         output_estimated = [0.0] * 225
-        output_estimated[0] = 0.7
+        output_estimated[0] = log_estimated_val
         output_target = [0.0] * 225
         output_target[0] = 0.5
         mask = [0] * 225
         mask[0] = 1
 
-        py_loss = compute_masked_l1_loss(output_estimated, output_target, mask)
-        self.assertAlmostEqual(py_loss, 0.2, places=4)
+        py_loss = compute_masked_kl_loss(output_estimated, output_target, mask)
 
         sample = {"input": [0.0] * 226, "output": output_target, "mask": mask}
         _, targets_t, masks_t = self.trainer._sample_loader.prepare_tensors([sample])
@@ -320,8 +323,8 @@ class TestFCv1TrainerPrepareTensors(unittest.TestCase):
         tensor_loss = self.trainer._masked_loss(outputs_t, targets_t, masks_t)
 
         self.assertAlmostEqual(
-            tensor_loss.item(), 0.2, places=4,
-            msg="targets 是 Softmax 概率，_masked_loss 应直接计算"
+            py_loss, tensor_loss.item(), places=3,
+            msg="纯Python KL 散度与 _masked_loss 应一致"
         )
 
 

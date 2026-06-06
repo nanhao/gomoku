@@ -4,7 +4,7 @@
 合并原三个文件（test_cnn_trainer.py / test_cnn_v2_trainer.py / test_cnn_v3_trainer.py）
 为 Mixin + 三子类结构。
 
-注：原 test_cnn_trainer.py::test_trainer_compute_loss 实为对 compute_masked_l1_loss 的测试，
+注：原 test_cnn_trainer.py::test_trainer_compute_loss 实为对 compute_masked_kl_loss 的测试，
 与 tests/ai/test_sample_loader.py 中同名用例重复，未纳入 Mixin。
 """
 

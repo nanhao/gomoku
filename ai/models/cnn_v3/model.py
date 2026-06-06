@@ -3,17 +3,17 @@
 CNN v3 追求结构最简化：
 - 纯卷积网络，无 FC 层、无 BatchNorm、无 Dropout
 - 用 1×1 卷积替代 FC 层，直接输出 15×15 空间概率图
-- 全程保持空间结构，Conv → ReLU → 1×1 Conv → Softmax
+- 全程保持空间结构，Conv → ReLU → 1×1 Conv → LogSoftmax
 
 网络结构：
-输入层(15x15x3) -> Conv(3→32) -> Conv(32→32) -> Conv(32→32) -> Conv1x1(32→1) -> Softmax
+输入层(15x15x3) -> Conv(3→32) -> Conv(32→32) -> Conv(32→32) -> Conv1x1(32→1) -> LogSoftmax
 
 输入编码：
 - 通道1：黑棋位置（1表示黑棋，0表示其他）
 - 通道2：白棋位置（1表示白棋，0表示其他）
 - 通道3：当前落子方（全1表示黑方，全0表示白方）
 
-输出：Softmax 概率分布，值域 (0, 1)，总和为 1
+输出：LogSoftmax log-probability 分布，值域 (-inf, 0]，exp 后总和为 1
 
 CNNV3Model 继承自 NeuralNetworkModel，只需实现：
 - _create_network: 返回 CNNV3Network 实例
@@ -32,15 +32,15 @@ class CNNV3Network(nn.Module):
     """CNN v3 纯卷积神经网络结构
 
     纯卷积设计，无 FC 层。用 1×1 卷积将 32 通道压缩为 1 通道，
-    直接输出 15×15 的空间概率图，展平后 Softmax 得到 225 维概率分布。
+    直接输出 15×15 的空间概率图，展平后 LogSoftmax 得到 225 维 log-probability 分布。
 
     输入：15x15x3 的棋盘状态
-    输出：225 维的 Softmax 概率分布
+    输出：225 维的 LogSoftmax log-probability 分布
 
     网络结构：
     - 3 层 3×3 卷积：3→32→32→32（统一 32 通道，无 BN）
     - 1 层 1×1 卷积：32→1（替代 FC 层，仅 33 个参数）
-    - Flatten + Softmax 输出
+    - Flatten + LogSoftmax 输出
     - 参数量：约 1.9 万
     """
 
@@ -64,8 +64,8 @@ class CNNV3Network(nn.Module):
         self.conv_out = nn.Conv2d(32, 1, kernel_size=1)
         self.relu_out = nn.ReLU()
 
-        # Softmax 激活函数
-        self.softmax = nn.Softmax(dim=1)
+        # LogSoftmax 激活函数，输出 log-probability
+        self.softmax = nn.LogSoftmax(dim=1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """前向传播
@@ -74,7 +74,7 @@ class CNNV3Network(nn.Module):
             x: 输入张量，形状为 (batch_size, 3, 15, 15)
 
         Returns:
-            输出张量，形状为 (batch_size, 225)，值域 (0, 1)，每行和为 1
+            输出张量，形状为 (batch_size, 225)，log-probability（值 <= 0），exp 后总和为 1
         """
         # 卷积层（Conv → ReLU，无 BN）
         x = self.relu1(self.conv1(x))
@@ -87,7 +87,7 @@ class CNNV3Network(nn.Module):
         # 展平: (batch, 1, 15, 15) -> (batch, 225)
         x = x.view(x.size(0), -1)
 
-        # Softmax 激活，输出概率分布
+        # LogSoftmax 激活，输出 log-probability 分布
         x = self.softmax(x)
 
         return x

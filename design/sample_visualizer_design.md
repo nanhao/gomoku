@@ -2,7 +2,7 @@
 
 ## 背景
 
-`create_samples.py` 生成的 winning_move 模式样本（input 226 维 + output 225 维 + mask 225 维）缺少直观的验证手段。现有 `SampleInspector` 和 `temp/viz_sample.py` 面向旧格式（概率分布 + 奖励热力图），不适用于 output 仅为单点取胜标记的新样本。
+`create_samples.py` 生成的 winning_move 模式样本（input 226 维 + output 225 维 + mask 225 维）缺少直观的验证手段。现有的 `temp/viz_sample.py` 面向旧格式（概率分布 + 奖励热力图），不适用于 output 仅为单点取胜标记的新样本。（注：`SampleInspector` 已在 intention 4 中删除。）
 
 需要一个正式工具，抽样可视化样本：棋盘状态 + 取胜位置标记，供人工直观确认。
 

@@ -53,31 +53,34 @@ class TestFCv1Network(unittest.TestCase):
             output = network(input_tensor)
             self.assertEqual(output.shape, (batch_size, 225))
     
-    def test_network_softmax_output_range(self):
-        """[primary] Softmax 输出值域应在 (0, 1) 范围内"""
+    def test_network_log_softmax_output_range(self):
+        """[primary] LogSoftmax 输出值 <= 0（log-probability 特征），exp 后在 (0, 1) 范围内"""
         network = FCv1Network()
         
         batch_size = 4
         input_tensor = torch.randn(batch_size, 226)
         output = network(input_tensor)
         
-        # 验证输出范围 (0, 1)
-        self.assertTrue(torch.all(output > 0), "Softmax 输出应大于 0")
-        self.assertTrue(torch.all(output < 1), "Softmax 输出应小于 1")
+        # LogSoftmax 输出应全部 <= 0
+        self.assertTrue(torch.all(output <= 0), "LogSoftmax 输出应全部 <= 0")
+        # exp 后的值应在 (0, 1)
+        prob = output.exp()
+        self.assertTrue(torch.all(prob > 0), "exp(log-probability) 应大于 0")
+        self.assertTrue(torch.all(prob < 1), "exp(log-probability) 应小于 1")
     
-    def test_network_softmax_row_sum(self):
-        """[primary] Softmax 每行概率和应为 1"""
+    def test_network_log_softmax_row_sum(self):
+        """[primary] LogSoftmax 输出的 exp 值每行和为 1"""
         network = FCv1Network()
         
         batch_size = 4
         input_tensor = torch.randn(batch_size, 226)
         output = network(input_tensor)
         
-        # 验证每行和为 1
-        row_sums = output.sum(dim=1)
+        # exp 后每行总和应为 1
+        row_sums = output.exp().sum(dim=1)
         expected_sums = torch.ones(batch_size)
         self.assertTrue(torch.allclose(row_sums, expected_sums, atol=1e-5),
-                       "Softmax 每行概率和应接近 1")
+                       "exp(LogSoftmax) 每行概率和应接近 1")
 
 
 class TestFCv1Model(unittest.TestCase):
@@ -151,9 +154,10 @@ class TestFCv1Model(unittest.TestCase):
             self.assertGreaterEqual(reward, -1000000)
             self.assertLessEqual(reward, 1000000)
     
-    def test_model_predict_softmax_output(self):
-        """[primary] 验证 predict 直接返回 Softmax 概率
+    def test_model_predict_probability_output(self):
+        """[primary] 验证 predict 返回概率分布
         
+        网络输出为 LogSoftmax，predict 方法通过 exp() 还原为概率分布。
         输出应为概率分布，值域 (0, 1)，总和为 1
         """
         model = FCv1Model()

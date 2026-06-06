@@ -9,14 +9,14 @@ CNN v1 的轻量化改进版本。
 - 计算量从 23M 降至 18M MACs（-22%）
 
 网络结构：
-输入层(15x15x3) -> 卷积层 -> 全连接层 -> 输出层(225) -> Softmax
+输入层(15x15x3) -> 卷积层 -> 全连接层 -> 输出层(225) -> LogSoftmax
 
 输入编码：
 - 通道1：黑棋位置（1表示黑棋，0表示其他）
 - 通道2：白棋位置（1表示白棋，0表示其他）
 - 通道3：当前落子方（全1表示黑方，全0表示白方）
 
-输出：Softmax 概率分布，值域 (0, 1)，总和为 1
+输出：LogSoftmax log-probability 分布，值域 (-inf, 0]，exp 后总和为 1
 
 CNNV2Model 继承自 NeuralNetworkModel，只需实现：
 - _create_network: 返回 CNNV2Network 实例
@@ -38,7 +38,7 @@ class CNNV2Network(nn.Module):
     相对 CNN v1，卷积层统一为 64 通道，FC1 输入从 28800 降至 14400。
 
     输入：15x15x3 的棋盘状态
-    输出：225 维的 Softmax 概率分布
+    输出：225 维的 LogSoftmax log-probability 分布
 
     网络结构：
     - 3 层卷积：3→64→64→64（统一通道数，减少参数量）
@@ -73,8 +73,8 @@ class CNNV2Network(nn.Module):
         # 输出层: 225个位置
         self.fc_output = nn.Linear(64, 225)
 
-        # Softmax 激活函数
-        self.softmax = nn.Softmax(dim=1)
+        # LogSoftmax 激活函数，输出 log-probability
+        self.softmax = nn.LogSoftmax(dim=1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """前向传播
@@ -83,7 +83,7 @@ class CNNV2Network(nn.Module):
             x: 输入张量，形状为 (batch_size, 3, 15, 15)
 
         Returns:
-            输出张量，形状为 (batch_size, 225)，值域 (0, 1)，每行和为 1
+            输出张量，形状为 (batch_size, 225)，log-probability（值 <= 0），exp 后总和为 1
         """
         # 卷积层
         x = self.conv1(x)
@@ -108,7 +108,7 @@ class CNNV2Network(nn.Module):
         # 输出层
         x = self.fc_output(x)
 
-        # Softmax 激活，输出概率分布
+        # LogSoftmax 激活，输出 log-probability 分布
         x = self.softmax(x)
 
         return x

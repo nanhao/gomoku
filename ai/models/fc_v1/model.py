@@ -1,6 +1,6 @@
 """FC v1 全连接神经网络模型实现
 
-网络结构：输入层(226) -> 隐藏层1-5(各1000, ReLU) -> 输出层(225) -> Softmax
+网络结构：输入层(226) -> 隐藏层1-5(各1000, ReLU) -> 输出层(225) -> LogSoftmax
 
 FCv1Model 继承自 NeuralNetworkModel，只需实现：
 - _create_network: 返回 FCv1Network 实例
@@ -19,7 +19,7 @@ class FCv1Network(nn.Module):
     """FC v1 神经网络结构
     
     5层隐藏层，每层1000个神经元，使用ReLU激活函数。
-    输入层(226) -> 隐藏层1-5(各1000, ReLU) -> 输出层(225) -> Softmax
+    输入层(226) -> 隐藏层1-5(各1000, ReLU) -> 输出层(225) -> LogSoftmax
     """
     
     def __init__(self):
@@ -47,8 +47,8 @@ class FCv1Network(nn.Module):
         # 输出层
         self.fc_output = nn.Linear(1000, 225)
         
-        # Softmax 激活函数，dim=1 表示按行计算
-        self.softmax = nn.Softmax(dim=1)
+        # LogSoftmax 激活函数，dim=1 表示按行计算，输出 log-probability
+        self.softmax = nn.LogSoftmax(dim=1)
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """前向传播
@@ -57,7 +57,7 @@ class FCv1Network(nn.Module):
             x: 输入张量，形状为 (batch_size, 226)
             
         Returns:
-            输出张量，形状为 (batch_size, 225)，值域 (0, 1)，每行和为 1
+            输出张量，形状为 (batch_size, 225)，log-probability（值 <= 0），exp 后总和为 1
         """
         # 第1层
         x = self.fc1(x)
@@ -82,7 +82,7 @@ class FCv1Network(nn.Module):
         # 输出层
         x = self.fc_output(x)
         
-        # Softmax 激活，输出概率分布
+        # LogSoftmax 激活，输出 log-probability 分布
         x = self.softmax(x)
         
         return x

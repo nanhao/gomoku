@@ -14,58 +14,137 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 import torch
 
-from ai.sample_loader import SampleLoader, compute_masked_l1_loss, discover_all_data
+from ai.sample_loader import SampleLoader, compute_masked_kl_loss, discover_all_data
 from tests.ai.helpers import create_sample_dir
 
 
-class TestComputeMaskedL1Loss(unittest.TestCase):
-    """测试 compute_masked_l1_loss 独立函数"""
+class TestComputeMaskedKLLoss(unittest.TestCase):
+    """测试 compute_masked_kl_loss 独立函数"""
 
-    def test_single_mask_position(self):
-        """单个 mask=1 位置时正确计算 L1 loss"""
-        estimated = [0.0] * 225
-        sample = [0.0] * 225
+    def test_identical_distribution_loss_is_zero(self):
+        """T1-01: 完全相同分布 KL 散度为 0"""
+        import math
+        # log_estimated = log([0.5, 0.5, 0, ..., 0])
+        log_estimated = [0.0] * 225
+        log_estimated[0] = math.log(0.5)
+        log_estimated[1] = math.log(0.5)
+        target = [0.0] * 225
+        target[0] = 0.5
+        target[1] = 0.5
         mask = [0] * 225
-        estimated[0] = 100.0
-        sample[0] = 50.0
         mask[0] = 1
-
-        loss = compute_masked_l1_loss(estimated, sample, mask)
-        # |100 - 50| / 1 = 50
-        self.assertEqual(loss, 50.0)
-
-    def test_multiple_mask_positions(self):
-        """多个 mask=1 位置时正确计算平均 L1 loss"""
-        estimated = [0.0] * 225
-        sample = [0.0] * 225
-        mask = [0] * 225
-        estimated[0] = 0.7
-        sample[0] = 0.5
-        mask[0] = 1
-        estimated[1] = 0.3
-        sample[1] = 0.1
         mask[1] = 1
 
-        loss = compute_masked_l1_loss(estimated, sample, mask)
-        # (|0.7-0.5| + |0.3-0.1|) / 2 = (0.2 + 0.2) / 2 = 0.2
-        self.assertAlmostEqual(loss, 0.2, places=6)
+        loss = compute_masked_kl_loss(log_estimated, target, mask)
+        self.assertAlmostEqual(loss, 0.0, places=5)
+
+    def test_known_distribution_kl_divergence(self):
+        """T1-02: 已知分布的 masked 平均 KL 散度 ≈ 0.0436"""
+        import math
+        # KL([0.5,0.5] || [0.7,0.3]) 总和 = 0.5*(ln0.5-ln0.7) + 0.5*(ln0.5-ln0.3) ≈ 0.0872
+        # 但 compute_masked_kl_loss 按 mask=1 位置数 (2个) 取平均，返回 ≈ 0.0872/2 ≈ 0.0436
+        log_estimated = [0.0] * 225
+        log_estimated[0] = math.log(0.7)
+        log_estimated[1] = math.log(0.3)
+        target = [0.0] * 225
+        target[0] = 0.5
+        target[1] = 0.5
+        mask = [0] * 225
+        mask[0] = 1
+        mask[1] = 1
+
+        loss = compute_masked_kl_loss(log_estimated, target, mask)
+        self.assertAlmostEqual(loss, 0.0436, places=3)
 
     def test_zero_mask_returns_zero(self):
-        """mask 全为 0 时返回 0.0"""
-        estimated = [100.0] * 225
-        sample = [0.0] * 225
+        """T1-03: mask 全为 0 时返回 0.0"""
+        log_estimated = [0.0] * 225
+        target = [0.0] * 225
         mask = [0] * 225
 
-        loss = compute_masked_l1_loss(estimated, sample, mask)
+        loss = compute_masked_kl_loss(log_estimated, target, mask)
         self.assertEqual(loss, 0.0)
 
-    def test_identical_values_zero_loss(self):
-        """估计值与样本值完全相同时 loss 为 0"""
-        values = [0.5] * 225
-        mask = [1] * 225
+    def test_target_with_zero_items(self):
+        """T1-04: target 含零项时，该位置贡献为 0"""
+        import math
+        # target[0]=0 跳过 log(0)，target[1]=1 贡献为 log(1)-log(0.2) ≈ 1.6094
+        log_estimated = [0.0] * 225
+        log_estimated[0] = math.log(0.8)
+        log_estimated[1] = math.log(0.2)
+        target = [0.0] * 225
+        target[0] = 0.0
+        target[1] = 1.0
+        mask = [0] * 225
+        mask[0] = 1
+        mask[1] = 1
 
-        loss = compute_masked_l1_loss(values, values, mask)
-        self.assertEqual(loss, 0.0)
+        loss = compute_masked_kl_loss(log_estimated, target, mask)
+        # 只有 target[1]=1.0 贡献: 1.0 * (log(1.0) - log(0.2)) ≈ 1.6094
+        # 除以 count=2, 平均 ≈ 0.8047
+        expected = 1.0 * (math.log(1.0) - math.log(0.2)) / 2
+        self.assertAlmostEqual(loss, expected, places=3)
+
+    def test_kl_divergence_asymmetry(self):
+        """T1-05: KL 散度非对称性——交换 estimated 和 target 结果不同"""
+        import math
+        log_est_a = [0.0] * 225
+        log_est_a[0] = math.log(0.7)
+        log_est_a[1] = math.log(0.3)
+        target_a = [0.0] * 225
+        target_a[0] = 0.5
+        target_a[1] = 0.5
+        mask = [0] * 225
+        mask[0] = 1
+        mask[1] = 1
+
+        loss_a = compute_masked_kl_loss(log_est_a, target_a, mask)
+
+        # 交换: log_estimated 用 [0.5,0.5] 的 log, target 用 [0.7,0.3]
+        log_est_b = [0.0] * 225
+        log_est_b[0] = math.log(0.5)
+        log_est_b[1] = math.log(0.5)
+        target_b = [0.0] * 225
+        target_b[0] = 0.7
+        target_b[1] = 0.3
+
+        loss_b = compute_masked_kl_loss(log_est_b, target_b, mask)
+
+        # KL 散度非对称，两者不应相等
+        self.assertNotAlmostEqual(loss_a, loss_b, places=3)
+
+    def test_consistent_with_masked_loss(self):
+        """T1-06: compute_masked_kl_loss 与 _masked_loss 结果一致"""
+        import math
+        log_estimated = [math.log(0.7), math.log(0.3)] + [0.0] * 223
+        target = [0.5, 0.5] + [0.0] * 223
+        mask = [1, 1] + [0] * 223
+
+        py_loss = compute_masked_kl_loss(log_estimated, target, mask)
+
+        # 用 PyTorch 计算 _masked_loss 对比
+        from ai.models.fc_v1.trainer import FCv1Trainer
+        trainer = FCv1Trainer(fresh=True)
+        outputs_t = torch.tensor([[math.log(0.7), math.log(0.3)] + [0.0] * 223],
+                                 dtype=torch.float32).to(trainer.device)
+        targets_t = torch.tensor([[0.5, 0.5] + [0.0] * 223],
+                                 dtype=torch.float32).to(trainer.device)
+        masks_t = torch.tensor([[1, 1] + [0] * 223],
+                                dtype=torch.float32).to(trainer.device)
+        tensor_loss = trainer._masked_loss(outputs_t, targets_t, masks_t)
+
+        self.assertAlmostEqual(py_loss, tensor_loss.item(), places=3,
+                               msg="纯Python KL 散度与 _masked_loss 应一致")
+
+    def test_positive_probability_raises_valueerror(self):
+        """运行时防御: log_estimated 中存在 > 0 元素（概率值特征）时 raise ValueError"""
+        # 误传概率值而非 log-probability
+        log_estimated = [0.7, 0.3] + [0.0] * 223  # 0.7 > 0，应为 log 值
+        target = [0.5, 0.5] + [0.0] * 223
+        mask = [1, 1] + [0] * 223
+
+        with self.assertRaises(ValueError):
+            compute_masked_kl_loss(log_estimated, target, mask)
 
 
 class TestLoadMergeFile(unittest.TestCase):
