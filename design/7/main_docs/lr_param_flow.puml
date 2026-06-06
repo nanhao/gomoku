@@ -1,0 +1,89 @@
+@startuml lr_param_flow
+title train_main.py --lr 参数传递流程
+
+skinparam defaultFontName Microsoft YaHei,SimHei,sans-serif
+skinparam backgroundColor white
+skinparam shadowing false
+
+actor "用户" as User
+
+participant "train_main.py\nmain()" as Main
+participant "argparse" as Argparse
+participant "registry.py\nget_trainer()" as Registry
+participant "BaseTrainer\n__init__()" as Trainer
+participant "AdamW\noptimizer" as Optimizer
+participant "runners.py\nrun_train_from_dir()" as Runner
+
+== 参数解析 ==
+
+User -> Main: python ai/train_main.py --model cnn_v3.2\n--train-from-dir data/ --lr 0.005
+Main -> Argparse: parser.parse_args()
+
+Argparse -> Argparse: --lr type=float → 0.005
+alt --lr 未指定
+    Argparse -> Argparse: args.lr = 0.001 (default)
+end
+
+Argparse --> Main: args
+
+== 参数校验 ==
+
+Main -> Main: if args.lr <= 0
+alt lr ≤ 0
+    Main -> User: parser.error("--lr 必须为正数")\nSystemExit(2)
+end
+
+== 训练器构造 ==
+
+Main -> Main: kwargs = {'lr': args.lr}
+note right: lr 无条件加入 kwargs\n与 --lr-scheduler 解耦
+
+alt --lr-scheduler 已指定
+    Main -> Main: kwargs.update({\nlr_scheduler_type, lr_step_size,\nlr_gamma, lr_patience, lr_factor\n})
+    note right: scheduler 参数条件追加
+end
+
+Main -> Registry: get_trainer("cnn_v3.2", **kwargs)
+note right: kwargs 含 lr=0.005
+
+Registry -> Registry: 解析 spec → name="cnn_v3", gen=2
+Registry -> Registry: 导入 CNNV3Trainer
+Registry -> Trainer: CNNV3Trainer(gen=2, lr=0.005)
+
+Trainer -> Trainer: _create_model(fresh=False)
+
+group 优化器初始化
+    Trainer -> Trainer: lr = 0.005 (传入值 ≠ None，不使用 DEFAULT_LR)
+    Trainer -> Optimizer: AdamW(params, lr=0.005, weight_decay=0.01)
+    Optimizer --> Trainer: optimizer
+    Trainer -> Trainer: _setup_lr_scheduler()\n(调度器从 lr=0.005 开始)
+end
+
+Trainer --> Registry: trainer
+Registry --> Main: trainer
+
+== 训练参数打印 ==
+
+Main -> Runner: run_train_from_dir(args, trainer)
+
+Runner -> Runner: 打印训练参数
+
+group 新增打印行
+    Runner -> Optimizer: param_groups[0]['lr']
+    Optimizer --> Runner: 0.005
+    Runner -> User: 初始学习率 (lr): 0.005
+end
+
+== 训练执行 ==
+
+Runner -> Trainer: train_auto(sample_dirs, epochs=1000, ...)
+
+loop 每个 epoch
+    Trainer -> Trainer: _forward_backward_step()\n(lr=0.005 驱动参数更新)
+    Trainer -> Trainer: _step_lr_scheduler()\n(若启用 scheduler，从此处衰减)
+end
+
+Runner --> Main: avg_loss
+Main -> User: 训练完成！平均损失: X.XXXX
+
+@enduml

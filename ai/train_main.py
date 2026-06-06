@@ -116,25 +116,39 @@ def main():
         help='验证集比例，0 表示不分割，推荐 0.2，默认 0.0'
     )
 
+    # 新增：初始学习率参数（与 scheduler 解耦，无条件传递）
+    parser.add_argument(
+        '--lr',
+        type=float,
+        default=0.001,
+        help='初始学习率，必须为正数，默认 0.001'
+    )
+
     args = parser.parse_args()
 
     # 验证：必须指定 --train-from-dir
     if not args.train_from_dir:
         parser.error("请指定 --train-from-dir 参数")
 
+    # 验证：--lr 必须为正数
+    if args.lr <= 0:
+        parser.error("--lr 必须为正数")
+
     # 创建训练器
-    scheduler_kwargs = {}
+    # lr 无条件加入 kwargs（与 --lr-scheduler 解耦）
+    kwargs = {'lr': args.lr}
     if args.lr_scheduler:
-        scheduler_kwargs = {
+        # scheduler 参数仅当 --lr-scheduler 指定时才追加
+        kwargs.update({
             'lr_scheduler_type': args.lr_scheduler,
             'lr_step_size': args.lr_step_size,
             'lr_gamma': args.lr_gamma,
             'lr_patience': args.lr_patience,
             'lr_factor': args.lr_factor
-        }
+        })
 
     try:
-        trainer = get_trainer(args.model, fresh=args.fresh, **scheduler_kwargs)
+        trainer = get_trainer(args.model, fresh=args.fresh, **kwargs)
     except ValueError as e:
         print(f"错误: {e}")
         sys.exit(1)

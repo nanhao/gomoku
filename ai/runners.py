@@ -143,6 +143,9 @@ def run_train_from_dir(args, trainer) -> None:
         print(f"  验证集比例 (val_ratio): {args.val_ratio}")
     else:
         print(f"  验证集比例 (val_ratio): 0.0 (不分割)")
+    # 打印实际初始学习率（从 optimizer 读取，确保与训练一致）
+    lr_value = trainer.optimizer.param_groups[0]['lr']
+    print(f"  初始学习率 (lr):        {lr_value}")
 
     try:
         # 自动选择训练方法（提供 batch_size 时使用 mini-batch，否则全量更新）

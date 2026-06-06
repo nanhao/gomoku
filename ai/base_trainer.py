@@ -53,7 +53,8 @@ class BaseTrainer(ABC):
                  device: Optional[torch.device] = None, loss_logger=None,
                  lr_scheduler_type: str = None, lr_step_size: int = 500,
                  lr_gamma: float = 0.9, lr_patience: int = 100,
-                 lr_factor: float = 0.5, weight_decay: float = None):
+                 lr_factor: float = 0.5, weight_decay: float = None,
+                 lr: float = None):
         """初始化训练器
 
         Args:
@@ -68,6 +69,8 @@ class BaseTrainer(ABC):
             lr_patience: ReduceLROnPlateau 耐心值，默认 100
             lr_factor: ReduceLROnPlateau 衰减系数，默认 0.5
             weight_decay: AdamW 权重衰减系数，None 时使用 DEFAULT_WEIGHT_DECAY
+            lr: 初始学习率，None 时使用类属性 DEFAULT_LR（0.001）；
+                显式传入时必须为正数
         """
         # 保存代数信息（在 _create_model 之前设置，以便子类访问）
         self.gen = gen
@@ -87,10 +90,17 @@ class BaseTrainer(ABC):
 
         # 初始化优化器（AdamW，解耦权重衰减）
         if self.model.network is not None:
+            # 确定初始学习率：显式传入时使用传入值，否则使用类默认值
+            if lr is not None:
+                if lr <= 0:
+                    raise ValueError(f"lr 必须为正数，实际值: {lr}")
+                actual_lr = lr
+            else:
+                actual_lr = self.DEFAULT_LR
             wd = weight_decay if weight_decay is not None else self.DEFAULT_WEIGHT_DECAY
             self.optimizer = optim.AdamW(
                 self.model.network.parameters(),
-                lr=self.DEFAULT_LR,
+                lr=actual_lr,
                 weight_decay=wd
             )
         else:
