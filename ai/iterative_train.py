@@ -225,7 +225,7 @@ class IterativeTrainer:
             cmd,
             cwd=self.project_root,
             capture_output=True,
-            text=True,
+            encoding='utf-8',
             env={**os.environ, "PYTHONIOENCODING": "utf-8"},
         )
 
@@ -285,7 +285,7 @@ class IterativeTrainer:
             cmd,
             cwd=self.project_root,
             capture_output=True,
-            text=True,
+            encoding='utf-8',
             env={**os.environ, "PYTHONIOENCODING": "utf-8"},
         )
 
@@ -315,7 +315,7 @@ class IterativeTrainer:
             cmd,
             cwd=self.project_root,
             capture_output=True,
-            text=True,
+            encoding='utf-8',
             env={**os.environ, "PYTHONIOENCODING": "utf-8"},
         )
 
