@@ -256,6 +256,25 @@ python -m ai.sample_visualizer --sample data.json --count 3 --no-heatmap --seed 
 
 > 热力图核心算法位于独立可复用的 `visualization/heatmap_color.py`（无 UI 依赖，默认白→黄→橙→红 4 色色板 + log 归一化），同时被 `ai/sample_visualizer.py`（matplotlib）和 `gui/components/heatmap.py`（tkinter 回放界面）共用。
 
+### 迭代进化训练
+
+自动化「生成样本 → 训练 → 对战评估 → 模型晋升」闭环，使 cnn_v3 模型持续迭代进化：
+
+```bash
+python ai/iterative_train.py
+```
+
+脚本以 `gen4/cnn_v3.pth` 为父代起点，每轮自动执行：
+1. 复制 gen4 → gen5（模型初始化）
+2. 调用 `create_samples.py` 自对弈生成 500 局样本
+3. 调用 `train_main.py` 训练 gen5（1 epoch, batch 4096）
+4. 调用 `battle.py` 父子对战 100 局
+5. 子代胜率 > 50% 则晋升（gen5 → gen4），进入下一轮
+6. 子代胜率 ≤ 50% 则停止，输出完整统计报告
+
+> 前置条件：`ai/models/cnn_v3/gen4/cnn_v3.pth` 必须存在；不支持多实例并发（`.iterative_lock` 锁保护）。
+> v1.0 所有参数硬编码，不做命令行参数化。
+
 ### LR Range Test
 
 学习率范围测试工具，用于确定最优学习率区间。每个 round 使用一个固定 lr，训练 `epochs` 个 step 后记录平均 loss，lr 从 `min_lr` 线性递增至 `max_lr`。每个 round 开始前重置模型到初始状态，确保 loss 只反映 lr 的影响。
@@ -294,7 +313,7 @@ python -m pytest tests/ -v -s
 python tests/run_tests.py
 ```
 
-> 覆盖全部 1446 个测试（自动发现，无需手工维护测试列表）
+> 覆盖全部 1519 个测试（自动发现，无需手工维护测试列表）
 >
 > 附加参数示例：
 > - `python -m pytest tests/ -q` —— 静默模式
