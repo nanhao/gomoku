@@ -156,60 +156,8 @@ python ai/train_main.py --model cnn_v1 --train-from-dir ai/merge_samples/merge_c
 python ai/train_main.py --model cnn_v3.2 --fresh --train-from-dir ai/merge_samples/v2 --epochs 1000 --batch-size 4096 --shuffle --val-ratio 0.2
 ```
 
-> **注意**：`--cycle` 与 `--train-from-dir` 两个模式互斥，只能选其一。
-
-#### 训练周期（自我对弈训练）
-
-```bash
-python ai/train_main.py --model <模型指定> --cycle [选项]
-```
-
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `--model` | 模型指定（如 fc_v1、cnn_v3.2） | fc_v1 |
-| `--cycle` | 启用训练周期模式 | - |
-| `--rounds` | 训练轮数 | 10 |
-| `--games` | 每轮对局数 | 100 |
-| `--epochs` | 每轮训练迭代数 | 1000 |
-| `--rate` | 奖励衰减率 | 0.9 |
-| `--fresh` | 从新模型开始 | - |
-| `--batch-size` | 每批次样本数（启用 mini-batch） | 无（全量更新） |
-| `--shuffle` | 每轮打乱数据顺序（mini-batch 有效） | False |
-| `--val-ratio` | 验证集比例，0 表示不分割，推荐 0.2 | 0.0 |
-| `--lr-scheduler` | 学习率调度：`step` / `plateau` | 无（固定学习率） |
-| `--lr-step-size` | StepLR 衰减间隔（epoch） | 500 |
-| `--lr-gamma` | StepLR 衰减系数 | 0.9 |
-| `--lr-patience` | ReduceLROnPlateau 耐心值 | 100 |
-| `--lr-factor` | ReduceLROnPlateau 衰减系数 | 0.5 |
-| `--no-temp-sampling` | 关闭温度采样，自对弈全程 argmax | - |
-| `--temperature` | 温度采样温度 T | 1.0 |
-| `--temp-moves` | 前 N 步启用温度采样 | 12 |
-| `--temp-side` | 温度采样作用方：`black` / `white` / `both` / `random` | `both` |
-| `--temp-seed` | 温度采样随机种子（便于复现） | None |
-
-> **温度采样**：`--cycle` 模式**默认启用**温度采样——前 12 步按模型 softmax 分布以 T=1.0 随机落子，之后切回 argmax。目的是让自对弈数据具有开局多样性，避免陷入固定棋谱。加 `--no-temp-sampling` 可关闭。详见 [design/move_sampler_design.md](design/move_sampler_design.md)。
-
 > **注意**：使用 `--batch-size` 启用 mini-batch 训练时，系统会自动生成**密集 loss log**，
 > 记录每个 batch 的 loss 和梯度大小，并在曲线图上以双 Y 轴形式叠加展示（Loss + Gradient Norm）。
-
-```bash
-# 示例
-python ai/train_main.py --model fc_v1 --cycle              # 默认参数（全量更新）
-python ai/train_main.py --model cnn_v1 --cycle             # CNN v1 训练
-python ai/train_main.py --model cnn_v2 --cycle             # CNN v2 轻量化训练
-python ai/train_main.py --model fc_v1 --cycle --rounds 50 --games 50  # 自定义
-python ai/train_main.py --model fc_v1 --cycle --fresh      # 从新模型开始
-python ai/train_main.py --model cnn_v1 --cycle --batch-size 32 --shuffle  # mini-batch 训练
-python ai/train_main.py --model cnn_v2 --cycle --batch-size 32 --shuffle  # CNN v2 mini-batch 训练
-
-# 使用学习率衰减（推荐后期训练使用）
-python ai/train_main.py --model cnn_v1 --cycle --batch-size 32 --lr-scheduler step --lr-step-size 300
-python ai/train_main.py --model cnn_v1 --cycle --batch-size 32 --lr-scheduler plateau --lr-patience 50
-python ai/train_main.py --model cnn_v2 --cycle --batch-size 32 --lr-scheduler plateau --lr-patience 50
-
-# 常用
-python ai/train_main.py --model cnn_v2 --cycle --batch-size 128 --shuffle --rounds 1 --games 600 --epochs 2000
-```
 
 ### 棋型样本生成
 
@@ -263,7 +211,7 @@ python ai/merge_samples.py <目录1> [目录2] ... -o <输出文件路径>
 python ai/merge_samples.py ai/train_data/cnn_v2_self_play_1 -o ai/merge_samples/merge_cnn_v2.json
 
 # 示例：合并多个目录
-python ai/merge_samples.py ai/train_data/cnn_v2_cycle_1_1 ai/train_data/cnn_v2_cycle_1_2 -o ai/merge_samples/merge_cnn_v2_all.json
+python ai/merge_samples.py ai/train_data/cnn_v2_self_play_1 ai/train_data/cnn_v2_self_play_2 -o ai/merge_samples/merge_cnn_v2_all.json
 ```
 
 ### 样本可视化
@@ -338,7 +286,7 @@ python -m pytest tests/ -v -s
 python tests/run_tests.py
 ```
 
-> 覆盖全部 1466 个测试（自动发现，无需手工维护测试列表）
+> 覆盖全部 1446 个测试（自动发现，无需手工维护测试列表）
 >
 > 附加参数示例：
 > - `python -m pytest tests/ -q` —— 静默模式
@@ -377,7 +325,7 @@ python tests/run_tests.py
 - **输入**：226 维向量（225 位棋盘状态 + 1 位当前玩家）
 - **输出**：225 维概率分布（Softmax）
 - **网络结构**：输入层(226) → 隐藏层1-5(各1000, ReLU) → 输出层(225) → Softmax
-- **训练方式**：自我对弈 + 奖励反向传播 + 五连追溯奖励
+- **训练方式**：自我对弈 + 棋型评估奖励 + KL 散度监督学习
 - **模型文件**：`ai/models/fc_v1/fc_v1.pth`
 
 ### CNN v1
@@ -387,14 +335,14 @@ python tests/run_tests.py
 - **输入**：15×15×3 张量（黑棋通道、白棋通道、当前玩家通道）
 - **输出**：225 维概率分布（Softmax）
 - **网络结构**：卷积层(3→32→64→128) → 全连接层(28800→150→225) → Softmax
-- **训练方式**：自我对弈 + 奖励反向传播 + 五连追溯奖励
+- **训练方式**：自我对弈 + 棋型评估奖励 + KL 散度监督学习
 - **模型文件**：`ai/models/cnn_v1/cnn.pth`
 
 ### CNN v2 模型（轻量化）
 
 - **网络结构**：卷积层(3→64→64→64) + BN → 全连接层(14400→64→225) → Softmax
 - **参数量**：约 101 万（CNN v1 的 23%，计算量 18M MACs）
-- **训练方式**：与 CNN v1 相同
+- **训练方式**：自我对弈 + 棋型评估奖励 + KL 散度监督学习
 - **模型文件**：`ai/models/cnn_v2/cnn_v2.pth`
 
 ### CNN v3 模型（纯卷积极简）
@@ -402,7 +350,7 @@ python tests/run_tests.py
 - **网络结构**：卷积层(3→32→32→32, 无BN) → 1×1卷积(32→1) → Softmax
 - **参数量**：约 1.9 万（CNN v2 的 1.9%）
 - **特点**：纯卷积，无 FC、无 BN、无 Dropout，1×1 Conv 替代 FC 层
-- **训练方式**：与 CNN v1 相同
+- **训练方式**：自我对弈 + 棋型评估奖励 + KL 散度监督学习
 - **模型文件**：`ai/models/cnn_v3/gen{i}/cnn_v3.pth`（多代模型，按代数存储）
 - **多代支持**：使用 `cnn_v3.代数` 格式指定（如 `cnn_v3.1`），权重按代数隔离存储在 `gen{i}/` 子目录下
 
