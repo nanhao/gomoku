@@ -374,6 +374,28 @@ class TestSubprocessArgs:
         assert 'env' in kwargs
         assert kwargs['env'].get('PYTHONIOENCODING') == 'utf-8'
 
+    @patch('subprocess.run')
+    def test_subprocess_encoding_utf8(self, mock_run, trainer):
+        """UT-3.7：subprocess.run 传入 encoding='utf-8'（避免 Windows gbk 解码异常）。"""
+        mock_run.return_value = _make_completed_process(returncode=0, stdout="ok")
+
+        trainer._generate_samples()
+        kwargs = mock_run.call_args[1]
+        assert kwargs.get('encoding') == 'utf-8'
+
+        # 同时验证 train_main 和 battle 调用也传入 encoding
+        mock_run.reset_mock()
+        mock_run.return_value = _make_completed_process(returncode=0, stdout="ok")
+        trainer._train_model()
+        assert mock_run.call_args[1].get('encoding') == 'utf-8'
+
+        mock_run.reset_mock()
+        mock_run.return_value = _make_completed_process(
+            returncode=0, stdout=_battle_stdout()
+        )
+        trainer._run_battle()
+        assert mock_run.call_args[1].get('encoding') == 'utf-8'
+
 
 # ============================================================
 # UT-4：胜率解析 (§2.4)

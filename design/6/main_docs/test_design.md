@@ -43,6 +43,7 @@
 | UT-3.4 | 第 round_num 轨输出文件名为 path{round_num}.json | round_num=3 时构造的 output 参数 | 路径以 "path3.json" 结尾 |
 | UT-3.5 | subprocess.run 传入 cwd=project_root | mock subprocess.run 的调用参数 | kwargs 含 cwd 且值为 self.project_root |
 | UT-3.6 | subprocess.run 传入 PYTHONIOENCODING=utf-8 | mock subprocess.run 的调用参数 | env 字典含 PYTHONIOENCODING=utf-8 |
+| UT-3.7 | subprocess.run 传入 encoding='utf-8' | mock subprocess.run 的调用参数（_generate_samples、_train_model、_run_battle 三处） | kwargs 含 encoding='utf-8' |
 
 ### 2.4 胜率解析
 
