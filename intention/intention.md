@@ -9,3 +9,7 @@
 
 # intention_id=3
 增强 ai/create_samples.py，加上一个参数 --sample_games，接收一个大于0的整数。该参数与 --games 参数互斥，不能同时指定。当指定 --sample_games 时，脚本持续进行自我对弈，直到收集到指定的样本局数时才停下。举例来说，--sample_games=100，说明要持续自我对弈，直到收集到100局样本才停下。
+
+# intention_id=4
+目前的 loss 都是 L1，全部要改成 kl-divergence。
+另外，SampleInspector 不需要了，删掉。

@@ -1,0 +1,40 @@
+@startuml training_loss_flow
+!theme plain
+
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam classFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title 训练损失计算流程（KL 散度）
+
+participant "Network\n(LogSoftmax)" as Net
+participant "BaseTrainer\n(_masked_loss)" as Trainer
+participant "KLDivLoss\n(reduction=none)" as Loss
+participant "SampleLoader\n(compute_masked_kl_loss)" as Loader
+
+== 训练流程 ==
+
+Trainer -> Net : forward(inputs)
+Net --> Trainer : log_probs (N, 225)\n值域 (-∞, 0]
+
+Trainer -> Loss : criterion(log_probs, targets)
+note right of Loss : input = log_probs\n(target = probabilities)
+Loss --> Trainer : per_element_kl (N, 225)
+
+Trainer -> Trainer : loss * masks_tensor\n→ sum / mask_sum
+
+== 纯 Python 测试辅助 ==
+
+Loader -> Loader : compute_masked_kl_loss(\n  log_estimated, target, mask)
+note right of Loader : KL(p‖q) = Σ p[i] * \n  (log(p[i]) - log_estimated[i])\n  仅 mask=1 位置
+
+== 推理流程 ==
+
+participant "NeuralNetworkModel\n(predict)" as Predict
+
+Predict -> Net : forward(input_tensor)
+Net --> Predict : log_probs (1, 225)
+Predict -> Predict : exp(log_probs)\n→ probabilities
+Predict --> Predict : return List[float]\n值域 (0,1), sum=1
+
+@enduml
