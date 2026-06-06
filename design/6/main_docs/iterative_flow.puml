@@ -1,0 +1,141 @@
+@startuml iterative_flow
+title cnn_v3 迭代进化训练 - 交互图
+
+skinparam defaultFontName Microsoft YaHei,SimHei,sans-serif
+skinparam backgroundColor white
+skinparam shadowing false
+
+actor "用户" as User
+
+participant "IterativeTrainer" as Trainer
+participant "文件系统" as FS
+participant "create_samples.py" as CS
+participant "train_main.py" as TM
+participant "battle.py" as Battle
+
+== 初始化 ==
+
+User -> Trainer: python ai/iterative_train.py
+Trainer -> FS: 检查 gen4/cnn_v3.pth 是否存在
+alt 不存在
+    Trainer -> User: FileNotFoundError 退出
+end
+
+Trainer -> FS: 检查 .iterative_lock 是否存在
+alt 锁文件存在
+    Trainer -> User: RuntimeError（多实例并发） 退出
+end
+Trainer -> FS: 创建 .iterative_lock
+
+Trainer -> Trainer: round_num = 1, rounds = []
+
+== 迭代循环 ==
+
+loop 每轮迭代
+
+    User <<-- Trainer: ========== 第 {round_num} 轨迭代开始 ==========
+
+    == 步骤a: 轮次标识（对应 puml 外） ==
+
+    == 步骤b/2: 模型初始化 ==
+
+    Trainer -> FS: 若 gen5/ 不存在则创建
+    Trainer -> FS: copy2 gen4/cnn_v3.pth → gen5/cnn_v3.pth
+    Trainer -> Trainer: 记录本轮开始
+
+    == 步骤c/3: 样本生成 ==
+
+    Trainer -> CS: subprocess.run(cwd=project_root,
+    Trainer -> CS:   PYTHONIOENCODING=utf-8)
+    Trainer -> CS:   {sys.executable} ai/create_samples.py
+    Trainer -> CS:   &#45;&#45;model cnn_v3.4
+    Trainer -> CS:   &#45;&#45;mode winner_path
+    Trainer -> CS:   &#45;&#45;sample_games 500
+    Trainer -> CS:   &#45;&#45;output ai/merge_samples/v4/path{round_num}.json
+    Trainer -> CS:   &#45;&#45;temp-side random
+    CS -> FS: 自我对弈 → 写入 ai/merge_samples/v4/path{round_num}.json
+    CS --> Trainer: returncode=0, stdout
+    alt returncode ≠ 0
+        Trainer -> User: RuntimeError + stderr
+    end
+    User <<-- Trainer: 样本生成完成: path{round_num}.json
+
+    == 步骤d: 样本校验 ==
+
+    Trainer -> FS: 读取 path{round_num}.json，解析 JSON 数组
+    alt 样本为空（0 条）或文件不存在
+        Trainer -> User: RuntimeError "空样本"
+    end
+
+    == 步骤e/4: 模型训练 ==
+
+    Trainer -> TM: subprocess.run(cwd=project_root,
+    Trainer -> TM:   PYTHONIOENCODING=utf-8)
+    Trainer -> TM:   {sys.executable} ai/train_main.py
+    Trainer -> TM:   &#45;&#45;model cnn_v3.5
+    Trainer -> TM:   &#45;&#45;train-from-dir ai/merge_samples/v4/path{round_num}.json
+    Trainer -> TM:   &#45;&#45;epochs 1 &#45;&#45;batch-size 4096 &#45;&#45;shuffle
+    TM -> FS: 读取 path{round_num}.json → 训练 → 更新 gen5/cnn_v3.pth
+    TM --> Trainer: returncode=0, stdout
+    alt returncode ≠ 0
+        Trainer -> User: RuntimeError + stderr
+    end
+    User <<-- Trainer: 训练完成
+
+    == 步骤f/5: 对战评估 ==
+
+    Trainer -> Battle: subprocess.run(cwd=project_root,
+    Trainer -> Battle:   PYTHONIOENCODING=utf-8)
+    Trainer -> Battle:   {sys.executable} ai/battle.py
+    Trainer -> Battle:   &#45;&#45;ai1 cnn_v3.4
+    Trainer -> Battle:   &#45;&#45;ai2 cnn_v3.5
+    Trainer -> Battle:   &#45;&#45;games 100
+    Battle -> FS: 加载 gen4, gen5 权重
+    Battle -> Battle: 对战 100 局
+    Battle --> Trainer: returncode=0, stdout (含胜率统计)
+    alt returncode ≠ 0
+        Trainer -> User: RuntimeError + stderr
+    end
+
+    == 步骤g/6: 胜率判定 ==
+
+    Trainer -> Trainer: 解析 stdout 提取 cnn_v3.5 胜率
+    User <<-- Trainer: cnn_v3.4 胜 X | cnn_v3.5 胜 Y | 平局 Z | 胜率 R%
+
+    alt 胜率 > 50.0%
+        == 晋升 ==
+        Trainer -> FS: copy2 gen5/cnn_v3.pth → gen4/cnn_v3.pth
+        Trainer -> FS: remove gen5/cnn_v3.pth
+        Trainer -> Trainer: rounds.append({promoted: true})
+        Trainer -> Trainer: round_num++
+        User <<-- Trainer: 第 {round_num} 轨结果: cnn_v3.5 胜率 = R% → 晋升
+
+    else 胜率 ≤ 50.0%
+        == 停止 ==
+        Trainer -> Trainer: rounds.append({promoted: false})
+        User <<-- Trainer: 第 {round_num} 轨结果: cnn_v3.5 胜率 = R% → 停止
+
+        == 最终统计报告 ==
+
+        User <<-- Trainer: ========== 最终统计 ==========
+        User <<-- Trainer: 总迭代次数: N
+        User <<-- Trainer: 逐轮明细: ...
+        User <<-- Trainer: 停止原因: ...
+        User <<-- Trainer: 最终优胜模型: gen4/cnn_v3.pth
+
+        Trainer -> FS: 删除 .iterative_lock
+        Trainer -> User: 返回统计 dict
+    end
+
+end
+
+== Ctrl+C 中断处理（可在任意步骤触发） ==
+
+note over Trainer
+  KeyboardInterrupt 可在上述任意步骤触发。
+  run() 捕获后：打印 "用户中断"，
+  输出已完成轮次统计，正常返回 dict。
+  子进程随主进程退出（Windows）。
+end note
+
+@enduml
