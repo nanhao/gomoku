@@ -25,3 +25,6 @@
 4, python ai/train_main.py --model cnn_v3.5 --train-from-dir ai/merge_samples/v4/path{i}.json --epochs 1 --batch-size 4096 --shuffle
 5, python ai/battle.py --ai1 cnn_v3.4 --ai2 cnn_v3.5 --games 100
 6, 判断 5 的胜负方，如果 cnn_v3.5 的胜率超过 50%，i++; mv ai\models\cnn_v3\gen5\cnn_v3.pth ai\models\cnn_v3\gen4\cnn_v3.pth; 然后回到2进行循环。如果 cnn_v3.5 的胜率不超过 50%，停下并报告完整统计信息
+
+# intention_id=7
+train_main.py 脚本新增一个参数，可以指定初始学习率
