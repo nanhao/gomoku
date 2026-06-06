@@ -109,7 +109,8 @@ class DataRecorder:
         Args:
             game_id: 游戏编号（由 new_game 返回）
             input_vector: 226 维输入向量（棋盘 + 当前落子方）
-            output_vector: 225 维输出向量（Softmax 概率分布，每个元素为 0~1 的浮点数）
+            output_vector: 225 维输出向量（概率分布，每个元素为 0~1 的浮点数，
+                            LogSoftmax + exp 还原）
             position: 引擎最终成功落子的位置 (x, y)
             strategy: 落子策略（"argmax" 或 "sampling"），默认 None（不写入字段，向后兼容）
             temperature: 温度值，仅 sampling 时有效，默认 None

@@ -171,7 +171,7 @@ class SampleCreator:
         samples = []
         for i in kept_indices:
             step = history[i]
-            # 软标签 output：基于当步模型 softmax 输出构造
+            # 软标签 output：基于当步模型概率分布构造
             output = self._build_winner_path_output(
                 step["output"], step["position"]
             )
@@ -190,7 +190,7 @@ class SampleCreator:
         """第三十九次追加：winner_path 软标签 output 构造
 
         算法（详见 design/sample_creator_design.md "第三十九次追加"）：
-            1. p = 模型当步 softmax 输出的拷贝（225 维，sum≈1）
+            1. p = 模型当步概率输出的拷贝（225 维，sum≈1）
             2. idx = position[0]*15 + position[1]
                - 若 idx 越界：output = p（原分布，不抬升）
             3. 若落子位已是"严格 top1"（唯一最大）：output = p（原样）
@@ -206,7 +206,7 @@ class SampleCreator:
             - 缺省 p 为"退化全零"时也能工作（此时 output 退化为 one-hot）
 
         Args:
-            model_output: 长度 225 的浮点列表，当步模型 softmax 输出
+            model_output: 长度 225 的浮点列表，当步模型概率分布（predict 返回值）
             position: [row, col] 落子坐标
 
         Returns:

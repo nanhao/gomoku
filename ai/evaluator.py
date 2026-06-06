@@ -5,7 +5,7 @@
 输出：ai/train_data/.../sample.json
 
 使用双向棋型检测法计算每个位置的 reward 值，
-并通过 Softmax 转换为概率分布。
+并通过 masked_softmax 转换为概率分布。
 
 支持多进程并行评价（ProcessPoolExecutor），
 在 Windows spawn 模式下使用顶层函数 _evaluate_record_worker。
@@ -135,7 +135,7 @@ class Evaluator:
         计算所有步骤的 reward（双向棋型检测法 + 五连追溯）
         
         对每个 step 的每个空位，计算其 reward 值，
-        然后通过 Softmax 转换为概率分布。
+        然后通过 masked_softmax 转换为概率分布。
         
         如果有胜者，叠加五连追溯奖励。
         
@@ -146,7 +146,7 @@ class Evaluator:
             
         Returns:
             包含 input, output, mask 的样本列表
-            output 为 Softmax 概率分布，值域 (0, 1)，总和为 1
+            output 为概率分布，值域 (0, 1)，总和为 1（由 masked_softmax 生成）
         """
         sample_dict = []
         
@@ -198,7 +198,7 @@ class Evaluator:
                             line_bonuses[step_idx]
                         )
             
-            # 对 raw_rewards 应用 Softmax 转换为概率分布（直连 probability_utils）
+            # 对 raw_rewards 应用 masked_softmax 转换为概率分布（直连 probability_utils）
             output = masked_softmax(raw_rewards, mask)
             
             sample_dict.append({
