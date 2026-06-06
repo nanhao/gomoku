@@ -61,8 +61,9 @@ class CNNV3Network(nn.Module):
 
         # 1×1 卷积替代 FC 层：将 32 通道压缩为 1 通道
         # 输出形状 (batch, 1, 15, 15)，展平后即为 225 维
+        # 注意：此处不加 ReLU，否则初始化不当会导致所有输出为负值，
+        # ReLU 将其全部置零，LogSoftmax 输入全零 → 输出均匀分布 → 梯度为零 → 模型不学习
         self.conv_out = nn.Conv2d(32, 1, kernel_size=1)
-        self.relu_out = nn.ReLU()
 
         # LogSoftmax 激活函数，输出 log-probability
         self.log_softmax = nn.LogSoftmax(dim=1)
@@ -82,7 +83,7 @@ class CNNV3Network(nn.Module):
         x = self.relu3(self.conv3(x))
 
         # 1×1 卷积：32通道 → 1通道，保持空间结构 15x15
-        x = self.relu_out(self.conv_out(x))
+        x = self.conv_out(x)
 
         # 展平: (batch, 1, 15, 15) -> (batch, 225)
         x = x.view(x.size(0), -1)
