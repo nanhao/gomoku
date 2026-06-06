@@ -170,9 +170,22 @@ class IterativeTrainer:
     # ============================================================
 
     def _create_lock(self):
-        """创建锁文件（写入当前 PID），防多实例并发运行。"""
-        with open(self._lock_path, 'w', encoding='utf-8') as f:
-            f.write(f"pid={os.getpid()}\n")
+        """创建锁文件（原子操作，写入当前 PID），防多实例并发运行。
+
+        使用 O_CREAT | O_EXCL 确保原子性，消除 __init__ 检查与创建之间的 TOCTOU 竞态窗口。
+
+        Raises:
+            RuntimeError: 锁文件已存在（多实例并发）。
+        """
+        try:
+            fd = os.open(self._lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                f.write(f"pid={os.getpid()}\n")
+        except FileExistsError:
+            raise RuntimeError(
+                f"检测到锁文件 {self._lock_path}，"
+                f"可能有另一个迭代训练实例正在运行"
+            )
 
     def _remove_lock(self):
         """删除锁文件（幂等操作）。"""
@@ -200,6 +213,37 @@ class IterativeTrainer:
     # 内部方法：子进程调用
     # ============================================================
 
+    def _run_subprocess(self, cmd: list) -> subprocess.CompletedProcess:
+        """执行子进程（统一封装公共参数）。
+
+        所有子进程统一使用 cwd=project_root、capture_output=True、
+        encoding='utf-8'、PYTHONIOENCODING=utf-8，避免重复代码。
+
+        Args:
+            cmd: 命令行参数列表。
+
+        Returns:
+            subprocess.CompletedProcess 结果对象。
+
+        Raises:
+            RuntimeError: 子进程返回非零退出码。
+        """
+        result = subprocess.run(
+            cmd,
+            cwd=self.project_root,
+            capture_output=True,
+            encoding='utf-8',
+            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+        )
+
+        if result.returncode != 0:
+            print(result.stderr, file=sys.stderr)
+            raise RuntimeError(
+                f"子进程失败，退出码: {result.returncode}"
+            )
+
+        return result
+
     def _generate_samples(self) -> str:
         """调用 create_samples.py（cnn_v3.4 自对弈，winner_path 模式）生成训练样本。
 
@@ -221,21 +265,18 @@ class IterativeTrainer:
             "--temp-side", "random",
         ]
 
-        result = subprocess.run(
-            cmd,
-            cwd=self.project_root,
-            capture_output=True,
-            encoding='utf-8',
-            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
-        )
+        result = self._run_subprocess(cmd)
 
-        if result.returncode != 0:
-            print(result.stderr, file=sys.stderr)
-            raise RuntimeError(
-                f"create_samples.py 失败，退出码: {result.returncode}"
-            )
+        # 从 create_samples.py 的 stdout 中提取样本局数
+        sample_games_count = None
+        match = re.search(r'样本局数:\s*(\d+)', result.stdout)
+        if match:
+            sample_games_count = int(match.group(1))
 
-        print(f"样本生成完成: {sample_path}")
+        if sample_games_count is not None:
+            print(f"样本生成完成: {sample_path}（样本局数: {sample_games_count}）")
+        else:
+            print(f"样本生成完成: {sample_path}")
         return sample_path
 
     def _validate_samples(self, sample_path: str):
@@ -281,20 +322,7 @@ class IterativeTrainer:
             "--shuffle",
         ]
 
-        result = subprocess.run(
-            cmd,
-            cwd=self.project_root,
-            capture_output=True,
-            encoding='utf-8',
-            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
-        )
-
-        if result.returncode != 0:
-            print(result.stderr, file=sys.stderr)
-            raise RuntimeError(
-                f"train_main.py 失败，退出码: {result.returncode}"
-            )
-
+        self._run_subprocess(cmd)
         print("训练完成")
 
     def _run_battle(self) -> str:
@@ -311,20 +339,7 @@ class IterativeTrainer:
             "--games", str(BATTLE_GAMES),
         ]
 
-        result = subprocess.run(
-            cmd,
-            cwd=self.project_root,
-            capture_output=True,
-            encoding='utf-8',
-            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
-        )
-
-        if result.returncode != 0:
-            print(result.stderr, file=sys.stderr)
-            raise RuntimeError(
-                f"battle.py 失败，退出码: {result.returncode}"
-            )
-
+        result = self._run_subprocess(cmd)
         return result.stdout
 
     # ============================================================
@@ -372,6 +387,24 @@ class IterativeTrainer:
     # 内部方法：日志输出
     # ============================================================
 
+    def _build_stop_reason(self) -> str:
+        """构建停止原因文本。
+
+        取最后一轮记录，拼接停止原因描述。_rounds 为空时返回空字符串。
+        此方法被 _print_final_report() 和 _build_result_dict() 共用，
+        避免重复代码。
+
+        Returns: 停止原因字符串。
+        """
+        if not self._rounds:
+            return ""
+        last = self._rounds[-1]
+        return (
+            f"第{last['round_num']}轮 "
+            f"cnn_v3.5 胜率 {last['gen5_win_rate']:.1f}% "
+            f"≤ {WIN_RATE_THRESHOLD}%，停止迭代"
+        )
+
     def _print_round_header(self):
         """打印轮次头：========== 第 {n} 轨迭代开始 =========="""
         print(f"========== 第 {self._round_num} 轨迭代开始 ==========")
@@ -385,7 +418,13 @@ class IterativeTrainer:
         )
 
     def _print_final_report(self):
-        """打印最终统计报告（总迭代次数、逐轮明细表、停止原因、最终优胜模型）。"""
+        """打印最终统计报告（总迭代次数、逐轮明细表、停止原因、最终优胜模型）。
+
+        _rounds 为空时提前返回（防御性编程，避免空记录导致无意义输出）。
+        """
+        if not self._rounds:
+            return
+
         total_iterations = sum(1 for r in self._rounds if r["promoted"])
 
         print("\n========== 最终统计 ==========")
@@ -402,15 +441,9 @@ class IterativeTrainer:
                 f"cnn_v3.5 胜率 {r['gen5_win_rate']:.1f}% → {action}"
             )
 
-        # 停止原因
-        if self._rounds:
-            last = self._rounds[-1]
-            stop_reason = (
-                f"第{last['round_num']}轮 "
-                f"cnn_v3.5 胜率 {last['gen5_win_rate']:.1f}% "
-                f"≤ {WIN_RATE_THRESHOLD}%，停止迭代"
-            )
-            print(f"停止原因: {stop_reason}")
+        # 停止原因（通过 _build_stop_reason() 共用逻辑）
+        stop_reason = self._build_stop_reason()
+        print(f"停止原因: {stop_reason}")
 
         print(
             f"最终优胜模型: gen{PARENT_GEN}/cnn_v3.pth"
@@ -425,24 +458,23 @@ class IterativeTrainer:
         """构建 run() 返回的统计字典。
 
         Returns: {"total_iterations", "final_round", "rounds", "stop_reason", "final_model_path"}。
+
+        final_round 取 _rounds 最后完成轮次的编号（而非 _round_num），
+        避免 KeyboardInterrupt 场景下返回未完成轮次编号。
         """
         total_iterations = sum(1 for r in self._rounds if r["promoted"])
 
+        # 取最后完成轮次编号（KeyboardInterrupt 时 _round_num 可能指向未完成轮次）
         if self._rounds:
-            last = self._rounds[-1]
-            stop_reason = (
-                f"第{last['round_num']}轮 "
-                f"cnn_v3.5 胜率 {last['gen5_win_rate']:.1f}% "
-                f"≤ {WIN_RATE_THRESHOLD}%，停止迭代"
-            )
+            final_round = self._rounds[-1]["round_num"]
         else:
-            stop_reason = ""
+            final_round = 0
 
         return {
             "total_iterations": total_iterations,
-            "final_round": self._round_num,
+            "final_round": final_round,
             "rounds": list(self._rounds),
-            "stop_reason": stop_reason,
+            "stop_reason": self._build_stop_reason(),
             "final_model_path": os.path.abspath(self._gen4_path),
         }
 

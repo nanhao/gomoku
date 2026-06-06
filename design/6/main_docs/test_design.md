@@ -120,7 +120,6 @@
 | IT-2.4 | gen4 权重不存在 | 临时目录无 gen4/cnn_v3.pth | 构造时抛 FileNotFoundError |
 | IT-2.5 | Ctrl+C 中断 | 第 2 轨样本生成中触发 KeyboardInterrupt | 打印 "用户中断"，输出已完成轮次的统计，正常退出 |
 | IT-2.6 | 锁文件存在时构造失败 | 临时目录含 .iterative_lock | 构造时抛 RuntimeError |
-| IT-2.6 | 锁文件存在时构造失败 | 临时目录含 .iterative_lock | 构造时抛 RuntimeError |
 
 ### 3.3 文件系统副作用
 

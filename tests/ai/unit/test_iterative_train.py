@@ -404,7 +404,7 @@ class TestSubprocessArgs:
 class TestWinRateParsing:
     """UT-4：battle.py 输出中的胜率解析。"""
 
-    def test_parse_normal_55_percent(self, trainer):
+    def test_parse_normal_48_percent(self, trainer):
         """UT-4.1：正常解析 cnn_v3.5 胜率 48.0%。"""
         stdout = _battle_stdout(gen4_wins=42, gen5_wins=48, draws=10)
         result = trainer._parse_battle_output(stdout)
