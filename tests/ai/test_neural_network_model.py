@@ -31,10 +31,10 @@ class DummyNetwork(nn.Module):
     def __init__(self):
         super().__init__()
         self.fc = nn.Linear(226, 225)
-        self.softmax = nn.LogSoftmax(dim=1)
+        self.log_softmax = nn.LogSoftmax(dim=1)
     
     def forward(self, x):
-        return self.softmax(self.fc(x))
+        return self.log_softmax(self.fc(x))
 
 
 class DummyModel(NeuralNetworkModel):

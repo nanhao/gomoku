@@ -241,6 +241,8 @@ class TestNumericalStability(unittest.TestCase):
         # 验证返回的零损失仍连接 autograd 图，backward() 不会报错
         self.assertTrue(loss.requires_grad,
                        "防御返回的零损失应连接 autograd 图（requires_grad=True）")
+        # 补充 backward() 可行性验证（Review T1）：确保 backward() 不报 "no grad_fn" 错误
+        loss.backward()
 
     def test_compute_masked_kl_loss_target_zero_no_exception(self):
         """T9-03: compute_masked_kl_loss 中 target[i]=0 不抛异常"""

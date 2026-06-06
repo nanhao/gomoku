@@ -696,7 +696,8 @@ class BaseTrainer(ABC):
             # 避免 KL 散度在全零 target 下的数值不稳定（设计§4.5）
             # 使用 outputs 连接 autograd 图，确保 backward() 不报 "no grad_fn" 错误
             target_sum = (targets_tensor * masks_tensor).sum()
-            if target_sum == 0:
+            # 使用 epsilon 比较避免浮点精确比较漏判（Review B2）
+            if target_sum < 1e-8:
                 return outputs.sum() * 0.0
             loss = loss.sum() / mask_sum
         else:

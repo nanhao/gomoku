@@ -36,9 +36,9 @@ def compute_masked_kl_loss(log_estimated: List[float], target: List[float], mask
     for val in log_estimated:
         if val > 0:
             raise ValueError(
-                "log_estimated 中存在 > 0 的元素（值={val}），"
-                "应传入 log-probability 而非概率值。"
-                "请确保传入的是网络 LogSoftmax 输出。"
+                f"log_estimated 中存在 > 0 的元素（值={val}），"
+                f"应传入 log-probability 而非概率值。"
+                f"请确保传入的是网络 LogSoftmax 输出。"
             )
 
     total_loss = 0.0

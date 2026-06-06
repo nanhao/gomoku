@@ -63,7 +63,7 @@ class CNNV1Network(nn.Module):
         self.fc_output = nn.Linear(150, 225)
         
         # LogSoftmax 激活函数，输出 log-probability
-        self.softmax = nn.LogSoftmax(dim=1)
+        self.log_softmax = nn.LogSoftmax(dim=1)
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """前向传播
@@ -98,7 +98,7 @@ class CNNV1Network(nn.Module):
         x = self.fc_output(x)
         
         # LogSoftmax 激活，输出 log-probability 分布
-        x = self.softmax(x)
+        x = self.log_softmax(x)
         
         return x
 
