@@ -16,3 +16,12 @@
 
 # intention_id=5
 考虑去掉五连追溯奖励机制和现有的 cycle 模式
+
+# intention_id=6
+新增一个脚本，这个脚本做以下逻辑：
+1, i=1
+2, cp ai\models\cnn_v3\gen4\cnn_v3.pth ai\models\cnn_v3\gen5\cnn_v3.pth
+3，python ai/create_samples.py --model cnn_v3.4 --mode winner_path --sample_games 500 --output ai\merge_samples\v4\path{i}.json --temp-side random
+4, python ai/train_main.py --model cnn_v3.5 --train-from-dir ai/merge_samples/v4/path{i}.json --epochs 1 --batch-size 4096 --shuffle
+5, python ai/battle.py --ai1 cnn_v3.4 --ai2 cnn_v3.5 --games 100
+6, 判断 5 的胜负方，如果 cnn_v3.5 的胜率超过 50%，i++; mv ai\models\cnn_v3\gen5\cnn_v3.pth ai\models\cnn_v3\gen4\cnn_v3.pth; 然后回到2进行循环。如果 cnn_v3.5 的胜率不超过 50%，停下并报告完整统计信息
