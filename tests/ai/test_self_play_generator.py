@@ -141,29 +141,14 @@ class TestSelfPlayGeneratorEvaluator(unittest.TestCase):
 
         generator.generate(games=10)
 
-        # 验证 Evaluator 被创建
+        # 验证 Evaluator 被创建（不含 decay_rate）
         mock_evaluator_cls.assert_called_once()
+        eval_call_kwargs = mock_evaluator_cls.call_args[1]
+        self.assertNotIn('decay_rate', eval_call_kwargs,
+                          "Evaluator 创建时不应包含 decay_rate 参数")
         # 验证 evaluate_round 被调用
         evaluator_instance = mock_evaluator_cls.return_value
         evaluator_instance.evaluate_round.assert_called_once_with("/tmp/ai_data/cnn_v1_self_play_1")
-
-    @patch('ai.self_play_generator.AIGameManager.start_ai_vs_ai')
-    @patch('ai.self_play_generator.DataRecorder')
-    @patch('ai.self_play_generator.Evaluator')
-    @patch('ai.self_play_generator.AIEngine')
-    def test_generate_passes_rate_to_evaluator(
-        self, mock_engine, mock_evaluator_cls, mock_recorder_cls, mock_start
-    ):
-        """rate 参数应传递给 Evaluator 的 decay_rate"""
-        model = _create_mock_model()
-        generator = SelfPlayGenerator(model)
-        _mock_generator_dependencies(mock_engine, mock_evaluator_cls, mock_recorder_cls, mock_start)
-
-        generator.generate(games=10, rate=0.85)
-
-        # 验证 Evaluator 创建时 decay_rate=0.85
-        eval_call_kwargs = mock_evaluator_cls.call_args[1]
-        self.assertEqual(eval_call_kwargs['decay_rate'], 0.85)
 
     @patch('ai.self_play_generator.AIGameManager.start_ai_vs_ai')
     @patch('ai.self_play_generator.DataRecorder')

@@ -15,7 +15,6 @@ from ai.base_model import BaseModel
 from ai.constants import AI_DATA_DIR, TRAIN_DATA_DIR, LOSS_LOG_INTERVAL
 from ai.loss_logger import LossLogger
 from ai.sample_loader import SampleLoader
-from ai.self_play_cycle import SelfPlayCycle
 
 
 def get_device() -> torch.device:
@@ -31,10 +30,10 @@ def get_device() -> torch.device:
 
 class BaseTrainer(ABC):
     """训练器抽象基类
-    
+
     所有模型训练器必须继承此类，实现模型特定的创建逻辑。
-    提供通用的训练流程：单轮次训练、批量训练、训练周期。
-    
+    提供通用的训练流程：单轮次训练、批量训练。
+
     自动检测并使用 GPU 加速训练。
     
     Attributes:
@@ -619,47 +618,6 @@ class BaseTrainer(ABC):
         else:
             self.lr_scheduler.step()
 
-    def train_cycle(
-        self,
-        rounds: int = 10,
-        games: int = 100,
-        epochs: int = 1000,
-        rate: float = 0.9,
-        batch_size: int = None,
-        shuffle: bool = False,
-        project_root: str = None,
-        val_ratio: float = 0.0,
-        temp_config=None,
-    ) -> None:
-        """训练周期
-
-        让模型自己跟自己对战 n 个轮次，每个轮次 m 场对局。
-        每个轮次结束后，将本轮所有 sample 数据合并训练模型。
-        提供 batch_size 时启用 mini-batch 训练，否则使用全量更新。
-
-        Args:
-            rounds: 轮次数 n，默认 10
-            games: 每轮对局数 m，默认 100
-            epochs: 每轮训练的轮数，默认 1000
-            rate: 奖励衰减率 r，默认 0.9，传给 Evaluator 用于生成 sample
-            batch_size: 每批次样本数，提供时启用 mini-batch 训练，默认 None（全量更新）
-            shuffle: 每个 epoch 是否打乱数据顺序，仅 mini-batch 模式有效，默认 False
-            project_root: 项目根目录，用于确定数据保存路径
-            val_ratio: 验证集比例，0 表示不分割，默认 0.0
-            temp_config: 可选 ai.move_sampler.TempConfig；None 保持原有 argmax 行为
-        """
-        SelfPlayCycle(self).run(
-            rounds=rounds,
-            games=games,
-            epochs=epochs,
-            rate=rate,
-            batch_size=batch_size,
-            shuffle=shuffle,
-            project_root=project_root,
-            val_ratio=val_ratio,
-            temp_config=temp_config,
-        )
-    
     def _convert_inputs(self, inputs: list) -> torch.Tensor:
         """将输入数据转换为模型所需的张量格式
         

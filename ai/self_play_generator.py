@@ -1,8 +1,7 @@
 """自我对弈数据生成器模块
 
 仅执行自我对弈 + 评价，生成训练数据，不训练模型。
-从 SelfPlayCycle 中提取数据生成部分（步骤1-3），去掉训练相关逻辑。
-提供公共函数 run_self_play_and_evaluate，供 SelfPlayGenerator 和 SelfPlayCycle 复用。
+提供公共函数 run_self_play_and_evaluate，供 SelfPlayGenerator 使用。
 """
 
 import os
@@ -21,7 +20,6 @@ if TYPE_CHECKING:
 def run_self_play_and_evaluate(
     model,
     games: int,
-    rate: float = 0.9,
     ai_data_dir: str = None,
     train_data_dir: str = None,
     max_workers: int = None,
@@ -31,13 +29,12 @@ def run_self_play_and_evaluate(
 ) -> dict:
     """执行自我对弈 + 评价，生成训练样本
 
-    公共逻辑提取，供 SelfPlayGenerator 和 SelfPlayCycle 复用。
+    公共逻辑提取，供 SelfPlayGenerator 使用。
     封装单轮对弈 + 评价的完整流程，包含 KeyboardInterrupt 优雅处理。
 
     Args:
         model: BaseModel 实例，用于创建 AIEngine，需要有 name 属性
         games: 对局数
-        rate: 奖励衰减率，传给 Evaluator，默认 0.9
         ai_data_dir: AI 数据目录，None 时使用常量 AI_DATA_DIR
         train_data_dir: 训练数据目录，None 时使用常量 TRAIN_DATA_DIR
         max_workers: 评价阶段并行进程数，None 表示使用默认值
@@ -102,7 +99,6 @@ def run_self_play_and_evaluate(
         evaluator = Evaluator(
             ai_data_dir=ai_data_dir,
             train_data_dir=train_data_dir,
-            decay_rate=rate,
             max_workers=max_workers
         )
 
@@ -176,12 +172,6 @@ class SelfPlayGenerator:
     3. 执行 AIGameManager.start_ai_vs_ai 生成对局数据
     4. 调用 Evaluator.evaluate_round 生成训练样本
     5. 返回结果字典（包含 round_dir、sample_dirs 等）
-
-    与 SelfPlayCycle 的区别：
-    - 不依赖 BaseTrainer，只需要 model
-    - 不执行训练步骤
-    - 不保存模型
-    - 不记录 loss 日志
     """
 
     def __init__(self, model, max_workers: int = None):
@@ -195,7 +185,7 @@ class SelfPlayGenerator:
         self.model = model
         self.max_workers = max_workers
 
-    def generate(self, games: int = 100, rate: float = 0.9,
+    def generate(self, games: int = 100,
                  project_root: str = None,
                  temp_config: Optional["TempConfig"] = None) -> dict:
         """执行自我对弈并生成训练样本
@@ -205,7 +195,6 @@ class SelfPlayGenerator:
 
         Args:
             games: 对局数，默认 100
-            rate: 奖励衰减率，传给 Evaluator，默认 0.9
             project_root: 项目根目录，用于确定数据保存路径
             temp_config: 可选温度采样配置；None 保持原有 argmax 行为
 
@@ -226,7 +215,6 @@ class SelfPlayGenerator:
         result = run_self_play_and_evaluate(
             model=self.model,
             games=games,
-            rate=rate,
             max_workers=self.max_workers,
             name_prefix="self_play",
             project_root=project_root,

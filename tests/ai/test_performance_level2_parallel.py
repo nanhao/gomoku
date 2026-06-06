@@ -107,7 +107,7 @@ class TestEvaluateRecordWorker(unittest.TestCase):
         record_path = _create_minimal_record(game_dir)
 
         result = _evaluate_record_worker(
-            record_path, self.ai_data_dir, self.train_data_dir, 0.9
+            record_path, self.ai_data_dir, self.train_data_dir
         )
 
         self.assertTrue(result.endswith("sample.json"))
@@ -119,7 +119,7 @@ class TestEvaluateRecordWorker(unittest.TestCase):
         record_path = _create_minimal_record(game_dir)
 
         sample_path = _evaluate_record_worker(
-            record_path, self.ai_data_dir, self.train_data_dir, 0.9
+            record_path, self.ai_data_dir, self.train_data_dir
         )
 
         with open(sample_path, 'r', encoding='utf-8') as f:
@@ -140,7 +140,7 @@ class TestEvaluateRecordWorker(unittest.TestCase):
         with ProcessPoolExecutor(max_workers=2) as executor:
             future = executor.submit(
                 _evaluate_record_worker,
-                record_path, self.ai_data_dir, self.train_data_dir, 0.9
+                record_path, self.ai_data_dir, self.train_data_dir
             )
             result = future.result()
 

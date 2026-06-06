@@ -13,3 +13,6 @@
 # intention_id=4
 目前的 loss 都是 L1，全部要改成 kl-divergence。
 另外，SampleInspector 不需要了，删掉。
+
+# intention_id=5
+考虑去掉五连追溯奖励机制和现有的 cycle 模式

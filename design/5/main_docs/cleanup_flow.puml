@@ -1,0 +1,87 @@
+@startuml cleanup_flow
+title 五连追溯与 Cycle 模式清理 - 变更交互图
+
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam backgroundColor white
+skinparam shadowing false
+
+rectangle "FR-1 删除五连追溯奖励" #FFCCCC {
+    artifact "line_tracer.py" as LT_FILE
+    artifact "test_line_tracer.py" as LT_TEST  
+    artifact "test_evaluator_winning_line.py" as WL_TEST
+    
+    note as EVAL_NOTE
+        Evaluator 变更:
+        - 删除 from line_tracer import
+        - 删除 BLEND_ALPHA
+        - 删除 decay_rate 参数与属性
+        - 删除 _line_tracer 属性
+        - 删除 line_bonuses 计算块
+        - 删除对 line_tracer.blend_rewards 的调用
+        - 删除 winner/end_board 参数（仅 line_bonuses 使用）
+        - 删除 _evaluate_files submit 的 decay_rate 传递
+        - 清理五连追溯相关 docstring
+    end note
+    
+    LT_FILE --> EVAL_NOTE
+    LT_TEST --> EVAL_NOTE
+    WL_TEST --> EVAL_NOTE
+}
+
+rectangle "FR-2 删除Cycle模式" #FFCCCC {
+    artifact "self_play_cycle.py" as CY_FILE
+    artifact "test_self_play_cycle.py" as CY_TEST
+    
+    note as BT_NOTE
+        BaseTrainer 变更:
+        - 删除 train_cycle()
+        - 删除 SelfPlayCycle import
+    end note
+    
+    note as TM_NOTE
+        train_main 变更:
+        - 删除 --cycle/--rounds/--games/--rate
+        - 删除 温度采样参数组
+        - 删除 run_cycle 路由
+        - 保留 --train-from-dir
+    end note
+    
+    note as RUN_NOTE
+        runners 变更:
+        - 删除 run_cycle()
+        - 保留 run_train_from_dir()
+    end note
+    
+    CY_FILE --> BT_NOTE
+    CY_FILE --> TM_NOTE
+    CY_FILE --> RUN_NOTE
+    CY_TEST --> BT_NOTE
+}
+
+rectangle "下游适配" #FFFFCC {
+    note as SPG_NOTE
+        SelfPlayGenerator 变更:
+        - 删除 rate 参数
+        - 删除 SelfPlayCycle 注释
+        - Evaluator 不传 decay_rate
+    end note
+
+    note as WORKER_NOTE
+        _evaluate_record_worker 变更:
+        - 删除 decay_rate 参数
+        - 内部创建 Evaluator 不传 decay_rate
+    end note
+}
+
+EVAL_NOTE ..> SPG_NOTE
+EVAL_NOTE ..> WORKER_NOTE
+
+rectangle "保留不变" #CCFFCC {
+    component "RewardCalculator" as RC
+    component "ProbabilityUtils" as PU
+    component "DataRecorder" as DR
+    component "AIGameManager" as AGM
+    component "SampleCreator" as SC
+}
+
+@enduml

@@ -44,7 +44,7 @@ class _ConcreteTrainer:
 class TestTrainBatchDenseLogOverride(unittest.TestCase):
     """Bug 1：train_batch 应强制 dense_log=False
 
-    根因：run_train_from_dir 和 self_play_cycle.py 无条件传递 dense_log=True。
+    根因：run_train_from_dir 无条件传递 dense_log=True。
     当 batch_size=None 时，train_auto 路由到 train_batch，导致 LossLogger
     被创建为 dense_log=True。此时 log() 用 "epoch" 键，log_val() 用 "step" 键，
     val_loss 数据在 plot() 中被静默丢弃。

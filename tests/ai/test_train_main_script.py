@@ -24,26 +24,22 @@ class TestTrainMainScript(unittest.TestCase):
     def test_train_main_script_epochs_default(self):
         """测试 train_main.py --epochs 默认值为 1000"""
         import argparse
-        
+
         # 模拟命令行参数解析
         original_argv = sys.argv
         try:
             sys.argv = ['train_main.py']
-            
+
             parser = argparse.ArgumentParser()
             parser.add_argument('--epochs', type=int, default=1000)
-            parser.add_argument('--rounds', type=int, default=10)
-            parser.add_argument('--games', type=int, default=100)
             parser.add_argument('--model', type=str, default='fc_v1')
-            
+
             args = parser.parse_args([])
-            
+
             # 验证默认值
             self.assertEqual(args.epochs, 1000, "--epochs 默认值应为 1000")
-            self.assertEqual(args.rounds, 10, "--rounds 默认值应为 10")
-            self.assertEqual(args.games, 100, "--games 默认值应为 100")
             self.assertEqual(args.model, 'fc_v1', "--model 默认值应为 fc_v1")
-            
+
         finally:
             sys.argv = original_argv
     
@@ -77,18 +73,6 @@ class TestTrainMainScript(unittest.TestCase):
         
         FCv1Model.DEFAULT_MODEL_PATH = original_model_path
     
-    def test_trainer_train_cycle_defaults(self):
-        """测试 trainer.train_cycle 默认参数值"""
-        # 获取 train_cycle 方法的签名
-        sig = inspect.signature(FCv1Trainer.train_cycle)
-
-        # 验证默认参数值
-        self.assertEqual(sig.parameters['rounds'].default, 10, "rounds 默认值应为 10")
-        self.assertEqual(sig.parameters['games'].default, 100, "games 默认值应为 100")
-        self.assertEqual(sig.parameters['epochs'].default, 1000, "epochs 默认值应为 1000")
-        self.assertIsNone(sig.parameters['batch_size'].default, "batch_size 默认值应为 None")
-        self.assertEqual(sig.parameters['shuffle'].default, False, "shuffle 默认值应为 False")
-
     def test_train_main_parser_batch_size_and_shuffle(self):
         """测试 argparse 能正确解析 --batch-size 和 --shuffle"""
         import argparse

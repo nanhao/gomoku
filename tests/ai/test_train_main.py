@@ -17,85 +17,22 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from ai.train_main import main
 
 
-class TestTrainMainArgParsing(unittest.TestCase):
-    """测试 train_main 的参数解析"""
+class TestTrainMainNoTrainFromDir(unittest.TestCase):
+    """测试不指定 --train-from-dir 时的报错行为"""
 
-    def test_cycle_mode_parses_rounds_and_games(self):
-        """--cycle 模式应解析 --rounds 和 --games"""
-        with patch('sys.argv', ['train_main.py', '--model', 'fc_v1', '--cycle', '--rounds', '5', '--games', '10']):
-            # 验证不崩溃（使用 mock 替代实际训练）
-            with patch('ai.train_main.get_trainer') as mock_get:
-                mock_trainer = MagicMock()
-                mock_trainer.train_cycle = MagicMock()
-                mock_get.return_value = mock_trainer
-                main()
-
-                mock_trainer.train_cycle.assert_called_once()
-                call_kwargs = mock_trainer.train_cycle.call_args[1]
-                self.assertEqual(call_kwargs['rounds'], 5)
-                self.assertEqual(call_kwargs['games'], 10)
-
-    def test_cycle_mode_with_batch_size(self):
-        """--cycle 模式应传递 --batch-size 和 --shuffle"""
-        with patch('sys.argv', ['train_main.py', '--model', 'fc_v1', '--cycle', '--batch-size', '32', '--shuffle']):
-            with patch('ai.train_main.get_trainer') as mock_get:
-                mock_trainer = MagicMock()
-                mock_trainer.train_cycle = MagicMock()
-                mock_get.return_value = mock_trainer
-                main()
-
-                call_kwargs = mock_trainer.train_cycle.call_args[1]
-                self.assertEqual(call_kwargs['batch_size'], 32)
-                self.assertTrue(call_kwargs['shuffle'])
-
-    def test_no_mode_fails(self):
-        """不指定任何模式参数应报错"""
+    def test_no_train_from_dir_fails(self):
+        """不指定 --train-from-dir 应报错退出"""
         with patch('sys.argv', ['train_main.py', '--model', 'fc_v1']):
             with self.assertRaises(SystemExit):
                 main()
 
-    def test_fresh_flag(self):
-        """--fresh 标志应传递给 get_trainer"""
-        with patch('sys.argv', ['train_main.py', '--model', 'fc_v1', '--cycle', '--fresh', '--rounds', '1', '--games', '1']):
-            with patch('ai.train_main.get_trainer') as mock_get:
-                mock_trainer = MagicMock()
-                mock_trainer.train_cycle = MagicMock()
-                mock_get.return_value = mock_trainer
+    def test_no_train_from_dir_error_message(self):
+        """不指定 --train-from-dir 时报错消息应为指定参数提示"""
+        with patch('sys.argv', ['train_main.py', '--model', 'fc_v1']):
+            with self.assertRaises(SystemExit) as cm:
                 main()
-
-                mock_get.assert_called_once()
-                call_kwargs = mock_get.call_args[1]
-                self.assertTrue(call_kwargs['fresh'])
-
-    def test_lr_scheduler_args(self):
-        """学习率调度参数应传递给 get_trainer"""
-        with patch('sys.argv', [
-            'train_main.py', '--model', 'fc_v1', '--cycle',
-            '--lr-scheduler', 'step', '--lr-step-size', '300', '--lr-gamma', '0.8',
-            '--rounds', '1', '--games', '1'
-        ]):
-            with patch('ai.train_main.get_trainer') as mock_get:
-                mock_trainer = MagicMock()
-                mock_trainer.train_cycle = MagicMock()
-                mock_get.return_value = mock_trainer
-                main()
-
-                call_kwargs = mock_get.call_args[1]
-                self.assertEqual(call_kwargs['lr_scheduler_type'], 'step')
-                self.assertEqual(call_kwargs['lr_step_size'], 300)
-                self.assertEqual(call_kwargs['lr_gamma'], 0.8)
-
-    def test_default_model_is_fc_v1(self):
-        """默认模型应为 fc_v1"""
-        with patch('sys.argv', ['train_main.py', '--cycle', '--rounds', '1', '--games', '1']):
-            with patch('ai.train_main.get_trainer') as mock_get:
-                mock_trainer = MagicMock()
-                mock_trainer.train_cycle = MagicMock()
-                mock_get.return_value = mock_trainer
-                main()
-
-                mock_get.assert_called_once()
-                self.assertEqual(mock_get.call_args[0][0], 'fc_v1')
+            # argparse.error 导致 SystemExit(2)
+            self.assertEqual(cm.exception.code, 2)
 
 
 class TestTrainFromDirModes(unittest.TestCase):
@@ -249,102 +186,6 @@ class TestTrainFromDirModes(unittest.TestCase):
                     # 内部走 train_batch 路径（train_batch 不使用 dense_log）
                     call_kwargs = mock_trainer.train_auto.call_args[1]
                     self.assertIsNone(call_kwargs.get('batch_size'))
-
-
-# ---------------------------------------------------------------------------
-# 温度采样 CLI 参数测试（对应 move_sampler_design.md 用例 33-34）
-# ---------------------------------------------------------------------------
-
-
-class TestTrainMainTempSamplingFlags(unittest.TestCase):
-    """train_main.py cycle 模式的温度采样 CLI 参数解析 + 透传行为"""
-
-    def test_cycle_mode_accepts_temp_flags(self):
-        """用例 33：cycle 模式解析温度参数并构造 TempConfig 透传到 train_cycle。"""
-        from ai.move_sampler import TEMP_SIDE_RANDOM
-
-        argv = [
-            'train_main.py', '--model', 'fc_v1', '--cycle',
-            '--rounds', '1', '--games', '1',
-            '--temp-side', 'random',
-            '--temperature', '0.8',
-            '--temp-moves', '10',
-            '--temp-seed', '123',
-        ]
-        with patch('sys.argv', argv):
-            with patch('ai.train_main.get_trainer') as mock_get:
-                mock_trainer = MagicMock()
-                mock_trainer.train_cycle = MagicMock()
-                mock_get.return_value = mock_trainer
-                main()
-
-                mock_trainer.train_cycle.assert_called_once()
-                call_kwargs = mock_trainer.train_cycle.call_args[1]
-                temp_config = call_kwargs.get('temp_config')
-                self.assertIsNotNone(
-                    temp_config,
-                    "cycle 模式应将 CLI 参数构造成 TempConfig 并透传"
-                )
-                self.assertEqual(temp_config.temperature, 0.8)
-                self.assertEqual(temp_config.temp_moves, 10)
-                self.assertEqual(temp_config.temp_side, TEMP_SIDE_RANDOM)
-                self.assertEqual(temp_config.seed, 123)
-
-    def test_cycle_mode_no_temp_sampling_flag(self):
-        """用例 33 补充：cycle 模式传 --no-temp-sampling → temp_config=None。"""
-        argv = [
-            'train_main.py', '--model', 'fc_v1', '--cycle',
-            '--rounds', '1', '--games', '1',
-            '--no-temp-sampling',
-        ]
-        with patch('sys.argv', argv):
-            with patch('ai.train_main.get_trainer') as mock_get:
-                mock_trainer = MagicMock()
-                mock_trainer.train_cycle = MagicMock()
-                mock_get.return_value = mock_trainer
-                main()
-
-                call_kwargs = mock_trainer.train_cycle.call_args[1]
-                self.assertIsNone(
-                    call_kwargs.get('temp_config'),
-                    "--no-temp-sampling 应将 temp_config 设为 None"
-                )
-
-    def test_non_cycle_mode_ignores_temp_flags(self):
-        """用例 34：--train-from-dir 模式传温度参数 → 打印 warning，不影响训练。"""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # 准备一个最小训练样本目录
-            sample_dir = os.path.join(tmpdir, "s")
-            os.makedirs(sample_dir, exist_ok=True)
-            sample_path = os.path.join(sample_dir, "sample.json")
-            with open(sample_path, "w", encoding="utf-8") as f:
-                json.dump([{
-                    "input": [0.0] * 226,
-                    "output": [0.0] * 225,
-                    "mask": [1] * 225,
-                }], f)
-
-            argv = [
-                'train_main.py', '--model', 'fc_v1',
-                '--train-from-dir', tmpdir,
-                '--temperature', '2.0',  # 非 cycle 模式下的温度参数应被忽略
-            ]
-            with patch('sys.argv', argv):
-                with patch('ai.train_main.get_trainer') as mock_get:
-                    mock_trainer = MagicMock()
-                    mock_trainer.train_auto = MagicMock(return_value=0.3)
-                    mock_get.return_value = mock_trainer
-
-                    # 关键：不应 raise。train_auto 被调用后，其 call_kwargs
-                    # 不应包含 temp_config（只 cycle 路径才传）。
-                    main()
-
-                    mock_trainer.train_auto.assert_called_once()
-                    call_kwargs = mock_trainer.train_auto.call_args[1]
-                    self.assertNotIn(
-                        "temp_config", call_kwargs,
-                        "train_auto 不应收到 temp_config 参数"
-                    )
 
 
 if __name__ == '__main__':

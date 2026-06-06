@@ -3,12 +3,6 @@
 独立运行的训练器入口，支持多种模型。
 
 用法:
-    # 训练周期（fc_v1 模型）
-    python ai/train_main.py --model fc_v1 --cycle [--rounds 100] [--games 100]
-
-    # 训练周期（多代模型 cnn_v3.2）
-    python ai/train_main.py --model cnn_v3.2 --cycle [--rounds 100] [--games 100]
-
     # 从已有数据目录训练模型
     python ai/train_main.py --model fc_v1 --train-from-dir ai/train_data/fc_v1_self_play_1
 """
@@ -21,7 +15,7 @@ import argparse
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from ai.registry import get_trainer
-from ai.runners import run_train_from_dir, run_cycle
+from ai.runners import run_train_from_dir
 
 
 def main():
@@ -31,20 +25,11 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  # 训练周期 fc_v1（100轮，每轮100局）
-  python ai/train_main.py --model fc_v1 --cycle
-
-  # 训练周期 cnn_v3.2（多代模型）
-  python ai/train_main.py --model cnn_v3.2 --cycle
-
-  # 训练周期 fc_v1（自定义参数）
-  python ai/train_main.py --model fc_v1 --cycle --rounds 50 --games 50
-
-  # 从新模型开始训练 fc_v1
-  python ai/train_main.py --model fc_v1 --cycle --fresh
-
   # 从已有数据目录训练模型
-  python ai/train_main.py --model fc_v1 --train-from-dir ai/train_data/fc_v1_self_play_1 --epochs 1000
+  python ai/train_main.py --model fc_v1 --train-from-dir ai/train_data/fc_v1_self_play_1
+
+  # mini-batch 训练
+  python ai/train_main.py --model fc_v1 --train-from-dir ai/train_data/fc_v1_self_play_1 --batch-size 32 --shuffle
         """
     )
     
@@ -56,39 +41,12 @@ def main():
     )
     
     parser.add_argument(
-        '--cycle',
-        action='store_true',
-        help='开启训练周期模式'
-    )
-    
-    parser.add_argument(
-        '--rounds',
-        type=int,
-        default=10,
-        help='训练周期轮次数 n，默认 10'
-    )
-    
-    parser.add_argument(
-        '--games',
-        type=int,
-        default=100,
-        help='每轮对局数 m，默认 100'
-    )
-    
-    parser.add_argument(
         '--epochs',
         type=int,
         default=1000,
         help='训练迭代数，默认 1000'
     )
-    
-    parser.add_argument(
-        '--rate',
-        type=float,
-        default=0.9,
-        help='奖励衰减率 r，训练周期时传给 Evaluator，默认 0.9'
-    )
-    
+
     parser.add_argument(
         '--fresh',
         action='store_true',
@@ -158,53 +116,12 @@ def main():
         help='验证集比例，0 表示不分割，推荐 0.2，默认 0.0'
     )
 
-    # ---- 温度采样参数（仅在 --cycle 模式生效；默认启用）----
-    parser.add_argument(
-        '--no-temp-sampling',
-        action='store_true',
-        default=False,
-        help='[仅 --cycle 模式] 禁用开局阶段温度采样，全程走 argmax'
-    )
-    parser.add_argument(
-        '--temperature',
-        type=float,
-        default=1.0,
-        help='[仅 --cycle 模式] 温度值 T（>0），越大越随机，默认 1.0'
-    )
-    parser.add_argument(
-        '--temp-moves',
-        type=int,
-        default=12,
-        help='[仅 --cycle 模式] 前 N 个全局步启用温度采样，默认 12'
-    )
-    parser.add_argument(
-        '--temp-side',
-        type=str,
-        default='both',
-        choices=['black', 'white', 'both', 'random'],
-        help='[仅 --cycle 模式] 启用温度采样的一方，默认 both'
-    )
-    parser.add_argument(
-        '--temp-seed',
-        type=int,
-        default=None,
-        help='[仅 --cycle 模式] 温度采样随机种子'
-    )
-
     args = parser.parse_args()
-    
-    # 验证参数：两个模式互斥（--cycle、--train-from-dir 二选一）
-    active_modes = []
-    if args.cycle:
-        active_modes.append('--cycle')
-    if args.train_from_dir:
-        active_modes.append('--train-from-dir')
 
-    if len(active_modes) == 0:
-        parser.error("请指定 --cycle 或 --train-from-dir 参数")
-    elif len(active_modes) > 1:
-        parser.error(f"以下参数不能同时使用: {', '.join(active_modes)}")
-    
+    # 验证：必须指定 --train-from-dir
+    if not args.train_from_dir:
+        parser.error("请指定 --train-from-dir 参数")
+
     # 创建训练器
     scheduler_kwargs = {}
     if args.lr_scheduler:
@@ -222,11 +139,8 @@ def main():
         print(f"错误: {e}")
         sys.exit(1)
     
-    # 根据模式路由到对应的运行器
-    if args.train_from_dir:
-        run_train_from_dir(args, trainer)
-    elif args.cycle:
-        run_cycle(args, trainer)
+    # 执行训练
+    run_train_from_dir(args, trainer)
 
 
 if __name__ == "__main__":

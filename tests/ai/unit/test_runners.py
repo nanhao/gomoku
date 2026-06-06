@@ -16,7 +16,7 @@ from unittest.mock import patch, MagicMock
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
 from ai.runners import (
-    run_train_from_dir, run_cycle,
+    run_train_from_dir,
     discover_sample_dirs, _create_temp_sample_dir,
 )
 
@@ -25,12 +25,8 @@ def _make_args(**overrides) -> argparse.Namespace:
     """构造测试用 args Namespace，提供合理的默认值"""
     defaults = {
         'model': 'fc_v1',
-        'cycle': False,
         'train_from_dir': None,
-        'rounds': 10,
-        'games': 100,
         'epochs': 1000,
-        'rate': 0.9,
         'fresh': False,
         'batch_size': None,
         'shuffle': False,
@@ -40,11 +36,6 @@ def _make_args(**overrides) -> argparse.Namespace:
         'lr_patience': 100,
         'lr_factor': 0.5,
         'val_ratio': 0.0,
-        'no_temp_sampling': False,
-        'temperature': 1.0,
-        'temp_moves': 12,
-        'temp_side': 'both',
-        'temp_seed': None,
     }
     defaults.update(overrides)
     return argparse.Namespace(**defaults)
@@ -172,64 +163,6 @@ class TestRunTrainFromDir(unittest.TestCase):
                     run_train_from_dir(args, trainer)
 
             mock_rmtree.assert_any_call('/fake/tmp/dir', ignore_errors=True)
-
-
-class TestRunCycle(unittest.TestCase):
-    """测试 run_cycle 运行模式"""
-
-    def test_calls_train_cycle(self):
-        """应调用 trainer.train_cycle 并传递参数"""
-        args = _make_args(cycle=True, rounds=5, games=20, epochs=100,
-                          rate=0.95, batch_size=32, shuffle=True)
-        trainer = MagicMock()
-
-        run_cycle(args, trainer)
-
-        trainer.train_cycle.assert_called_once()
-        call_kwargs = trainer.train_cycle.call_args.kwargs
-        self.assertEqual(call_kwargs['rounds'], 5)
-        self.assertEqual(call_kwargs['games'], 20)
-        self.assertEqual(call_kwargs['epochs'], 100)
-        self.assertEqual(call_kwargs['rate'], 0.95)
-        self.assertEqual(call_kwargs['batch_size'], 32)
-        self.assertTrue(call_kwargs['shuffle'])
-        self.assertEqual(call_kwargs['val_ratio'], 0.0)
-        # 默认启用温度采样，temp_config 为 TempConfig 实例
-        self.assertIn('temp_config', call_kwargs)
-        temp_config = call_kwargs['temp_config']
-        self.assertIsNotNone(temp_config)
-        self.assertEqual(temp_config.temperature, 1.0)
-        self.assertEqual(temp_config.temp_moves, 12)
-        self.assertEqual(temp_config.temp_side, 'both')
-        self.assertIsNone(temp_config.seed)
-
-    def test_no_temp_sampling_passes_none(self):
-        """--no-temp-sampling 应使 temp_config=None"""
-        args = _make_args(cycle=True, no_temp_sampling=True)
-        trainer = MagicMock()
-
-        run_cycle(args, trainer)
-
-        call_kwargs = trainer.train_cycle.call_args.kwargs
-        self.assertIsNone(call_kwargs['temp_config'])
-
-    def test_not_implemented_exits(self):
-        """NotImplementedError 应导致 sys.exit(1)"""
-        args = _make_args(cycle=True)
-        trainer = MagicMock()
-        trainer.train_cycle.side_effect = NotImplementedError("not yet")
-
-        with self.assertRaises(SystemExit):
-            run_cycle(args, trainer)
-
-    def test_generic_exception_exits(self):
-        """通用异常也应导致 sys.exit(1)"""
-        args = _make_args(cycle=True)
-        trainer = MagicMock()
-        trainer.train_cycle.side_effect = RuntimeError("boom")
-
-        with self.assertRaises(SystemExit):
-            run_cycle(args, trainer)
 
 
 if __name__ == '__main__':

@@ -4,7 +4,7 @@
 输入：ai/ai_data/.../record.json
 输出：ai/train_data/.../sample.json
 
-使用双向棋型检测法计算每个位置的 reward 值，
+使用棋型评估法计算每个位置的 reward 值，
 并通过 masked_softmax 转换为概率分布。
 
 支持多进程并行评价（ProcessPoolExecutor），
@@ -18,13 +18,12 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from concurrent.futures.process import BrokenProcessPool
 
 from ai.constants import AI_DATA_DIR, TRAIN_DATA_DIR
-from ai.line_tracer import LineTracer
 from ai.reward_calculator import RewardCalculator, RewardConfig
 from ai.probability_utils import masked_softmax
 
 
 def _evaluate_record_worker(record_file: str, ai_data_dir: str,
-                          train_data_dir: str, decay_rate: float) -> str:
+                          train_data_dir: str) -> str:
     """顶层辅助函数，供 ProcessPoolExecutor 调用
 
     Windows 使用 spawn 模式创建子进程，子进程会重新导入模块。
@@ -35,38 +34,31 @@ def _evaluate_record_worker(record_file: str, ai_data_dir: str,
         record_file: record.json 文件路径
         ai_data_dir: AI 数据目录路径
         train_data_dir: 训练数据目录路径
-        decay_rate: 奖励衰减率
 
     Returns:
         生成的 sample.json 文件路径
     """
     evaluator = Evaluator(
         ai_data_dir=ai_data_dir,
-        train_data_dir=train_data_dir,
-        decay_rate=decay_rate
+        train_data_dir=train_data_dir
     )
     return evaluator.evaluate_record(record_file)
 
 
 class Evaluator:
-    """评价器 - 生成训练样本（双向棋型检测法）"""
-    
-    # 常量定义
-    BLEND_ALPHA = 1.0  # 五连追溯奖励融合权重
-    
+    """评价器 - 生成训练样本（棋型评估法）"""
+
     def __init__(self, ai_data_dir: str = None, train_data_dir: str = None,
-                 decay_rate: float = 0.9, max_workers: int = None):
+                 max_workers: int = None):
         """
         初始化评价器
 
         创建 RewardConfig 作为唯一的奖励配置来源，
-        LineTracer 和 RewardCalculator 均从该配置获取 max_reward / min_reward，
-        避免在多处重复定义相同的常量值。
+        RewardCalculator 从该配置获取 max_reward / min_reward。
 
         Args:
             ai_data_dir: AI 数据目录路径，默认为 AI_DATA_DIR
             train_data_dir: 训练数据目录路径，默认为 TRAIN_DATA_DIR
-            decay_rate: 奖励衰减率 r，默认 0.9
             max_workers: 并行进程数，1 表示串行，默认 min(os.cpu_count(), 4)
         """
         if ai_data_dir is None:
@@ -75,9 +67,8 @@ class Evaluator:
             train_data_dir = TRAIN_DATA_DIR
         self.ai_data_dir = ai_data_dir
         self.train_data_dir = train_data_dir
-        self.decay_rate = decay_rate
 
-        # 奖励配置：单一来源，LineTracer / RewardCalculator 均从此获取
+        # 奖励配置：单一来源，RewardCalculator 从此获取
         self._reward_config = RewardConfig()
 
         # 并行进程数：默认 min(cpu_count, 4)，1 表示串行
@@ -86,12 +77,6 @@ class Evaluator:
         else:
             self.max_workers = min(os.cpu_count() or 4, 4)
 
-        self._line_tracer = LineTracer(
-            max_reward=self._reward_config.max_reward,
-            min_reward=self._reward_config.min_reward,
-            decay_rate=self.decay_rate,
-            blend_alpha=self.BLEND_ALPHA
-        )
         self._reward_calculator = RewardCalculator(self._reward_config)
     
     def evaluate_record(self, record_file: str) -> str:
@@ -109,13 +94,12 @@ class Evaluator:
         
         history = record.get("history", [])
         winner = record.get("winner", 0)
-        end_board = record.get("end_board", [])
-        
+
         if not history or winner == 0:
             raise ValueError("记录文件无效或游戏未结束")
-        
-        # 计算每个 step 的 reward（融合棋型评估和五连追溯）
-        sample_dict = self._compute_all_rewards(history, winner, end_board)
+
+        # 计算每个 step 的 reward（棋型评估）
+        sample_dict = self._compute_all_rewards(history)
         
         # 生成输出文件路径
         sample_file = self._get_sample_path(record_file)
@@ -129,36 +113,21 @@ class Evaluator:
         
         return sample_file
     
-    def _compute_all_rewards(self, history: List[Dict], winner: int = 0,
-                              end_board: List[int] = None) -> List[Dict]:
-        """
-        计算所有步骤的 reward（双向棋型检测法 + 五连追溯）
-        
+    def _compute_all_rewards(self, history: List[Dict]) -> List[Dict]:
+        """计算所有步骤的 reward（棋型评估）
+
         对每个 step 的每个空位，计算其 reward 值，
         然后通过 masked_softmax 转换为概率分布。
-        
-        如果有胜者，叠加五连追溯奖励。
-        
+
         Args:
             history: 历史记录
-            winner: 获胜方（1=黑, 2=白, 0=未结束, 3=平局）
-            end_board: 最终棋盘状态（225 或 226 维）
-            
+
         Returns:
             包含 input, output, mask 的样本列表
             output 为概率分布，值域 (0, 1)，总和为 1（由 masked_softmax 生成）
         """
         sample_dict = []
-        
-        # 计算五连追溯奖励
-        line_bonuses = {}
-        if end_board and winner > 0 and winner < 3:
-            # end_board 可能是 226 维，取前 225 位
-            board_225 = end_board[:225] if len(end_board) >= 225 else end_board
-            bonuses = self._line_tracer.trace_winning_line(board_225, winner, history)
-            # 转换为 {step_index: bonus_reward} 字典
-            line_bonuses = dict(bonuses)
-        
+
         for step_idx, step in enumerate(history):
             input_vector = step.get("input", [])
             if len(input_vector) < 226:
@@ -181,24 +150,11 @@ class Evaluator:
                 else:
                     # 空位：mask = 1，计算 reward
                     mask[i] = 1
-                    # 直连 RewardCalculator 计算位置 reward
+                    # 使用 RewardCalculator 计算位置 reward
                     x, y = i // 15, i % 15
                     raw_rewards[i] = float(self._reward_calculator.compute_position_reward(board, x, y, current_player))
-            
-            # 如果当前步骤有五连追溯奖励，叠加到实际落子位置
-            if step_idx in line_bonuses:
-                position = step.get("position", [])
-                if len(position) >= 2:
-                    px, py = position[0], position[1]
-                    pos_idx = px * 15 + py
-                    if 0 <= pos_idx < 225 and mask[pos_idx] == 1:
-                        # 直连 LineTracer 融合棋型评估奖励和五连追溯奖励
-                        raw_rewards[pos_idx] = self._line_tracer.blend_rewards(
-                            raw_rewards[pos_idx],
-                            line_bonuses[step_idx]
-                        )
-            
-            # 对 raw_rewards 应用 masked_softmax 转换为概率分布（直连 probability_utils）
+
+            # 对 raw_rewards 应用 masked_softmax 转换为概率分布
             output = masked_softmax(raw_rewards, mask)
             
             sample_dict.append({
@@ -309,8 +265,7 @@ class Evaluator:
                     _evaluate_record_worker,
                     record_file,
                     self.ai_data_dir,
-                    self.train_data_dir,
-                    self.decay_rate
+                    self.train_data_dir
                 ): record_file
                 for record_file in record_files
             }

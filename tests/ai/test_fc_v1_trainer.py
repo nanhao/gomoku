@@ -140,33 +140,6 @@ class TestFCv1TrainerInit(_DefaultModelPathIsolatedMixin, unittest.TestCase):
         self.assertTrue(issubclass(FCv1Trainer, BaseTrainer))
 
 
-class TestTrainCycleRateParameter(unittest.TestCase):
-    """train_cycle rate 参数默认值（原 test_fc_v1_trainer_cycle.py 保留）"""
-
-    def test_train_cycle_has_rate_parameter(self):
-        """train_cycle 应有 rate 参数，默认 0.9"""
-        sig = inspect.signature(FCv1Trainer.train_cycle)
-        self.assertIn('rate', sig.parameters, "train_cycle 应有 rate 参数")
-        self.assertAlmostEqual(
-            sig.parameters['rate'].default, 0.9, places=9,
-            msg="rate 默认值应为 0.9"
-        )
-
-    def test_train_main_script_rate_default(self):
-        """train_main.py --rate 默认值为 0.9"""
-        import argparse
-        original_argv = sys.argv
-        try:
-            parser = argparse.ArgumentParser()
-            parser.add_argument('--rate', type=float, default=0.9)
-            parser.add_argument('--model', type=str, default='fc_v1')
-            args = parser.parse_args([])
-            self.assertAlmostEqual(args.rate, 0.9, places=9)
-            self.assertEqual(args.model, 'fc_v1')
-        finally:
-            sys.argv = original_argv
-
-
 # ---------------------------------------------------------------------------
 # 单轮训练 / 数据加载
 # ---------------------------------------------------------------------------
