@@ -1,7 +1,6 @@
-"""train_main CLI 参数互斥测试
+"""train_main CLI 参数测试
 
-测试 --train-from-dir 参数与其他模式参数的互斥关系。
-两个模式参数二选一：--cycle、--train-from-dir
+测试已移除的参数（--self-play、--merge-output）和 --train-from-dir 的行为。
 """
 
 import os
@@ -32,12 +31,12 @@ class TestSelfPlayParamRemoved(unittest.TestCase):
                 main()
 
 
-class TestTrainFromDirExclusive(unittest.TestCase):
-    """测试 --train-from-dir 与其他模式的互斥关系"""
+class TestRemovedCycleParam(unittest.TestCase):
+    """验证 --cycle 参数已移除"""
 
-    def test_train_from_dir_exclusive_with_cycle(self):
-        """--train-from-dir 与 --cycle 互斥"""
-        with patch('sys.argv', ['train_main.py', '--model', 'fc_v1', '--train-from-dir', '/tmp/train', '--cycle']):
+    def test_cycle_param_removed(self):
+        """--cycle 参数已不存在，解析时报错"""
+        with patch('sys.argv', ['train_main.py', '--model', 'fc_v1', '--cycle']):
             with self.assertRaises(SystemExit):
                 main()
 

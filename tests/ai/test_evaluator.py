@@ -1,7 +1,6 @@
-"""evaluator.py 测试 - _evaluate_files 进程池崩溃回退逻辑
+"""evaluator.py 测试 - 签名验证与进程池崩溃回退逻辑
 
-验证当 ProcessPoolExecutor 崩溃时，_evaluate_files 能正确回退到串行模式，
-并仅重试尚未成功处理的 record 文件（不重复处理已成功的文件）。
+验证接口变更（AC-1.9/AC-1.12）和 _evaluate_files 进程池崩溃时的回退逻辑。
 """
 
 import json
@@ -9,13 +8,43 @@ import os
 import sys
 import tempfile
 import unittest
+import inspect
 from concurrent.futures.process import BrokenProcessPool
 from unittest.mock import patch, MagicMock
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from ai.evaluator import Evaluator
+from ai.evaluator import Evaluator, _evaluate_record_worker
+
+
+class TestEvaluatorSignatureChanges(unittest.TestCase):
+    """验证 Evaluator 接口变更（AC-1.9/AC-1.12）"""
+
+    def test_compute_all_rewards_has_only_history_param(self):
+        """_compute_all_rewards 签名仅含 history 参数（AC-1.9）"""
+        sig = inspect.signature(Evaluator._compute_all_rewards)
+        param_names = list(sig.parameters.keys())
+        # 实例方法的 signature 包含 self，排除后验证
+        non_self_params = [p for p in param_names if p != 'self']
+        self.assertEqual(non_self_params, ['history'],
+                        "_compute_all_rewards 应仅含 history 参数（不含 self），"
+                        f"实际包含: {param_names}")
+
+    def test_evaluate_record_worker_has_three_params(self):
+        """_evaluate_record_worker 签名仅含 3 个参数（AC-1.12）"""
+        sig = inspect.signature(_evaluate_record_worker)
+        param_names = list(sig.parameters.keys())
+        self.assertEqual(param_names, ['record_file', 'ai_data_dir', 'train_data_dir'],
+                        "_evaluate_record_worker 应仅含 3 个参数，"
+                        f"实际包含: {param_names}")
+
+    def test_evaluator_init_has_no_decay_rate(self):
+        """Evaluator.__init__ 不含 decay_rate 参数"""
+        sig = inspect.signature(Evaluator.__init__)
+        param_names = list(sig.parameters.keys())
+        self.assertNotIn('decay_rate', param_names,
+                        "Evaluator.__init__ 不应包含 decay_rate 参数")
 
 
 def _create_record_file(base_dir, game_name, history_len=2):

@@ -13,7 +13,7 @@ from .model import CNNV1Model
 class CNNV1Trainer(BaseTrainer):
     """CNN 训练器
     
-    负责训练 CNN 模型，支持单轮次训练和训练周期模式。
+    负责训练 CNN 模型，提供单轮次训练和批量训练。
     继承自 BaseTrainer，使用通用训练逻辑。
     
     默认行为：

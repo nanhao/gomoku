@@ -13,7 +13,7 @@ from .model import CNNV3Model
 class CNNV3Trainer(BaseTrainer):
     """CNN v3 训练器
 
-    负责训练 CNN v3 极简模型，支持单轮次训练和训练周期模式。
+    负责训练 CNN v3 极简模型，提供单轮次训练和批量训练。
     继承自 BaseTrainer，使用通用训练逻辑。
 
     默认行为：

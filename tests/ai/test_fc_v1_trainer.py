@@ -1,10 +1,9 @@
 """FC v1 训练器单元测试（整合）
 
 按 task_reports/2026-05-01/test_suite_review.md Top #6 执行：
-将原 7 个文件
+将原 6 个文件
   - test_fc_v1_trainer.py
   - test_fc_v1_trainer_batch.py
-  - test_fc_v1_trainer_cycle.py
   - test_fc_v1_trainer_error.py
   - test_fc_v1_trainer_fresh.py
   - test_fc_v1_trainer_verbose.py

@@ -160,8 +160,8 @@ class TestTrainFromDirModes(unittest.TestCase):
                     self.assertTrue(call_kwargs.get('dense_log', False),
                                     "--train-from-dir + --batch-size 应传 dense_log=True")
 
-    def test_train_from_dir_no_batch_no_dense_log(self):
-        """--train-from-dir 不指定 --batch-size 时，train_auto 接收 dense_log=True 但内部走 train_batch 路径"""
+    def test_train_from_dir_no_batch_passes_dense_log(self):
+        """--train-from-dir 不指定 --batch-size 时，runners 仍传 dense_log=True 给 train_auto（内部走 train_batch 路径，train_batch 不使用 dense_log）"""
         with tempfile.TemporaryDirectory() as tmp_dir:
             sample_dir = os.path.join(tmp_dir, "1")
             os.makedirs(sample_dir)

@@ -95,8 +95,10 @@ class Evaluator:
         history = record.get("history", [])
         winner = record.get("winner", 0)
 
-        if not history or winner == 0:
-            raise ValueError("记录文件无效或游戏未结束")
+        if not history:
+            raise ValueError("记录文件无效：history 为空")
+        if winner == 0:
+            raise ValueError("游戏未结束或平局：winner 为 0")
 
         # 计算每个 step 的 reward（棋型评估）
         sample_dict = self._compute_all_rewards(history)

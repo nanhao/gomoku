@@ -23,7 +23,7 @@ def discover_sample_dirs(train_data_dir: str) -> list:
     扫描 train_data_dir 下的直接子目录，返回包含 sample.json 的子目录列表。
 
     Args:
-        train_data_dir: 训练数据根目录（如 ai/train_data/fc_v1_cycle_1_5）
+        train_data_dir: 训练数据根目录（如 ai/train_data/fc_v1_self_play_1）
 
     Returns:
         包含 sample.json 的子目录路径列表，按子目录名数字排序
