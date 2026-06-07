@@ -1,19 +1,21 @@
 """AI 对战脚本
 
 独立运行的命令行脚本，用于启动两个 AI 对战。
-支持通过参数指定双方 AI 及对战局数。每一局执方随机（黑白随机分配）。
-对战结束后输出每局结果及双方胜率。
+支持通过参数指定双方 AI、对战局数及温度采样行为。
+每一局执方随机（黑白随机分配）。对战结束后输出每局结果及双方胜率。
 
 用法:
     python ai/battle.py --ai1 random --ai2 fc_v1 --games 10
-    python ai/battle.py --ai1 random --ai2 random --games 50
-    python ai/battle.py --ai1 cnn_v1 --ai2 fc_v1 --games 10
-    python ai/battle.py --ai1 fc_v1 --ai2 cnn_v2 --games 50
+    python ai/battle.py --ai1 cnn_v3.1 --ai2 cnn_v3.2 --games 50 --no-temp-sampling
+    python ai/battle.py --ai1 fc_v1 --ai2 cnn_v2 --games 20 --temperature 2.0 --temp-moves 6
+    python ai/battle.py --ai1 cnn_v3.1 --ai2 cnn_v3.2 --games 10 --temp-seed 42
 """
 
 import sys
 import os
+import math
 import argparse
+import warnings
 
 # 添加项目根目录到路径，并移除 ai/ 目录（防止遮蔽标准库 random 模块）
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -25,11 +27,38 @@ for _p in list(sys.path):
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
+from typing import Optional
+
 from ai.engine import AIEngine
 from ai.data_recorder import DataRecorder
 from ai.game_manager import AIGameManager
 from ai.constants import AI_DATA_DIR
 from ai.registry import get_model
+from ai.move_sampler import TempConfig, SUPPORTED_TEMP_SIDES, TEMP_SIDE_BOTH
+
+
+def finite_float(value: str) -> float:
+    """argparse 自定义 type 函数：将字符串转为有限浮点数。
+
+    argparse 内置 ``type=float`` 会接受 ``inf`` / ``nan`` 等特殊浮点值，
+    但温度采样要求 temperature 必须是有限正实数。本函数在 ``float(value)``
+    成功后额外校验 ``math.isfinite``，拒绝 inf / -inf / nan。
+
+    Args:
+        value: 命令行参数字符串（如 "1.0"、"inf"）
+
+    Returns:
+        解析后的有限浮点数
+
+    Raises:
+        argparse.ArgumentTypeError: 值为 inf / -inf / nan 时
+    """
+    f = float(value)
+    if not math.isfinite(f):
+        raise argparse.ArgumentTypeError(
+            f"temperature 必须是有限浮点数，收到: {value}"
+        )
+    return f
 
 
 def get_color_name(color: int) -> str:
@@ -91,14 +120,17 @@ def print_battle_results(ai1_name: str, ai2_name: str, results: list):
     print(f"平局: {draws} 局 ({draw_rate:.1f}%)")
 
 
-def run_battle(ai1_name: str, ai2_name: str, num_games: int):
+def run_battle(ai1_name: str, ai2_name: str, num_games: int,
+               temp_config: Optional[TempConfig] = None):
     """
     执行 AI 对战主流程
-    
+
     Args:
         ai1_name: AI1 名称
         ai2_name: AI2 名称
         num_games: 对战局数
+        temp_config: 可选的温度采样配置；None 时透传给 AIGameManager，
+            底层解释为全程 argmax。默认启用温度采样由 main() 保证。
     """
     print(f"开始 AI 对战: {ai1_name} vs {ai2_name}, 共 {num_games} 局")
     print()
@@ -116,8 +148,9 @@ def run_battle(ai1_name: str, ai2_name: str, num_games: int):
     # 使用常量定义的 AI 数据目录
     recorder = DataRecorder(round_name, AI_DATA_DIR)
     
-    # 执行对战（每局执方随机）
-    results = AIGameManager.start_ai_vs_ai_random(engine1, engine2, num_games, recorder)
+    # 执行对战（每局执方随机），透传 temp_config（不做语义转换）
+    results = AIGameManager.start_ai_vs_ai_random(
+        engine1, engine2, num_games, recorder, temp_config=temp_config)
     
     # 逐局输出结果
     for r in results:
@@ -133,14 +166,20 @@ def run_battle(ai1_name: str, ai2_name: str, num_games: int):
     return results
 
 
-def main():
-    """主函数"""
+def build_parser() -> argparse.ArgumentParser:
+    """构建命令行参数解析器。
+
+    提取为独立函数便于单元测试直接测试参数解析行为。
+
+    Returns:
+        配置完成的 ArgumentParser 实例
+    """
     parser = argparse.ArgumentParser(
         description="AI 对战脚本 - 启动两个 AI 内战，每局执方随机",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  # random vs random，对战 10 局
+  # random vs random，对战 10 局（默认启用温度采样）
   python ai/battle.py --ai1 random --ai2 random --games 10
 
   # random vs fc_v1，对战 50 局
@@ -154,9 +193,21 @@ def main():
 
   # cnn_v3.1 vs cnn_v3.2（多代模型），对战 50 局
   python ai/battle.py --ai1 cnn_v3.1 --ai2 cnn_v3.2 --games 50
+
+  # 禁用温度采样，全程 argmax
+  python ai/battle.py --ai1 cnn_v3.1 --ai2 cnn_v3.2 --games 50 --no-temp-sampling
+
+  # 自定义温度值
+  python ai/battle.py --ai1 fc_v1 --ai2 cnn_v2 --games 20 --temperature 2.0
+
+  # 固定随机种子复现对战
+  python ai/battle.py --ai1 cnn_v3.1 --ai2 cnn_v3.2 --games 10 --temp-seed 42
+
+  # 组合使用
+  python ai/battle.py --ai1 cnn_v3.1 --ai2 cnn_v3.2 --games 100 --temperature 0.8 --temp-moves 8 --temp-side random --temp-seed 2026
         """
     )
-    
+
     parser.add_argument(
         "--ai1",
         type=str,
@@ -170,22 +221,102 @@ def main():
         required=True,
         help="第二方 AI 指定（如 random, fc_v1, cnn_v3.1)"
     )
-    
+
     parser.add_argument(
         "--games",
         type=int,
         default=10,
         help="对战局数，默认 10"
     )
-    
+
+    # ---- 温度采样参数（默认启用，与 create_samples.py 对齐）----
+    parser.add_argument(
+        "--no-temp-sampling",
+        action="store_true",
+        default=False,
+        help="禁用开局阶段温度采样，全程走 argmax"
+    )
+    parser.add_argument(
+        "--temperature",
+        type=finite_float,
+        default=1.0,
+        help="温度值 T（>0），越大越随机，默认 1.0"
+    )
+    parser.add_argument(
+        "--temp-moves",
+        type=int,
+        default=12,
+        help="前 N 个全局步启用温度采样，之后走 argmax，默认 12"
+    )
+    parser.add_argument(
+        "--temp-side",
+        type=str,
+        default=TEMP_SIDE_BOTH,
+        choices=list(SUPPORTED_TEMP_SIDES),
+        help="启用温度采样的一方，默认 both"
+    )
+    parser.add_argument(
+        "--temp-seed",
+        type=int,
+        default=None,
+        help="温度采样随机种子（用于复现对战结果）"
+    )
+
+    return parser
+
+
+def _build_temp_config(args: argparse.Namespace) -> Optional[TempConfig]:
+    """从 argparse 解析结果构造 TempConfig 或 None。
+
+    提取为独立函数便于单元测试。
+
+    Args:
+        args: argparse 解析后的 Namespace
+
+    Returns:
+        TempConfig 实例（启用温度采样时）或 None（禁用时）
+
+    Raises:
+        ValueError: temperature 或 temp_moves 非法时（由 TempConfig.__post_init__ 抛出）
+    """
+    if args.no_temp_sampling:
+        # 若用户显式传了温度相关参数，通过 warning 提示被忽略
+        # （行为与 create_samples.py 保持一致）
+        user_set_temp = (
+            args.temperature != 1.0
+            or args.temp_moves != 12
+            or args.temp_side != TEMP_SIDE_BOTH
+            or args.temp_seed is not None
+        )
+        if user_set_temp:
+            warnings.warn(
+                "已启用 --no-temp-sampling，以下参数被忽略："
+                "--temperature / --temp-moves / --temp-side / --temp-seed"
+            )
+        return None
+    else:
+        return TempConfig(
+            temperature=args.temperature,
+            temp_moves=args.temp_moves,
+            temp_side=args.temp_side,
+            top_k=None,
+            seed=args.temp_seed,
+        )
+
+
+def main():
+    """主函数"""
+    parser = build_parser()
     args = parser.parse_args()
-    
+
     # 校验局数
     if args.games <= 0:
         parser.error(f"对战局数必须大于 0，当前值: {args.games}")
-    
+
+    # TempConfig 构造必须在 try 块之内，确保 __post_init__ 的 ValueError 被捕获
     try:
-        run_battle(args.ai1, args.ai2, args.games)
+        temp_config = _build_temp_config(args)
+        run_battle(args.ai1, args.ai2, args.games, temp_config=temp_config)
     except ValueError as e:
         print(f"错误: {e}")
         sys.exit(1)

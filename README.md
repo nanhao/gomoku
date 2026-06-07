@@ -55,7 +55,7 @@ GUI 还支持：存档加载、AI 对战回放（含热力图对比）、游戏�
 ### AI 对战
 
 ```bash
-python ai/battle.py --ai1 <AI指定> --ai2 <AI指定> [--games <局数>]
+python ai/battle.py --ai1 <AI指定> --ai2 <AI指定> [--games <局数>] [温度采样选项]
 ```
 
 | 参数 | 说明 | 默认值 |
@@ -63,6 +63,11 @@ python ai/battle.py --ai1 <AI指定> --ai2 <AI指定> [--games <局数>]
 | `--ai1` | 第一方 AI 指定（如 random, fc_v1, cnn_v3.1） | 必填 |
 | `--ai2` | 第二方 AI 指定（如 random, fc_v1, cnn_v3.1） | 必填 |
 | `--games` | 对战局数 | 10 |
+| `--no-temp-sampling` | 禁用开局阶段温度采样，全程走 argmax | —（默认启用） |
+| `--temperature` | 温度值 T（必须 > 0），越大越随机，趋近 0 时等价 argmax | 1.0 |
+| `--temp-moves` | 前 N 个全局步启用温度采样，之后切回 argmax | 12 |
+| `--temp-side` | 温度采样作用方：`black` / `white` / `both` / `random` | `both` |
+| `--temp-seed` | 温度采样随机种子（用于复现对战结果） | None（不可复现） |
 
 **可用 AI：** `random` / `fc_v1` / `cnn_v1` / `cnn_v2` / `cnn_v3.1` / `cnn_v3.2` ...
 
@@ -72,6 +77,18 @@ python ai/battle.py --ai1 <AI指定> --ai2 <AI指定> [--games <局数>]
 # 示例
 python ai/battle.py --ai1 fc_v1 --ai2 random --games 50
 python ai/battle.py --ai1 cnn_v3.1 --ai2 cnn_v3.2 --games 50
+
+# 禁用温度采样，全程 argmax
+python ai/battle.py --ai1 cnn_v3.1 --ai2 cnn_v3.2 --games 50 --no-temp-sampling
+
+# 自定义温度值（更随机的对战）
+python ai/battle.py --ai1 fc_v1 --ai2 cnn_v2 --games 20 --temperature 2.0
+
+# 固定随机种子复现对战
+python ai/battle.py --ai1 cnn_v3.1 --ai2 cnn_v3.2 --games 10 --temp-seed 42
+
+# 组合使用
+python ai/battle.py --ai1 cnn_v3.1 --ai2 cnn_v3.2 --games 100 --temperature 0.8 --temp-moves 8 --temp-side random --temp-seed 2026
 ```
 
 ### 模型训练

@@ -1,0 +1,102 @@
+@startuml battle_temp_flow
+title battle.py --temperature 参数传递流程
+
+skinparam defaultFontName Microsoft YaHei,SimHei,sans-serif
+skinparam backgroundColor white
+skinparam shadowing false
+
+actor "用户" as User
+
+participant "battle.py\nmain()" as Main
+participant "argparse" as Argparse
+participant "TempConfig" as TempCfg
+participant "battle.py\nrun_battle()" as RunBattle
+participant "AIGameManager\nstart_ai_vs_ai_random()" as Manager
+participant "play_single_game()" as PlayGame
+
+== 参数解析 ==
+
+User -> Main: python ai/battle.py --ai1 cnn_v3.1\n--ai2 cnn_v3.2 --games 50\n--temperature 0.8 --temp-moves 8\n--temp-side random --temp-seed 2026
+
+Main -> Argparse: parser.parse_args()
+
+group 新增参数解析
+    Argparse -> Argparse: --no-temp-sampling → False
+    Argparse -> Argparse: --temperature → 0.8
+    Argparse -> Argparse: --temp-moves → 8
+    Argparse -> Argparse: --temp-side → "random"
+    Argparse -> Argparse: --temp-seed → 2026
+end
+
+alt --temp-side 非法 (如 abc)
+    Argparse -> User: error: argument --temp-side:\ninvalid choice: 'abc'\nSystemExit(2)
+end
+
+Argparse --> Main: args
+
+== TempConfig 构造 ==
+
+alt args.no_temp_sampling == True
+    Main -> Main: temp_config = None
+    note right: 禁用温度采样，全程 argmax
+else 默认（启用）
+    Main -> TempCfg: TempConfig(temperature=0.8,\ntemp_moves=8, temp_side="random",\nseed=2026)
+    TempCfg -> TempCfg: __post_init__()\n校验 temperature > 0\ntemp_moves >= 0\ntemp_side ∈ SUPPORTED_TEMP_SIDES
+
+    alt 校验失败 (如 temperature ≤ 0)
+        TempCfg -> Main: ValueError
+        Main -> User: 错误: temperature 必须 > 0\nSystemExit(1)
+    end
+
+    TempCfg --> Main: temp_config
+end
+
+== 对战执行 ==
+
+Main -> RunBattle: run_battle("cnn_v3.1", "cnn_v3.2", 50,\ntemp_config=temp_config)
+
+RunBattle -> RunBattle: engine1 = AIEngine(get_model("cnn_v3.1"))
+RunBattle -> RunBattle: engine2 = AIEngine(get_model("cnn_v3.2"))
+RunBattle -> RunBattle: recorder = DataRecorder(...)
+
+RunBattle -> Manager: start_ai_vs_ai_random(engine1, engine2,\n50, recorder, temp_config=temp_config)
+
+loop 每局 game_num = 1..50
+    Manager -> Manager: 随机决定执方 (ai1_color, ai2_color)
+
+    Manager -> PlayGame: play_single_game(engine_black, engine_white,\nrecorder, game_num, temp_config=temp_config)
+
+    group 温度采样编排（每局）
+        PlayGame -> PlayGame: rng = Random(seed + game_num)
+        PlayGame -> PlayGame: temp_side_this_game =\nresolve_temp_side(temp_config.temp_side, rng)
+        note right: random → 等概率抽 black 或 white
+    end
+
+    loop 每步落子直到对局结束
+        PlayGame -> PlayGame: should_sample(move_count, player,\ntemp_config, temp_side_this_game)
+
+        alt use_temp == True
+            PlayGame -> PlayGame: engine.get_move(strategy=SAMPLING,\ntemperature=temp_config.temperature, top_k=None, rng=rng)
+            note right: 温度采样落子
+        else
+            PlayGame -> PlayGame: engine.get_move(strategy=ARGMAX)
+            note right: 确定性 argmax 落子
+        end
+
+        PlayGame -> PlayGame: controller.make_move(x, y)
+        PlayGame -> PlayGame: move_count += 1
+    end
+
+    PlayGame --> Manager: SingleGameResult(winner, temp_side_this_game)
+    Manager --> RunBattle: 累计结果
+end
+
+Manager --> RunBattle: results
+
+== 结果输出 ==
+
+RunBattle -> RunBattle: 逐局输出结果
+RunBattle -> RunBattle: print_battle_results(ai1, ai2, results)
+RunBattle -> User: 对战结果统计
+
+@enduml

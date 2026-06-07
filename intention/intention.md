@@ -28,3 +28,6 @@
 
 # intention_id=7
 train_main.py 脚本新增一个参数，可以指定初始学习率
+
+# intention_id=8
+battle.py 脚本也要加上温度采样参数，从而支持温度采样
