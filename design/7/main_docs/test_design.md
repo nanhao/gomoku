@@ -41,8 +41,8 @@
 | UT-3.1 | 正常解析 --lr 0.0005 | `--model fc_v1 --train-from-dir /tmp --lr 0.0005` | `args.lr` 等于 0.0005 |
 | UT-3.2 | 正常解析 --lr 1e-4 | `--model fc_v1 --train-from-dir /tmp --lr 1e-4` | `args.lr` 等于 0.0001 |
 | UT-3.3 | 不指定 --lr 时取默认值 | `--model fc_v1 --train-from-dir /tmp` | `args.lr` 等于 0.001 |
-| UT-3.4 | --lr 0 报错退出 | `--model fc_v1 --train-from-dir /tmp --lr 0` | `SystemExit`，退出码 2，stderr 含 "--lr" |
-| UT-3.5 | --lr -0.01 报错退出 | `--model fc_v1 --train-from-dir /tmp --lr -0.01` | `SystemExit`，退出码 2，stderr 含 "--lr" |
+| UT-3.4 | --lr 0 解析通过但标记为非法 | `--model fc_v1 --train-from-dir /tmp --lr 0` | `args.lr` 等于 0.0，`args.lr <= 0` 为 True（后置校验由 main() 中的 `parser.error` 在 IT-3.1 验证） |
+| UT-3.5 | --lr -0.01 解析通过但标记为非法 | `--model fc_v1 --train-from-dir /tmp --lr -0.01` | `args.lr` 等于 -0.01，`args.lr < 0` 为 True（后置校验由 main() 中的 `parser.error` 在 IT-3.1 验证） |
 | UT-3.6 | --lr abc 报错退出 | `--model fc_v1 --train-from-dir /tmp --lr abc` | `SystemExit`，退出码 2，stderr 含类型错误 |
 | UT-3.7 | --help 输出含 --lr 说明 | `--help` | stdout 含 "--lr" 及其帮助文本 |
 

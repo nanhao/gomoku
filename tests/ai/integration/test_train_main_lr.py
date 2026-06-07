@@ -17,32 +17,32 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
 
 # ---------------------------------------------------------------------------
+# 共享测试辅助函数
+# ---------------------------------------------------------------------------
+
+def _create_sample_file(tmp_dir):
+    """在临时目录创建最小样本文件，返回文件路径
+
+    供多个测试类共用，避免重复代码。
+    """
+    json_path = os.path.join(tmp_dir, "data.json")
+    sample = [{"input": [1.0] * 226, "output": [0.0] * 225, "mask": [1] * 225}]
+    with open(json_path, 'w', encoding='utf-8') as f:
+        json.dump(sample, f)
+    return json_path
+
+
+# ---------------------------------------------------------------------------
 # IT-1: 端到端参数传递
 # ---------------------------------------------------------------------------
 
 class TestEndToEndLrFlow(unittest.TestCase):
     """IT-1.1 ~ IT-1.4：--lr 值完整传递到训练器"""
 
-    def _create_sample_file(self, tmp_dir):
-        """在临时目录创建最小样本文件，返回文件路径"""
-        json_path = os.path.join(tmp_dir, "data.json")
-        sample = [{"input": [1.0] * 226, "output": [0.0] * 225, "mask": [1] * 225}]
-        with open(json_path, 'w', encoding='utf-8') as f:
-            json.dump(sample, f)
-        return json_path
-
-    def _run_main_with_args(self, argv, mock_trainer):
-        """以给定 argv 和 mock trainer 运行 main()"""
-        with patch('sys.argv', argv):
-            with patch('ai.train_main.get_trainer') as mock_get:
-                mock_get.return_value = mock_trainer
-                from ai.train_main import main
-                main()
-
     def test_it_1_1_lr_passed_to_trainer(self):
         """IT-1.1：--lr 0.005 正确传递到 get_trainer 和 optimizer"""
         with tempfile.TemporaryDirectory() as tmp_dir:
-            json_path = self._create_sample_file(tmp_dir)
+            json_path = _create_sample_file(tmp_dir)
 
             mock_trainer = MagicMock()
             mock_trainer.train_auto = MagicMock(return_value=0.5)
@@ -80,7 +80,7 @@ class TestEndToEndLrFlow(unittest.TestCase):
     def test_it_1_2_default_lr_when_not_specified(self):
         """IT-1.2：不指定 --lr 时使用默认值 0.001"""
         with tempfile.TemporaryDirectory() as tmp_dir:
-            json_path = self._create_sample_file(tmp_dir)
+            json_path = _create_sample_file(tmp_dir)
 
             mock_trainer = MagicMock()
             mock_trainer.train_auto = MagicMock(return_value=0.3)
@@ -116,7 +116,7 @@ class TestEndToEndLrFlow(unittest.TestCase):
     def test_it_1_3_lr_with_step_scheduler(self):
         """IT-1.3：--lr 配合 --lr-scheduler step 传递正确"""
         with tempfile.TemporaryDirectory() as tmp_dir:
-            json_path = self._create_sample_file(tmp_dir)
+            json_path = _create_sample_file(tmp_dir)
 
             mock_trainer = MagicMock()
             mock_trainer.train_auto = MagicMock(return_value=0.4)
@@ -149,7 +149,7 @@ class TestEndToEndLrFlow(unittest.TestCase):
     def test_it_1_4_lr_with_plateau_scheduler(self):
         """IT-1.4：--lr 配合 --lr-scheduler plateau 传递正确"""
         with tempfile.TemporaryDirectory() as tmp_dir:
-            json_path = self._create_sample_file(tmp_dir)
+            json_path = _create_sample_file(tmp_dir)
 
             mock_trainer = MagicMock()
             mock_trainer.train_auto = MagicMock(return_value=0.3)
@@ -186,17 +186,10 @@ class TestEndToEndLrFlow(unittest.TestCase):
 class TestBackwardCompatibility(unittest.TestCase):
     """IT-2.1 ~ IT-2.2：向后兼容性测试"""
 
-    def _create_sample_file(self, tmp_dir):
-        json_path = os.path.join(tmp_dir, "data.json")
-        sample = [{"input": [1.0] * 226, "output": [0.0] * 225, "mask": [1] * 225}]
-        with open(json_path, 'w', encoding='utf-8') as f:
-            json.dump(sample, f)
-        return json_path
-
     def test_it_2_1_intent6_call_unaffected(self):
         """IT-2.1：意图 6 中 train_main 调用不受 --lr 新增影响"""
         with tempfile.TemporaryDirectory() as tmp_dir:
-            json_path = self._create_sample_file(tmp_dir)
+            json_path = _create_sample_file(tmp_dir)
 
             mock_trainer = MagicMock()
             mock_trainer.train_auto = MagicMock(return_value=0.5)

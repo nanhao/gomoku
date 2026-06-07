@@ -94,18 +94,20 @@ class TestTrainMainLrArgParsing(unittest.TestCase):
         self.assertEqual(cm.exception.code, 2)
 
     def test_ut_3_7_help_contains_lr(self):
-        """UT-3.7：--help 输出含 --lr 及其帮助文本"""
-        import argparse
-        parser = argparse.ArgumentParser()
-        parser.add_argument('--lr', type=float, default=0.001,
-                            help='初始学习率，必须为正数')
+        """UT-3.7：--help 输出含 --lr 及其帮助文本
+
+        验证 train_main.py 的真实 parser 包含 --lr 参数，
+        而非独立构造的 parser，避免 false positive。
+        """
+        from ai.train_main import main
 
         captured = io.StringIO()
         with patch('sys.stdout', captured):
-            try:
-                parser.parse_args(['--help'])
-            except SystemExit:
-                pass
+            with patch('sys.argv', ['train_main.py', '--help']):
+                try:
+                    main()
+                except SystemExit:
+                    pass
         output = captured.getvalue()
         self.assertIn('--lr', output)
         self.assertIn('学习率', output)
@@ -147,18 +149,22 @@ class TestRunnersLrPrinting(unittest.TestCase):
         defaults.update(kwargs)
         return MagicMock(**defaults)
 
+    def _create_sample_file(self, tmp_dir):
+        """在临时目录创建最小样本文件，供 UT-4 测试共用"""
+        import json
+        json_path = os.path.join(tmp_dir, "data.json")
+        sample = [{"input": [1.0] * 226, "output": [0.0] * 225, "mask": [1] * 225}]
+        with open(json_path, 'w', encoding='utf-8') as f:
+            json.dump(sample, f)
+        return json_path
+
     def test_ut_4_1_print_lr_when_specified(self):
         """UT-4.1：指定 lr 后打印对应值"""
-        import json
         import tempfile
         from unittest.mock import patch as mock_patch
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            # 创建样本数据文件
-            json_path = os.path.join(tmp_dir, "data.json")
-            sample = [{"input": [1.0] * 226, "output": [0.0] * 225, "mask": [1] * 225}]
-            with open(json_path, 'w', encoding='utf-8') as f:
-                json.dump(sample, f)
+            json_path = self._create_sample_file(tmp_dir)
 
             trainer = self._make_mock_trainer(0.005)
             args = self._make_mock_args(train_from_dir=json_path)
@@ -175,15 +181,11 @@ class TestRunnersLrPrinting(unittest.TestCase):
 
     def test_ut_4_2_print_lr_when_default(self):
         """UT-4.2：不指定 lr 时打印默认值 0.001"""
-        import json
         import tempfile
         from unittest.mock import patch as mock_patch
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            json_path = os.path.join(tmp_dir, "data.json")
-            sample = [{"input": [1.0] * 226, "output": [0.0] * 225, "mask": [1] * 225}]
-            with open(json_path, 'w', encoding='utf-8') as f:
-                json.dump(sample, f)
+            json_path = self._create_sample_file(tmp_dir)
 
             trainer = self._make_mock_trainer(0.001)
             args = self._make_mock_args(train_from_dir=json_path)
@@ -200,15 +202,11 @@ class TestRunnersLrPrinting(unittest.TestCase):
 
     def test_ut_4_3_lr_line_after_training_method(self):
         """UT-4.3：初始学习率行位于训练方法行之后"""
-        import json
         import tempfile
         from unittest.mock import patch as mock_patch
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            json_path = os.path.join(tmp_dir, "data.json")
-            sample = [{"input": [1.0] * 226, "output": [0.0] * 225, "mask": [1] * 225}]
-            with open(json_path, 'w', encoding='utf-8') as f:
-                json.dump(sample, f)
+            json_path = self._create_sample_file(tmp_dir)
 
             trainer = self._make_mock_trainer(0.005)
             args = self._make_mock_args(train_from_dir=json_path)
