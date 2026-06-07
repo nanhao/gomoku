@@ -13,6 +13,8 @@ from unittest.mock import MagicMock, patch
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
+from tests.ai.helpers import create_minimal_sample_file
+
 
 # ---------------------------------------------------------------------------
 # UT-3: CLI 参数解析测试
@@ -22,28 +24,13 @@ class TestTrainMainLrArgParsing(unittest.TestCase):
     """UT-3.1 ~ UT-3.7：train_main.py --lr 参数解析和校验"""
 
     def _parse_args(self, argv_list):
-        """辅助：用给定 argv 列表解析参数，返回 Namespace"""
-        import argparse
-        from ai.train_main import main as _main_ref
+        """辅助：用真实 parser 解析给定 argv 列表，返回 Namespace
 
-        # 手动构建 parser 来测试解析（避免执行 main 的完整流程）
-        parser = argparse.ArgumentParser()
-        parser.add_argument('--model', type=str, default='fc_v1')
-        parser.add_argument('--epochs', type=int, default=1000)
-        parser.add_argument('--fresh', action='store_true')
-        parser.add_argument('--train-from-dir', type=str, default=None)
-        parser.add_argument('--batch-size', type=int, default=None)
-        parser.add_argument('--shuffle', action='store_true')
-        parser.add_argument('--lr-scheduler', type=str, default=None,
-                            choices=['step', 'plateau'])
-        parser.add_argument('--lr-step-size', type=int, default=500)
-        parser.add_argument('--lr-gamma', type=float, default=0.9)
-        parser.add_argument('--lr-patience', type=int, default=100)
-        parser.add_argument('--lr-factor', type=float, default=0.5)
-        parser.add_argument('--val-ratio', type=float, default=0.0)
-        # 新增参数（与实际代码中保持一致）
-        parser.add_argument('--lr', type=float, default=0.001,
-                            help='初始学习率，必须为正数')
+        使用 train_main.py 中提取的 build_parser() 构造真实 parser，
+        保证测试与实际 CLI 参数定义完全一致，避免手动镜像产生不一致。
+        """
+        from ai.train_main import build_parser
+        parser = build_parser()
         return parser.parse_args(argv_list)
 
     def test_ut_3_1_parse_lr_00005(self):
@@ -150,13 +137,8 @@ class TestRunnersLrPrinting(unittest.TestCase):
         return MagicMock(**defaults)
 
     def _create_sample_file(self, tmp_dir):
-        """在临时目录创建最小样本文件，供 UT-4 测试共用"""
-        import json
-        json_path = os.path.join(tmp_dir, "data.json")
-        sample = [{"input": [1.0] * 226, "output": [0.0] * 225, "mask": [1] * 225}]
-        with open(json_path, 'w', encoding='utf-8') as f:
-            json.dump(sample, f)
-        return json_path
+        """在临时目录创建最小样本文件，委托给共享辅助函数"""
+        return create_minimal_sample_file(tmp_dir)
 
     def test_ut_4_1_print_lr_when_specified(self):
         """UT-4.1：指定 lr 后打印对应值"""

@@ -54,7 +54,7 @@ class BaseTrainer(ABC):
                  lr_scheduler_type: str = None, lr_step_size: int = 500,
                  lr_gamma: float = 0.9, lr_patience: int = 100,
                  lr_factor: float = 0.5, weight_decay: float = None,
-                 lr: float = None):
+                 lr: Optional[float] = None):
         """初始化训练器
 
         Args:

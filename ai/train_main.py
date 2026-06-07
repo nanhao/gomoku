@@ -18,8 +18,15 @@ from ai.registry import get_trainer
 from ai.runners import run_train_from_dir
 
 
-def main():
-    """主函数：argparse 解析、参数校验、函数路由"""
+def build_parser():
+    """构造命令行参数解析器
+
+    将 parser 构建逻辑提取为独立函数，便于测试直接使用真实 parser，
+    避免 UT-3 中手动镜像 parser 定义导致与真实代码不一致的风险。
+
+    Returns:
+        argparse.ArgumentParser: 参数解析器实例
+    """
     parser = argparse.ArgumentParser(
         description='AI 模型训练器',
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -124,6 +131,12 @@ def main():
         help='初始学习率，必须为正数，默认 0.001'
     )
 
+    return parser
+
+
+def main():
+    """主函数：argparse 解析、参数校验、函数路由"""
+    parser = build_parser()
     args = parser.parse_args()
 
     # 验证：必须指定 --train-from-dir

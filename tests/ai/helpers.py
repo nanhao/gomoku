@@ -70,3 +70,23 @@ def create_output(x: int, y: int, reward: int) -> list:
     idx = x * 15 + y
     output[idx] = reward
     return output
+
+
+def create_minimal_sample_file(tmp_dir: str) -> str:
+    """在临时目录创建最小样本文件，返回 JSON 文件路径
+
+    用于 lr 参数测试等仅需最简 sample 数据的场景。
+    创建单个样本：input 为 226 维全 1.0，output 为 225 维全 0.0，
+    mask 为 225 维全 1。
+
+    Args:
+        tmp_dir: 临时目录路径
+
+    Returns:
+        JSON 文件的绝对路径
+    """
+    json_path = os.path.join(tmp_dir, "data.json")
+    sample = [{"input": [1.0] * 226, "output": [0.0] * 225, "mask": [1] * 225}]
+    with open(json_path, 'w', encoding='utf-8') as f:
+        json.dump(sample, f)
+    return json_path
