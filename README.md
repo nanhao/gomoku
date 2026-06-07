@@ -148,7 +148,21 @@ python ai/train_main.py --model <模型指定> --train-from-dir <数据目录或
 | `--batch-size` | 每批次样本数（启用 mini-batch） | 无（全量更新） |
 | `--shuffle` | 每轮打乱数据顺序（mini-batch 有效） | False |
 | `--val-ratio` | 验证集比例，0 表示不分割，推荐 0.2 | 0.0 |
-| `--lr-scheduler` | 学习率调度：`step` / `plateau` | 无（固定学习率） |
+| `--lr-scheduler` | 学习率调度策略，可选 `step` 或 `plateau` | 无（固定学习率） |
+| `--lr-step-size` | `step` 模式：每隔 N 个 epoch 衰减一次 | 500 |
+| `--lr-gamma` | `step` 模式：衰减系数 γ，新 lr = 旧 lr × γ | 0.9 |
+| `--lr-patience` | `plateau` 模式：验证 loss 不再下降后，等待 N 个 epoch 才衰减 | 100 |
+| `--lr-factor` | `plateau` 模式：衰减系数，新 lr = 旧 lr × factor | 0.5 |
+
+> **学习率调度策略说明**：
+> - **`step`（StepLR）**：按固定间隔衰减。每 `--lr-step-size` 个 epoch，学习率乘以 `--lr-gamma`。公式：\( \text{lr}_n = \text{lr}_0 \times \gamma^{\lfloor n / s \rfloor} \)，其中 \( s \) 为 step_size，\( \gamma \) 为 gamma。
+>   例：`--lr 0.01 --lr-scheduler step --lr-step-size 100 --lr-gamma 0.5`
+>   → epoch 1~100: lr = 0.01
+>   → epoch 101~200: lr = 0.005
+>   → epoch 201~300: lr = 0.0025
+> - **`plateau`（ReduceLROnPlateau）**：自适应衰减，监控验证 loss（`mode='min'`）。当 loss 连续 `--lr-patience` 个 epoch 未创新低时，学习率乘以 `--lr-factor`。适合 loss 进入平台期后自动降速以突破局部最优。
+>   例：`--lr 0.01 --lr-scheduler plateau --lr-patience 100 --lr-factor 0.5`
+>   → 若连续 100 个 epoch loss 不降，lr 从 0.01 降为 0.005，再等 100 epoch 仍不降则降为 0.0025，以此类推。
 
 > 指定目录时递归加载其下所有 `.json` 文件（不限文件名前缀）；指定 `.json` 文件时直接加载。
 
