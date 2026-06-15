@@ -7,7 +7,6 @@
 
 import os
 import json
-import shutil
 import tempfile
 import subprocess
 from unittest.mock import patch, Mock, call, ANY
@@ -21,43 +20,7 @@ from ai.iterative_train import (
     CHILD_GEN,
     SAMPLE_OUTPUT_DIR,
 )
-
-
-# ============================================================
-# Fixtures
-# ============================================================
-
-@pytest.fixture
-def temp_project():
-    """创建临时项目目录，包含 gen4/cnn_v3.pth 假文件和必要子目录。
-
-    所有文件系统副作用隔离在临时目录中，测试结束自动清理。
-    """
-    tmp = tempfile.mkdtemp()
-    # 创建模型目录和假权重文件
-    gen4_dir = os.path.join(tmp, MODELS_DIR, f"gen{PARENT_GEN}")
-    os.makedirs(gen4_dir, exist_ok=True)
-    gen4_path = os.path.join(gen4_dir, "cnn_v3.pth")
-    with open(gen4_path, 'w') as f:
-        f.write("fake_model_weights")
-
-    # 创建 models 目录
-    models_dir = os.path.join(tmp, MODELS_DIR)
-    os.makedirs(models_dir, exist_ok=True)
-
-    yield tmp
-
-    # 清理
-    shutil.rmtree(tmp, ignore_errors=True)
-
-
-def _make_completed_process(returncode=0, stdout="", stderr=""):
-    """构造 mock subprocess.CompletedProcess 对象。"""
-    result = Mock(spec=subprocess.CompletedProcess)
-    result.returncode = returncode
-    result.stdout = stdout
-    result.stderr = stderr
-    return result
+from tests.ai.helpers import _make_completed_process
 
 
 def _battle_stdout_line(gen5_wins, gen4_wins, draws):

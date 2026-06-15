@@ -78,6 +78,9 @@ def _is_protected_path(filepath):
     使用 os.sep 确保精确的目录前缀匹配，
     避免 /project/ai_data 匹配 /project/ai_data_backup 等情况
     """
+    # 文件描述符（int）不可能是路径，直接放行
+    if isinstance(filepath, int):
+        return False
     try:
         abs_path = os.path.abspath(str(filepath))
         for protected in PROTECTED_DIRS:
@@ -110,6 +113,9 @@ def pytest_configure(config):
     """安装写入保护 hook：替换 builtins.open 和 io.open"""
     builtins.open = _guarded_open
     _io_module.open = _guarded_open
+    config.addinivalue_line(
+        "markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')"
+    )
 
 
 def pytest_unconfigure(config):

@@ -25,14 +25,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from ai.create_samples import main
 
 
+@patch('ai.create_samples.DataRecorder')
+@patch('ai.create_samples.AIGameManager')
+@patch('ai.create_samples.AIEngine')
+@patch('ai.create_samples.get_model')
 class TestCliCreatesOutputFile(unittest.TestCase):
     """执行后输出文件存在且格式正确"""
 
-    @patch('ai.create_samples.get_model')
-    @patch('ai.create_samples.AIEngine')
-    @patch('ai.create_samples.AIGameManager')
-    @patch('ai.create_samples.DataRecorder')
-    def test_output_file_exists_and_valid(self, mock_recorder_cls, mock_manager_cls, mock_engine_cls, mock_get_model):
+    def test_output_file_exists_and_valid(self, mock_get_model, mock_engine_cls, mock_manager_cls, mock_recorder_cls):
         """CLI 执行后输出文件存在且包含有效样本"""
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = os.path.join(tmpdir, "output.json")
@@ -91,14 +91,14 @@ class TestCliCreatesOutputFile(unittest.TestCase):
             self.assertEqual(samples[0]["mask"], [1] * 225)
 
 
+@patch('ai.create_samples.DataRecorder')
+@patch('ai.create_samples.AIGameManager')
+@patch('ai.create_samples.AIEngine')
+@patch('ai.create_samples.get_model')
 class TestCliOutputHasCorrectSampleCount(unittest.TestCase):
     """输出样本数与对局数一致（排除平局）"""
 
-    @patch('ai.create_samples.get_model')
-    @patch('ai.create_samples.AIEngine')
-    @patch('ai.create_samples.AIGameManager')
-    @patch('ai.create_samples.DataRecorder')
-    def test_excludes_draws(self, mock_recorder_cls, mock_manager_cls, mock_engine_cls, mock_get_model):
+    def test_excludes_draws(self, mock_get_model, mock_engine_cls, mock_manager_cls, mock_recorder_cls):
         """平局对局不产生样本"""
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = os.path.join(tmpdir, "output.json")
@@ -160,11 +160,7 @@ class TestCliOutputHasCorrectSampleCount(unittest.TestCase):
             # 平局被跳过，2 个有效局 × 8 增强 = 16 个样本
             self.assertEqual(len(samples), 16)
 
-    @patch('ai.create_samples.get_model')
-    @patch('ai.create_samples.AIEngine')
-    @patch('ai.create_samples.AIGameManager')
-    @patch('ai.create_samples.DataRecorder')
-    def test_all_draws_produces_empty(self, mock_recorder_cls, mock_manager_cls, mock_engine_cls, mock_get_model):
+    def test_all_draws_produces_empty(self, mock_get_model, mock_engine_cls, mock_manager_cls, mock_recorder_cls):
         """全部平局时输出空列表"""
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = os.path.join(tmpdir, "output.json")
@@ -208,14 +204,14 @@ class TestCliOutputHasCorrectSampleCount(unittest.TestCase):
             self.assertEqual(samples, [])
 
 
+@patch('ai.create_samples.DataRecorder')
+@patch('ai.create_samples.AIGameManager')
+@patch('ai.create_samples.AIEngine')
+@patch('ai.create_samples.get_model')
 class TestCliNoAugment(unittest.TestCase):
     """--no-augment 参数测试"""
 
-    @patch('ai.create_samples.get_model')
-    @patch('ai.create_samples.AIEngine')
-    @patch('ai.create_samples.AIGameManager')
-    @patch('ai.create_samples.DataRecorder')
-    def test_no_augment_keeps_sample_count(self, mock_recorder_cls, mock_manager_cls, mock_engine_cls, mock_get_model):
+    def test_no_augment_keeps_sample_count(self, mock_get_model, mock_engine_cls, mock_manager_cls, mock_recorder_cls):
         """使用 --no-augment 时样本数不翻倍"""
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = os.path.join(tmpdir, "output.json")
@@ -311,16 +307,16 @@ def _setup_common_mocks(tmpdir, mock_get_model, mock_engine_cls,
     mock_recorder_cls.return_value = mock_recorder
 
 
+@patch('ai.create_samples.DataRecorder')
+@patch('ai.create_samples.AIGameManager')
+@patch('ai.create_samples.AIEngine')
+@patch('ai.create_samples.get_model')
 class TestCliTempSamplingFlags(unittest.TestCase):
     """create_samples.py 的温度采样 CLI 参数解析 + 透传行为"""
 
-    @patch('ai.create_samples.get_model')
-    @patch('ai.create_samples.AIEngine')
-    @patch('ai.create_samples.AIGameManager')
-    @patch('ai.create_samples.DataRecorder')
     def test_cli_default_enables_temp_sampling(
-            self, mock_recorder_cls, mock_manager_cls,
-            mock_engine_cls, mock_get_model):
+            self, mock_get_model, mock_engine_cls,
+            mock_manager_cls, mock_recorder_cls):
         """用例 29：不传 --no-temp-sampling → 透传给 start_ai_vs_ai
         的 temp_config 非 None，且字段为默认值（T=1.0，moves=12，side=random）。"""
         from ai.move_sampler import TempConfig, TEMP_SIDE_RANDOM
@@ -347,13 +343,9 @@ class TestCliTempSamplingFlags(unittest.TestCase):
             # 意图 9：--temp-side 默认值改为 random
             self.assertEqual(temp_config.temp_side, TEMP_SIDE_RANDOM)
 
-    @patch('ai.create_samples.get_model')
-    @patch('ai.create_samples.AIEngine')
-    @patch('ai.create_samples.AIGameManager')
-    @patch('ai.create_samples.DataRecorder')
     def test_cli_no_temp_sampling_rejected(
-            self, mock_recorder_cls, mock_manager_cls,
-            mock_engine_cls, mock_get_model):
+            self, mock_get_model, mock_engine_cls,
+            mock_manager_cls, mock_recorder_cls):
         """意图 9：--no-temp-sampling 已移除，传入应触发 SystemExit。"""
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = os.path.join(tmpdir, "output.json")
@@ -367,13 +359,9 @@ class TestCliTempSamplingFlags(unittest.TestCase):
                 with self.assertRaises(SystemExit):
                     main()
 
-    @patch('ai.create_samples.get_model')
-    @patch('ai.create_samples.AIEngine')
-    @patch('ai.create_samples.AIGameManager')
-    @patch('ai.create_samples.DataRecorder')
     def test_cli_temp_side_parse(
-            self, mock_recorder_cls, mock_manager_cls,
-            mock_engine_cls, mock_get_model):
+            self, mock_get_model, mock_engine_cls,
+            mock_manager_cls, mock_recorder_cls):
         """用例 31：--temp-side random → TempConfig.temp_side == 'random'。"""
         from ai.move_sampler import TEMP_SIDE_RANDOM
 
@@ -399,13 +387,9 @@ class TestCliTempSamplingFlags(unittest.TestCase):
             self.assertEqual(temp_config.temp_moves, 8)
             self.assertEqual(temp_config.seed, 2025)
 
-    @patch('ai.create_samples.get_model')
-    @patch('ai.create_samples.AIEngine')
-    @patch('ai.create_samples.AIGameManager')
-    @patch('ai.create_samples.DataRecorder')
     def test_cli_invalid_temperature_fails(
-            self, mock_recorder_cls, mock_manager_cls,
-            mock_engine_cls, mock_get_model):
+            self, mock_get_model, mock_engine_cls,
+            mock_manager_cls, mock_recorder_cls):
         """用例 32：--temperature 0 → 进程以非 0 退出码结束。"""
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = os.path.join(tmpdir, "output.json")
@@ -463,15 +447,15 @@ class TestCliTempSideDefault(unittest.TestCase):
         self.assertEqual(args.temp_side, 'black')
 
 
+@patch('ai.create_samples.DataRecorder')
+@patch('ai.create_samples.AIGameManager')
+@patch('ai.create_samples.AIEngine')
+@patch('ai.create_samples.get_model')
 class TestCliStatsOutput(unittest.TestCase):
     """统计输出测试（STAT-01 ~ STAT-04）"""
 
-    @patch('ai.create_samples.get_model')
-    @patch('ai.create_samples.AIEngine')
-    @patch('ai.create_samples.AIGameManager')
-    @patch('ai.create_samples.DataRecorder')
-    def test_stats_output_with_filter(self, mock_recorder_cls, mock_manager_cls,
-                                       mock_engine_cls, mock_get_model):
+    def test_stats_output_with_filter(self, mock_get_model, mock_engine_cls,
+                                       mock_manager_cls, mock_recorder_cls):
         """STAT-01: 单方采样时有步级统计输出"""
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = os.path.join(tmpdir, "output.json")
@@ -491,12 +475,8 @@ class TestCliStatsOutput(unittest.TestCase):
             self.assertIn("变异步", stdout)
             self.assertIn("跳过", stdout)
 
-    @patch('ai.create_samples.get_model')
-    @patch('ai.create_samples.AIEngine')
-    @patch('ai.create_samples.AIGameManager')
-    @patch('ai.create_samples.DataRecorder')
-    def test_augment_enabled_output(self, mock_recorder_cls, mock_manager_cls,
-                                     mock_engine_cls, mock_get_model):
+    def test_augment_enabled_output(self, mock_get_model, mock_engine_cls,
+                                     mock_manager_cls, mock_recorder_cls):
         """STAT-03: augment=True → 输出含"启用 (D4 群 8 变换)" """
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = os.path.join(tmpdir, "output.json")
@@ -512,12 +492,8 @@ class TestCliStatsOutput(unittest.TestCase):
             stdout = captured.getvalue()
             self.assertIn("启用 (D4 群 8 变换)", stdout)
 
-    @patch('ai.create_samples.get_model')
-    @patch('ai.create_samples.AIEngine')
-    @patch('ai.create_samples.AIGameManager')
-    @patch('ai.create_samples.DataRecorder')
-    def test_augment_disabled_output(self, mock_recorder_cls, mock_manager_cls,
-                                      mock_engine_cls, mock_get_model):
+    def test_augment_disabled_output(self, mock_get_model, mock_engine_cls,
+                                      mock_manager_cls, mock_recorder_cls):
         """STAT-04: augment=False → 输出含"禁用" """
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = os.path.join(tmpdir, "output.json")

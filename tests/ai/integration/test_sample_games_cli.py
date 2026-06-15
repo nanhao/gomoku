@@ -3,9 +3,8 @@
 覆盖设计文档 test_cases.md:
 - A 组: 参数互斥与校验 (A-01 ~ A-07)
 - D 组: 对弈循环 (D-01 ~ D-06)
-- E 组: 进度输出时机 (E-01 ~ E-03)
-- F 组: Ctrl+C 中断 (F-01 ~ F-03)
-- G 组: 向后兼容 (G-01 ~ G-02)
+
+E/F/G 组已拆分到 test_sample_games_cli_progress.py。
 """
 
 import json
@@ -90,13 +89,13 @@ def _create_record_json(round_dir, game_num, winner, history=None):
 # =====================================================================
 
 
+@patch('ai.create_samples.DataRecorder')
+@patch('ai.create_samples.AIGameManager')
+@patch('ai.create_samples.AIEngine')
+@patch('ai.create_samples.get_model')
 class TestArgMutualExclusion(unittest.TestCase):
     """A 组: --games 与 --sample_games 互斥校验"""
 
-    @patch('ai.create_samples.DataRecorder')
-    @patch('ai.create_samples.AIGameManager')
-    @patch('ai.create_samples.AIEngine')
-    @patch('ai.create_samples.get_model')
     def test_both_specified_exits(self, mock_get_model, mock_engine_cls,
                                   mock_manager_cls, mock_recorder_cls):
         """A-01: --games + --sample_games 同时指定 → 报错退出"""
@@ -112,10 +111,6 @@ class TestArgMutualExclusion(unittest.TestCase):
                     main()
                 self.assertNotEqual(ctx.exception.code, 0)
 
-    @patch('ai.create_samples.DataRecorder')
-    @patch('ai.create_samples.AIGameManager')
-    @patch('ai.create_samples.AIEngine')
-    @patch('ai.create_samples.get_model')
     def test_sample_games_zero_exits(self, mock_get_model, mock_engine_cls,
                                      mock_manager_cls, mock_recorder_cls):
         """A-02: --sample_games 0 → 报错退出"""
@@ -130,10 +125,6 @@ class TestArgMutualExclusion(unittest.TestCase):
                     main()
                 self.assertNotEqual(ctx.exception.code, 0)
 
-    @patch('ai.create_samples.DataRecorder')
-    @patch('ai.create_samples.AIGameManager')
-    @patch('ai.create_samples.AIEngine')
-    @patch('ai.create_samples.get_model')
     def test_sample_games_negative_exits(self, mock_get_model, mock_engine_cls,
                                          mock_manager_cls, mock_recorder_cls):
         """A-03: --sample_games -5 → 报错退出"""
@@ -148,28 +139,6 @@ class TestArgMutualExclusion(unittest.TestCase):
                     main()
                 self.assertNotEqual(ctx.exception.code, 0)
 
-    @patch('ai.create_samples.DataRecorder')
-    @patch('ai.create_samples.AIGameManager')
-    @patch('ai.create_samples.AIEngine')
-    @patch('ai.create_samples.get_model')
-    def test_only_games_unchanged(self, mock_get_model, mock_engine_cls,
-                                  mock_manager_cls, mock_recorder_cls):
-        """A-04: 仅指定 --games → 行为与未修改前完全一致"""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            output_path = os.path.join(tmpdir, "output.json")
-            _setup_common_mocks(tmpdir, mock_get_model, mock_engine_cls,
-                                mock_manager_cls, mock_recorder_cls)
-            argv = ['create_samples.py', '--model', 'test_model',
-                    '--games', '10', '--output', output_path]
-            with patch('sys.argv', argv):
-                main()
-            # 验证走的是 start_ai_vs_ai 路径
-            mock_manager_cls.start_ai_vs_ai.assert_called_once()
-
-    @patch('ai.create_samples.DataRecorder')
-    @patch('ai.create_samples.AIGameManager')
-    @patch('ai.create_samples.AIEngine')
-    @patch('ai.create_samples.get_model')
     def test_neither_specified_defaults_games(self, mock_get_model,
                                               mock_engine_cls,
                                               mock_manager_cls,
@@ -188,10 +157,6 @@ class TestArgMutualExclusion(unittest.TestCase):
             call_kwargs = mock_manager_cls.start_ai_vs_ai.call_args
             self.assertEqual(call_kwargs[0][2], 100)
 
-    @patch('ai.create_samples.DataRecorder')
-    @patch('ai.create_samples.AIGameManager')
-    @patch('ai.create_samples.AIEngine')
-    @patch('ai.create_samples.get_model')
     def test_games_zero_exits(self, mock_get_model, mock_engine_cls,
                               mock_manager_cls, mock_recorder_cls):
         """A-06: --games 0 → 报错退出"""
@@ -206,10 +171,6 @@ class TestArgMutualExclusion(unittest.TestCase):
                     main()
                 self.assertNotEqual(ctx.exception.code, 0)
 
-    @patch('ai.create_samples.DataRecorder')
-    @patch('ai.create_samples.AIGameManager')
-    @patch('ai.create_samples.AIEngine')
-    @patch('ai.create_samples.get_model')
     def test_games_negative_exits(self, mock_get_model, mock_engine_cls,
                                   mock_manager_cls, mock_recorder_cls):
         """A-07: --games -5 → 报错退出"""
@@ -230,13 +191,13 @@ class TestArgMutualExclusion(unittest.TestCase):
 # =====================================================================
 
 
+@patch('ai.create_samples.DataRecorder')
+@patch('ai.create_samples.AIGameManager')
+@patch('ai.create_samples.AIEngine')
+@patch('ai.create_samples.get_model')
 class TestGameLoop(unittest.TestCase):
     """D 组: --sample_games 对弈循环"""
 
-    @patch('ai.create_samples.DataRecorder')
-    @patch('ai.create_samples.AIGameManager')
-    @patch('ai.create_samples.AIEngine')
-    @patch('ai.create_samples.get_model')
     def test_no_filter_reaches_target(self, mock_get_model, mock_engine_cls,
                                      mock_manager_cls, mock_recorder_cls):
         """D-01: 无过滤场景达标 → 精确10局对弈，样本局=10"""
@@ -263,10 +224,6 @@ class TestGameLoop(unittest.TestCase):
             # 精确10局对弈
             self.assertEqual(mock_manager_cls.play_single_game.call_count, 10)
 
-    @patch('ai.create_samples.DataRecorder')
-    @patch('ai.create_samples.AIGameManager')
-    @patch('ai.create_samples.AIEngine')
-    @patch('ai.create_samples.get_model')
     def test_single_side_filter_reaches_target(self, mock_get_model,
                                                mock_engine_cls,
                                                mock_manager_cls,
@@ -308,10 +265,6 @@ class TestGameLoop(unittest.TestCase):
             # 第19局时达到10个样本局，循环停止，共对弈19局
             self.assertEqual(mock_manager_cls.play_single_game.call_count, 19)
 
-    @patch('ai.create_samples.DataRecorder')
-    @patch('ai.create_samples.AIGameManager')
-    @patch('ai.create_samples.AIEngine')
-    @patch('ai.create_samples.get_model')
     def test_count_matches_sample_creator(self, mock_get_model,
                                           mock_engine_cls,
                                           mock_manager_cls,
@@ -342,10 +295,6 @@ class TestGameLoop(unittest.TestCase):
             # 5局黑胜，无增强，每局1样本 → 5个
             self.assertEqual(len(samples), 5)
 
-    @patch('ai.create_samples.DataRecorder')
-    @patch('ai.create_samples.AIGameManager')
-    @patch('ai.create_samples.AIEngine')
-    @patch('ai.create_samples.get_model')
     def test_winning_move_with_augment(self, mock_get_model,
                                        mock_engine_cls,
                                        mock_manager_cls,
@@ -374,10 +323,6 @@ class TestGameLoop(unittest.TestCase):
             # 50局 × 8(增强) = 400
             self.assertEqual(len(samples), 400)
 
-    @patch('ai.create_samples.DataRecorder')
-    @patch('ai.create_samples.AIGameManager')
-    @patch('ai.create_samples.AIEngine')
-    @patch('ai.create_samples.get_model')
     def test_winning_move_no_augment(self, mock_get_model,
                                      mock_engine_cls,
                                      mock_manager_cls,
@@ -405,10 +350,6 @@ class TestGameLoop(unittest.TestCase):
                 samples = json.load(f)
             self.assertEqual(len(samples), 50)
 
-    @patch('ai.create_samples.DataRecorder')
-    @patch('ai.create_samples.AIGameManager')
-    @patch('ai.create_samples.AIEngine')
-    @patch('ai.create_samples.get_model')
     def test_winner_path_mode(self, mock_get_model, mock_engine_cls,
                               mock_manager_cls, mock_recorder_cls):
         """D-06: winner_path模式 → 样本局=10，最终样本数>=10"""
@@ -445,263 +386,6 @@ class TestGameLoop(unittest.TestCase):
                 samples = json.load(f)
             # 10局 × 3步(黑胜偶数索引) = 30，winner_path不增强
             self.assertGreaterEqual(len(samples), 10)
-
-
-# =====================================================================
-# E 组: 进度输出时机
-# =====================================================================
-
-
-class TestProgressTiming(unittest.TestCase):
-    """E 组: 进度输出时机"""
-
-    @patch('ai.create_samples.DataRecorder')
-    @patch('ai.create_samples.AIGameManager')
-    @patch('ai.create_samples.AIEngine')
-    @patch('ai.create_samples.get_model')
-    def test_standard_100_progress(self, mock_get_model, mock_engine_cls,
-                                   mock_manager_cls, mock_recorder_cls):
-        """E-01: 100局标准进度 → 10%/20%/.../100% 各打印一次"""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            output_path = os.path.join(tmpdir, "output.json")
-            _setup_common_mocks(tmpdir, mock_get_model, mock_engine_cls,
-                                mock_manager_cls, mock_recorder_cls)
-
-            mock_manager_cls.play_single_game.return_value = \
-                SingleGameResult(winner=1, temp_side_this_game=None)
-
-            round_dir = os.path.join(tmpdir, "round_1")
-            for i in range(1, 101):
-                _create_record_json(round_dir, i, winner=1)
-
-            captured = StringIO()
-            argv = ['create_samples.py', '--model', 'test_model',
-                    '--sample_games', '100',
-                    '--output', output_path]
-            with patch('sys.argv', argv), patch('sys.stdout', captured):
-                main()
-
-            output = captured.getvalue()
-            # 验证 10%, 20%, ..., 100% 各出现一次
-            for pct in range(10, 110, 10):
-                self.assertIn(f"({pct}%)", output)
-
-    @patch('ai.create_samples.DataRecorder')
-    @patch('ai.create_samples.AIGameManager')
-    @patch('ai.create_samples.AIEngine')
-    @patch('ai.create_samples.get_model')
-    def test_small_value_prints_at_completion(self, mock_get_model,
-                                              mock_engine_cls,
-                                              mock_manager_cls,
-                                              mock_recorder_cls):
-        """E-02: 小值仅打印达标 → 至少打印一次100%进度"""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            output_path = os.path.join(tmpdir, "output.json")
-            _setup_common_mocks(tmpdir, mock_get_model, mock_engine_cls,
-                                mock_manager_cls, mock_recorder_cls)
-
-            mock_manager_cls.play_single_game.return_value = \
-                SingleGameResult(winner=1, temp_side_this_game=None)
-
-            round_dir = os.path.join(tmpdir, "round_1")
-            for i in range(1, 6):
-                _create_record_json(round_dir, i, winner=1)
-
-            captured = StringIO()
-            argv = ['create_samples.py', '--model', 'test_model',
-                    '--sample_games', '5',
-                    '--output', output_path]
-            with patch('sys.argv', argv), patch('sys.stdout', captured):
-                main()
-
-            output = captured.getvalue()
-            self.assertIn("(100%)", output)
-
-    @patch('ai.create_samples.DataRecorder')
-    @patch('ai.create_samples.AIGameManager')
-    @patch('ai.create_samples.AIEngine')
-    @patch('ai.create_samples.get_model')
-    def test_non_divisible_target(self, mock_get_model, mock_engine_cls,
-                                  mock_manager_cls, mock_recorder_cls):
-        """E-03: 非整除场景 → 按百分比阈值触发，达标时必定打印"""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            output_path = os.path.join(tmpdir, "output.json")
-            _setup_common_mocks(tmpdir, mock_get_model, mock_engine_cls,
-                                mock_manager_cls, mock_recorder_cls)
-
-            mock_manager_cls.play_single_game.return_value = \
-                SingleGameResult(winner=1, temp_side_this_game=None)
-
-            round_dir = os.path.join(tmpdir, "round_1")
-            for i in range(1, 11):
-                _create_record_json(round_dir, i, winner=1)
-
-            captured = StringIO()
-            argv = ['create_samples.py', '--model', 'test_model',
-                    '--sample_games', '7',
-                    '--output', output_path]
-            with patch('sys.argv', argv), patch('sys.stdout', captured):
-                main()
-
-            output = captured.getvalue()
-            # 达标时必定打印
-            self.assertIn("(100%)", output)
-
-
-# =====================================================================
-# F 组: Ctrl+C 中断
-# =====================================================================
-
-
-class TestKeyboardInterrupt(unittest.TestCase):
-    """F 组: Ctrl+C 中断处理"""
-
-    @patch('ai.create_samples.DataRecorder')
-    @patch('ai.create_samples.AIGameManager')
-    @patch('ai.create_samples.AIEngine')
-    @patch('ai.create_samples.get_model')
-    def test_interrupt_prints_stats(self, mock_get_model, mock_engine_cls,
-                                    mock_manager_cls, mock_recorder_cls):
-        """F-01: 中断后打印统计信息"""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            output_path = os.path.join(tmpdir, "output.json")
-            _setup_common_mocks(tmpdir, mock_get_model, mock_engine_cls,
-                                mock_manager_cls, mock_recorder_cls)
-
-            # 前5局正常，第6局抛 KeyboardInterrupt
-            normal = SingleGameResult(winner=1, temp_side_this_game=None)
-            mock_manager_cls.play_single_game.side_effect = [
-                normal, normal, normal, normal, normal, KeyboardInterrupt()
-            ]
-
-            round_dir = os.path.join(tmpdir, "round_1")
-            for i in range(1, 6):
-                _create_record_json(round_dir, i, winner=1)
-
-            captured = StringIO()
-            argv = ['create_samples.py', '--model', 'test_model',
-                    '--sample_games', '10',
-                    '--output', output_path]
-            with patch('sys.argv', argv), patch('sys.stdout', captured):
-                main()
-
-            output = captured.getvalue()
-            self.assertIn("[中断]", output)
-
-    @patch('ai.create_samples.DataRecorder')
-    @patch('ai.create_samples.AIGameManager')
-    @patch('ai.create_samples.AIEngine')
-    @patch('ai.create_samples.get_model')
-    def test_interrupt_produces_valid_samples(self, mock_get_model,
-                                              mock_engine_cls,
-                                              mock_manager_cls,
-                                              mock_recorder_cls):
-        """F-02: 中断后样本可生成，JSON合法"""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            output_path = os.path.join(tmpdir, "output.json")
-            _setup_common_mocks(tmpdir, mock_get_model, mock_engine_cls,
-                                mock_manager_cls, mock_recorder_cls)
-
-            normal = SingleGameResult(winner=1, temp_side_this_game=None)
-            mock_manager_cls.play_single_game.side_effect = [
-                normal, normal, KeyboardInterrupt()
-            ]
-
-            round_dir = os.path.join(tmpdir, "round_1")
-            for i in range(1, 3):
-                _create_record_json(round_dir, i, winner=1)
-
-            argv = ['create_samples.py', '--model', 'test_model',
-                    '--sample_games', '10',
-                    '--no-augment', '--output', output_path]
-            with patch('sys.argv', argv):
-                main()
-
-            with open(output_path, 'r', encoding='utf-8') as f:
-                samples = json.load(f)
-            # JSON 合法，含 input/output/mask
-            self.assertIsInstance(samples, list)
-            for s in samples:
-                self.assertIn("input", s)
-                self.assertIn("output", s)
-                self.assertIn("mask", s)
-
-    @patch('ai.create_samples.DataRecorder')
-    @patch('ai.create_samples.AIGameManager')
-    @patch('ai.create_samples.AIEngine')
-    @patch('ai.create_samples.get_model')
-    def test_interrupt_sample_count_consistent(self, mock_get_model,
-                                               mock_engine_cls,
-                                               mock_manager_cls,
-                                               mock_recorder_cls):
-        """F-03: 中断后样本数与 SampleCreator 从已有对局记录生成的结果一致"""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            output_path = os.path.join(tmpdir, "output.json")
-            _setup_common_mocks(tmpdir, mock_get_model, mock_engine_cls,
-                                mock_manager_cls, mock_recorder_cls)
-
-            normal = SingleGameResult(winner=1, temp_side_this_game=None)
-            mock_manager_cls.play_single_game.side_effect = [
-                normal, normal, normal, KeyboardInterrupt()
-            ]
-
-            round_dir = os.path.join(tmpdir, "round_1")
-            for i in range(1, 4):
-                _create_record_json(round_dir, i, winner=1)
-
-            argv = ['create_samples.py', '--model', 'test_model',
-                    '--sample_games', '10',
-                    '--no-augment', '--output', output_path]
-            with patch('sys.argv', argv):
-                main()
-
-            with open(output_path, 'r', encoding='utf-8') as f:
-                samples = json.load(f)
-            # 3局黑胜，no-augment → 3个样本
-            self.assertEqual(len(samples), 3)
-
-
-# =====================================================================
-# G 组: 向后兼容
-# =====================================================================
-
-
-class TestBackwardCompatibility(unittest.TestCase):
-    """G 组: 向后兼容"""
-
-    @patch('ai.create_samples.DataRecorder')
-    @patch('ai.create_samples.AIGameManager')
-    @patch('ai.create_samples.AIEngine')
-    @patch('ai.create_samples.get_model')
-    def test_without_sample_games(self, mock_get_model, mock_engine_cls,
-                                  mock_manager_cls, mock_recorder_cls):
-        """G-01: 不传 --sample_games → 行为与未修改前完全一致"""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            output_path = os.path.join(tmpdir, "output.json")
-            _setup_common_mocks(tmpdir, mock_get_model, mock_engine_cls,
-                                mock_manager_cls, mock_recorder_cls)
-            argv = ['create_samples.py', '--model', 'test_model',
-                    '--games', '100', '--output', output_path]
-            with patch('sys.argv', argv):
-                main()
-            # 验证走的是 start_ai_vs_ai，而非 play_single_game
-            mock_manager_cls.start_ai_vs_ai.assert_called_once()
-
-    @patch('ai.create_samples.DataRecorder')
-    @patch('ai.create_samples.AIGameManager')
-    @patch('ai.create_samples.AIEngine')
-    @patch('ai.create_samples.get_model')
-    def test_help_includes_sample_games(self, mock_get_model,
-                                        mock_engine_cls,
-                                        mock_manager_cls,
-                                        mock_recorder_cls):
-        """G-02: --help 输出包含 --sample_games 参数说明"""
-        argv = ['create_samples.py', '--help']
-        with patch('sys.argv', argv):
-            with self.assertRaises(SystemExit):
-                main()
-        # argparse --help 会 exit(0)，且输出到 stdout
-        # 此处仅验证参数已注册（无异常即通过）
 
 
 if __name__ == "__main__":

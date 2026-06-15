@@ -3,7 +3,15 @@
 测试 IterativeTrainer 类各方法的单元行为，使用 mock subprocess.run
 和临时目录隔离文件系统副作用。
 
-测试用例覆盖 test_design.md §2 中定义的所有单元测试场景。
+测试用例覆盖：
+- UT-1：构造器校验
+- UT-2：模型文件操作
+- UT-3：子进程调用参数构造
+- UT-4：胜率解析
+- UT-8：边界条件
+
+UT-6/UT-7 已拆分到 test_iterative_train_report.py。
+UT-5 已删除（无效测试，只验证 Python 内置比较逻辑）。
 """
 
 import os
@@ -25,35 +33,7 @@ from ai.iterative_train import (
     SAMPLE_OUTPUT_DIR,
     WIN_RATE_THRESHOLD,
 )
-
-
-# ============================================================
-# Fixtures
-# ============================================================
-
-@pytest.fixture
-def temp_project():
-    """创建临时项目目录，包含 gen4/cnn_v3.pth 假文件。
-
-    用于隔离测试文件系统副作用，避免污染真实项目文件。
-    测试结束自动清理。
-    """
-    tmp = tempfile.mkdtemp()
-    # 创建模型目录和假权重文件
-    gen4_dir = os.path.join(tmp, MODELS_DIR, f"gen{PARENT_GEN}")
-    os.makedirs(gen4_dir, exist_ok=True)
-    gen4_path = os.path.join(gen4_dir, "cnn_v3.pth")
-    with open(gen4_path, 'w') as f:
-        f.write("fake_model_weights")
-
-    # 创建 models 目录（用于锁文件存放）
-    models_dir = os.path.join(tmp, MODELS_DIR)
-    os.makedirs(models_dir, exist_ok=True)
-
-    yield tmp
-
-    # 清理
-    shutil.rmtree(tmp, ignore_errors=True)
+from tests.ai.helpers import _make_completed_process
 
 
 @pytest.fixture
@@ -62,13 +42,7 @@ def trainer(temp_project):
     return IterativeTrainer(project_root=temp_project)
 
 
-def _make_completed_process(returncode=0, stdout="", stderr=""):
-    """构造 mock subprocess.CompletedProcess 对象。"""
-    result = Mock(spec=subprocess.CompletedProcess)
-    result.returncode = returncode
-    result.stdout = stdout
-    result.stderr = stderr
-    return result
+# _make_completed_process 已移入 tests.ai.helpers，从该处导入
 
 
 def _battle_stdout(gen4_wins=40, gen5_wins=55, draws=5):
@@ -469,194 +443,6 @@ class TestWinRateParsing:
         )
         result = trainer._parse_battle_output(stdout)
         assert result["gen5_win_rate"] == 55.0
-
-
-# ============================================================
-# UT-5：迭代逻辑判定 (§2.5)
-# ============================================================
-
-class TestIterationLogic:
-    """UT-5：胜率阈值判定与晋升/停止逻辑。
-
-    使用 mock 验证晋升操作是否被正确触发。
-    """
-
-    def test_win_rate_above_50_promotes(self, trainer):
-        """UT-5.1：胜率 > 50.0% 应晋升（51.0%）。"""
-        # 通过直接调用内部方法并使用 mock 验证逻辑
-        assert (51.0 > WIN_RATE_THRESHOLD) is True
-
-    def test_win_rate_50_not_promote(self, trainer):
-        """UT-5.2：胜率 = 50.0% 不应晋升。"""
-        assert (50.0 > WIN_RATE_THRESHOLD) is False
-
-    def test_win_rate_below_50_not_promote(self, trainer):
-        """UT-5.3：胜率 < 50.0% 不应晋升（49.0%）。"""
-        assert (49.0 > WIN_RATE_THRESHOLD) is False
-
-    def test_win_rate_50_1_promotes(self, trainer):
-        """UT-5.4：胜率 = 50.1% 应晋升。"""
-        assert (50.1 > WIN_RATE_THRESHOLD) is True
-
-
-# ============================================================
-# UT-6：日志输出 (§2.6)
-# ============================================================
-
-class TestLogOutput:
-    """UT-6：日志输出格式验证。"""
-
-    def test_round_start_header(self, trainer, capsys):
-        """UT-6.1：每轮开始时打印轮次标识。"""
-        trainer._round_num = 1
-        trainer._print_round_header()
-        captured = capsys.readouterr()
-        assert "第 1 轨迭代开始" in captured.out
-
-    def test_round_result_promoted(self, trainer, capsys):
-        """UT-6.2：每轮结束时打印结果摘要（晋升）。"""
-        trainer._round_num = 1
-        trainer._print_round_result(win_rate=55.0, promoted=True)
-        captured = capsys.readouterr()
-        assert "第 1 轨结果: cnn_v3.5 胜率 = 55.0% → 晋升" in captured.out
-
-    def test_round_result_stopped(self, trainer, capsys):
-        """UT-6.3：每轮结束时打印结果摘要（停止）。"""
-        trainer._round_num = 1
-        trainer._print_round_result(win_rate=48.0, promoted=False)
-        captured = capsys.readouterr()
-        assert "第 1 轨结果: cnn_v3.5 胜率 = 48.0% → 停止" in captured.out
-
-    def test_detail_line_promoted(self, trainer, capsys):
-        """UT-6.4：最终统计逐轮明细行格式（晋升）。"""
-        trainer._rounds = [{
-            "round_num": 1,
-            "gen4_wins": 38,
-            "gen5_wins": 55,
-            "draws": 7,
-            "gen5_win_rate": 55.0,
-            "promoted": True,
-        }]
-        trainer._print_final_report()
-        captured = capsys.readouterr()
-        expected = (
-            "第1轮: cnn_v3.4 胜 38 | cnn_v3.5 胜 55 | "
-            "平局 7 | cnn_v3.5 胜率 55.0% → 晋升"
-        )
-        assert expected in captured.out
-
-    def test_detail_line_stopped(self, trainer, capsys):
-        """UT-6.5：最终统计逐轮明细行格式（停止）。"""
-        trainer._rounds = [{
-            "round_num": 3,
-            "gen4_wins": 44,
-            "gen5_wins": 47,
-            "draws": 9,
-            "gen5_win_rate": 47.0,
-            "promoted": False,
-        }]
-        trainer._print_final_report()
-        captured = capsys.readouterr()
-        expected = (
-            "第3轮: cnn_v3.4 胜 44 | cnn_v3.5 胜 47 | "
-            "平局 9 | cnn_v3.5 胜率 47.0% → 停止"
-        )
-        assert expected in captured.out
-
-
-# ============================================================
-# UT-7：最终统计报告 (§2.7)
-# ============================================================
-
-class TestFinalReport:
-    """UT-7：最终统计报告内容和格式。"""
-
-    def _add_rounds(self, trainer, rounds_data):
-        """辅助：填充 trainer._rounds 数据。"""
-        trainer._rounds = rounds_data
-        trainer._round_num = len(rounds_data)
-
-    def test_report_total_iterations(self, trainer, capsys):
-        """UT-7.1：报告含总迭代次数（晋升2轮后第3轮停止）。"""
-        self._add_rounds(trainer, [
-            {"round_num": 1, "gen4_wins": 38, "gen5_wins": 55, "draws": 7,
-             "gen5_win_rate": 55.0, "promoted": True},
-            {"round_num": 2, "gen4_wins": 40, "gen5_wins": 52, "draws": 8,
-             "gen5_win_rate": 52.0, "promoted": True},
-            {"round_num": 3, "gen4_wins": 44, "gen5_wins": 47, "draws": 9,
-             "gen5_win_rate": 47.0, "promoted": False},
-        ])
-        trainer._print_final_report()
-        captured = capsys.readouterr()
-        assert "总迭代次数: 2" in captured.out
-
-    def test_report_round_details_all(self, trainer, capsys):
-        """UT-7.2：报告含逐轮明细表（3行：2晋升 + 1停止）。"""
-        self._add_rounds(trainer, [
-            {"round_num": 1, "gen4_wins": 38, "gen5_wins": 55, "draws": 7,
-             "gen5_win_rate": 55.0, "promoted": True},
-            {"round_num": 2, "gen4_wins": 40, "gen5_wins": 52, "draws": 8,
-             "gen5_win_rate": 52.0, "promoted": True},
-            {"round_num": 3, "gen4_wins": 44, "gen5_wins": 47, "draws": 9,
-             "gen5_win_rate": 47.0, "promoted": False},
-        ])
-        trainer._print_final_report()
-        captured = capsys.readouterr()
-
-        # 验证3行逐轮明细
-        assert "第1轮:" in captured.out
-        assert "第2轮:" in captured.out
-        assert "第3轮:" in captured.out
-        # 验证晋升/停止标识
-        assert captured.out.count("→ 晋升") == 2
-        assert captured.out.count("→ 停止") == 1
-        # 验证含胜场和平局
-        assert "cnn_v3.4 胜" in captured.out
-        assert "cnn_v3.5 胜" in captured.out
-        assert "平局" in captured.out
-
-    def test_report_stop_reason(self, trainer, capsys):
-        """UT-7.3：报告含停止原因。"""
-        self._add_rounds(trainer, [
-            {"round_num": 1, "gen4_wins": 38, "gen5_wins": 55, "draws": 7,
-             "gen5_win_rate": 55.0, "promoted": True},
-            {"round_num": 2, "gen4_wins": 40, "gen5_wins": 52, "draws": 8,
-             "gen5_win_rate": 52.0, "promoted": True},
-            {"round_num": 3, "gen4_wins": 44, "gen5_wins": 47, "draws": 9,
-             "gen5_win_rate": 47.0, "promoted": False},
-        ])
-        trainer._print_final_report()
-        captured = capsys.readouterr()
-        assert "停止原因" in captured.out
-        assert "第3轮" in captured.out
-        assert "47.0%" in captured.out
-
-    def test_report_final_model(self, trainer, capsys):
-        """UT-7.4：报告含最终优胜模型。"""
-        self._add_rounds(trainer, [
-            {"round_num": 1, "gen4_wins": 44, "gen5_wins": 47, "draws": 9,
-             "gen5_win_rate": 47.0, "promoted": False},
-        ])
-        trainer._print_final_report()
-        captured = capsys.readouterr()
-        assert "最终优胜模型" in captured.out
-        assert "gen4" in captured.out
-        assert "cnn_v3.pth" in captured.out
-
-    def test_report_first_round_stop(self, trainer, capsys):
-        """UT-7.5：首轮即停止时统计正确。
-
-        总迭代次数 0，逐轮明细 1 行，停止原因正确。
-        """
-        self._add_rounds(trainer, [
-            {"round_num": 1, "gen4_wins": 45, "gen5_wins": 48, "draws": 7,
-             "gen5_win_rate": 48.0, "promoted": False},
-        ])
-        trainer._print_final_report()
-        captured = capsys.readouterr()
-        assert "总迭代次数: 0" in captured.out
-        assert "第1轮:" in captured.out
-        assert "停止原因" in captured.out
 
 
 # ============================================================

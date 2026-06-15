@@ -174,3 +174,22 @@ class TestWriteGuardEdgeCases:
         # 这应该正常工作，不会抛出 AssertionError
         test_file.write_text('test')
         assert test_file.read_text() == 'test'
+
+    def test_int_fd_not_blocked(self):
+        """int 类型文件描述符不应被 write guard 误拦截。
+
+        builtins.open(fd, mode) 中 fd 为文件描述符（int），
+        对其调用 os.path.abspath 等路径函数语义错误，
+        应直接放行。
+        """
+        fd = os.open(os.path.join(tempfile.gettempdir(), 'guard_fd_test.tmp'),
+                     os.O_CREAT | os.O_RDWR)
+        try:
+            # 通过文件描述符打开不应触发 write guard
+            with open(fd, 'w', closefd=False) as f:
+                f.write('test via fd')
+            os.lseek(fd, 0, os.SEEK_SET)
+            content = os.read(fd, 100)
+            assert b'test via fd' in content
+        finally:
+            os.close(fd)

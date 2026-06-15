@@ -7,6 +7,8 @@ test_mini_batch_training.py 等文件的重复辅助方法，
 
 import json
 import os
+import subprocess
+from unittest.mock import Mock
 
 
 def create_sample_dir(temp_dir: str, name: str, n_items: int = 2,
@@ -90,3 +92,16 @@ def create_minimal_sample_file(tmp_dir: str) -> str:
     with open(json_path, 'w', encoding='utf-8') as f:
         json.dump(sample, f)
     return json_path
+
+
+def _make_completed_process(returncode=0, stdout="", stderr=""):
+    """构造 mock subprocess.CompletedProcess 对象。
+
+    用于在迭代训练测试中模拟子进程返回值，
+    避免真实启动 subprocess。
+    """
+    result = Mock(spec=subprocess.CompletedProcess)
+    result.returncode = returncode
+    result.stdout = stdout
+    result.stderr = stderr
+    return result
