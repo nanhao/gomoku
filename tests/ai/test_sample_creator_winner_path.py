@@ -1,12 +1,12 @@
 """SampleCreator winner_path 模式单元测试
 
-覆盖第三十八次追加的 winner_path 模式（需求 key_points.md 第 643-644 行）。
+覆盖 winner_path 模式（需求 key_points.md 第 643-644 行）。
 
 测试规则（参见 design/sample_creator_design.md "第三十八次追加"）：
 - 仅选取获胜方的落子步（黑胜 → history 偶数索引；白胜 → 奇数索引）
 - mask：全 1
 - 平局/未结束/空 history：整局跳过
-- 强制不做 D4 增强（即使 augment=True 也不增强）
+- augment 默认启用 D4 增强（意图 9 恢复）
 
 注意：第三十九次追加已将 output 构造由硬标签替换为软标签，相关 output 精确值
 校验移至 tests/ai/test_sample_creator_winner_path_soft_label.py；
@@ -57,8 +57,9 @@ class TestWinnerPathBlackWins(unittest.TestCase):
             record = {"winner": 1, "history": _make_history(5)}
             path = _write_record(tmpdir, record)
 
-            creator = SampleCreator(mode="winner_path")
-            samples = creator.create([path])
+            # augment=False 用于隔离测试 winner_path 步数逻辑
+            creator = SampleCreator(augment=False)
+            samples, stats = creator.create([path])
 
             # 获胜方步 = [0, 2, 4]，不再剔首 → 3 个 sample
             self.assertEqual(len(samples), 3)
@@ -73,8 +74,9 @@ class TestWinnerPathWhiteWins(unittest.TestCase):
             record = {"winner": 2, "history": _make_history(6)}
             path = _write_record(tmpdir, record)
 
-            creator = SampleCreator(mode="winner_path")
-            samples = creator.create([path])
+            # augment=False 用于隔离测试 winner_path 步数逻辑
+            creator = SampleCreator(augment=False)
+            samples, stats = creator.create([path])
 
             # 获胜方步 = [1, 3, 5]，不再剔首 → 3 个 sample
             self.assertEqual(len(samples), 3)
@@ -89,8 +91,9 @@ class TestWinnerPathInputAlignment(unittest.TestCase):
             record = {"winner": 1, "history": _make_history(6)}
             path = _write_record(tmpdir, record)
 
-            creator = SampleCreator(mode="winner_path")
-            samples = creator.create([path])
+            # augment=False 用于隔离测试 input 对齐逻辑
+            creator = SampleCreator(augment=False)
+            samples, stats = creator.create([path])
 
             self.assertEqual(len(samples), 3)
             # _make_history 中 step i 的 input 全为 float(i)
@@ -115,8 +118,8 @@ class TestWinnerPathMask(unittest.TestCase):
             record = {"winner": 1, "history": _make_history(5)}
             path = _write_record(tmpdir, record)
 
-            creator = SampleCreator(mode="winner_path")
-            samples = creator.create([path])
+            creator = SampleCreator()
+            samples, stats = creator.create([path])
 
             self.assertGreater(len(samples), 0)
             for s in samples:
@@ -131,8 +134,8 @@ class TestWinnerPathSkipDraw(unittest.TestCase):
             record = {"winner": 3, "history": _make_history(10)}
             path = _write_record(tmpdir, record)
 
-            creator = SampleCreator(mode="winner_path")
-            samples = creator.create([path])
+            creator = SampleCreator()
+            samples, stats = creator.create([path])
 
             self.assertEqual(samples, [])
 
@@ -145,8 +148,8 @@ class TestWinnerPathSkipNoWinner(unittest.TestCase):
             record = {"winner": 0, "history": _make_history(10)}
             path = _write_record(tmpdir, record)
 
-            creator = SampleCreator(mode="winner_path")
-            samples = creator.create([path])
+            creator = SampleCreator()
+            samples, stats = creator.create([path])
 
             self.assertEqual(samples, [])
 
@@ -160,8 +163,8 @@ class TestWinnerPathFirstMoveIncluded(unittest.TestCase):
             record = {"winner": 1, "history": _make_history(5)}
             path = _write_record(tmpdir, record)
 
-            creator = SampleCreator(mode="winner_path")
-            samples = creator.create([path])
+            creator = SampleCreator()
+            samples, stats = creator.create([path])
 
             # history[0] 的 input 全为 0.0，应出现在样本中（不再剔首）
             included = any(s["input"] == [0.0] * 226 for s in samples)
@@ -173,8 +176,8 @@ class TestWinnerPathFirstMoveIncluded(unittest.TestCase):
             record = {"winner": 2, "history": _make_history(6)}
             path = _write_record(tmpdir, record)
 
-            creator = SampleCreator(mode="winner_path")
-            samples = creator.create([path])
+            creator = SampleCreator()
+            samples, stats = creator.create([path])
 
             # history[1] 的 input 全为 1.0，应出现在样本中（不再剔首）
             included = any(s["input"] == [1.0] * 226 for s in samples)
@@ -190,8 +193,9 @@ class TestWinnerPathShortGame(unittest.TestCase):
             record = {"winner": 1, "history": _make_history(1)}
             path = _write_record(tmpdir, record)
 
-            creator = SampleCreator(mode="winner_path")
-            samples = creator.create([path])
+            # augment=False 用于隔离测试短局逻辑
+            creator = SampleCreator(augment=False)
+            samples, stats = creator.create([path])
 
             self.assertEqual(len(samples), 1)
 
@@ -201,43 +205,44 @@ class TestWinnerPathShortGame(unittest.TestCase):
             record = {"winner": 2, "history": _make_history(2)}
             path = _write_record(tmpdir, record)
 
-            creator = SampleCreator(mode="winner_path")
-            samples = creator.create([path])
+            # augment=False 用于隔离测试短局逻辑
+            creator = SampleCreator(augment=False)
+            samples, stats = creator.create([path])
 
             self.assertEqual(len(samples), 1)
 
 
 class TestWinnerPathNoAugmentation(unittest.TestCase):
-    """augment=True 时仍不增强"""
+    """augment=True 时启用增强（意图 9 恢复）"""
 
-    def test_no_augmentation_even_if_enabled(self):
+    def test_augment_enabled_by_default(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            # 黑胜、history=5 步 → 获胜方 3 步，不再剔首 → 3 个 sample
+            # 黑胜、history=5 步 → 获胜方 3 步，不再剔首
             record = {"winner": 1, "history": _make_history(5)}
             path = _write_record(tmpdir, record)
 
-            creator = SampleCreator(mode="winner_path", augment=True)
-            samples = creator.create([path])
+            # 默认 augment=True，应产出 3*8 = 24 个样本
+            creator = SampleCreator()
+            samples, stats = creator.create([path])
 
-            # 即使启用 augment，也应只有 3 个（不是 3*8=24）
+            self.assertEqual(len(samples), 24)
+            self.assertTrue(creator.augment)
+
+    def test_augment_disabled_explicitly(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            record = {"winner": 1, "history": _make_history(5)}
+            path = _write_record(tmpdir, record)
+
+            # 显式禁用增强，应只有 3 个样本
+            creator = SampleCreator(augment=False)
+            samples, stats = creator.create([path])
+
             self.assertEqual(len(samples), 3)
-            # 进一步：creator.augment 应在 __init__ 中被强制置为 False
             self.assertFalse(creator.augment)
             # 每个 sample 的 output 的 1 位置应落在原始保留步的 position 上
-            # _make_history 中 step i 的 position=[i//15, i%15]
-            # 保留步 = [0, 2, 4] → 位置分别为 [0,0]、[0,2]、[0,4] → idx=0、idx=2、idx=4
-            # 注意：因 model_output 为全零退化为 one-hot，故 output 仍为精确 1.0
             self.assertEqual(samples[0]["output"][0], 1.0)
             self.assertEqual(samples[1]["output"][2], 1.0)
             self.assertEqual(samples[2]["output"][4], 1.0)
-            # 其余位置必须为 0（不是 D4 变换产生的副本）
-            for idx in range(225):
-                if idx != 0:
-                    self.assertEqual(samples[0]["output"][idx], 0.0)
-                if idx != 2:
-                    self.assertEqual(samples[1]["output"][idx], 0.0)
-                if idx != 4:
-                    self.assertEqual(samples[2]["output"][idx], 0.0)
 
 
 class TestWinnerPathInvalidPosition(unittest.TestCase):
@@ -272,8 +277,9 @@ class TestWinnerPathMultipleFiles(unittest.TestCase):
                 filename="record3.json",
             )
 
-            creator = SampleCreator(mode="winner_path")
-            samples = creator.create([path1, path2, path3])
+            # augment=False 用于隔离测试多文件合并逻辑
+            creator = SampleCreator(augment=False)
+            samples, stats = creator.create([path1, path2, path3])
 
             self.assertEqual(len(samples), 6)
 
@@ -294,8 +300,9 @@ class TestWinnerPathFromRoundDir(unittest.TestCase):
                 with open(os.path.join(game_dir, "record.json"), 'w', encoding='utf-8') as f:
                     json.dump(record, f)
 
-            creator = SampleCreator(mode="winner_path")
-            samples = creator.create_from_round_dir(tmpdir)
+            # augment=False 用于隔离测试轮次目录发现逻辑
+            creator = SampleCreator(augment=False)
+            samples, stats = creator.create_from_round_dir(tmpdir)
 
             self.assertEqual(len(samples), 9)
 
@@ -315,8 +322,9 @@ class TestWinnerPathStepId(unittest.TestCase):
             record = {"winner": 1, "history": history}
             path = _write_record(tmpdir, record)
 
-            creator = SampleCreator(mode="winner_path")
-            samples = creator.create([path])
+            # augment=False 用于隔离测试 step_id 透传逻辑
+            creator = SampleCreator(augment=False)
+            samples, stats = creator.create([path])
 
             # 获胜方步 = [0, 2]
             self.assertEqual(len(samples), 2)
@@ -329,8 +337,9 @@ class TestWinnerPathStepId(unittest.TestCase):
             record = {"winner": 1, "history": _make_history(3)}
             path = _write_record(tmpdir, record)
 
-            creator = SampleCreator(mode="winner_path")
-            samples = creator.create([path])
+            # augment=False 用于隔离测试
+            creator = SampleCreator(augment=False)
+            samples, stats = creator.create([path])
 
             self.assertGreater(len(samples), 0)
             for s in samples:

@@ -1,14 +1,19 @@
 """独立 CLI 脚本：执行 AI 对弈并生成训练样本
 
 用法:
-    python ai/create_samples.py --model cnn_v3 --mode winning_move --games 100 --output ai/train_data/win_samples.json
+    python ai/create_samples.py --model cnn_v3 --games 100 --output ai/train_data/samples.json
+
+注意：
+    - winner_path 模式为唯一模式（winning_move 已移除）
+    - 默认启用变异步过滤（仅保留引擎落子不在模型 argmax 中的步）
+    - 默认启用 D4 增强（8 变换），可通过 --no-augment 禁用
+    - 温度采样始终启用，--no-temp-sampling 已移除
 """
 
 import sys
 import os
 import json
 import argparse
-import warnings
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
@@ -17,8 +22,38 @@ from ai.engine import AIEngine
 from ai.game_manager import AIGameManager
 from ai.data_recorder import DataRecorder
 from ai.sample_creator import SampleCreator
-from ai.move_sampler import TempConfig, SUPPORTED_TEMP_SIDES, TEMP_SIDE_BOTH
+from ai.move_sampler import TempConfig, SUPPORTED_TEMP_SIDES, TEMP_SIDE_RANDOM
 from ai.game_filter import should_keep_game
+
+
+def is_variant_move(step: dict) -> bool:
+    """判定单个历史步是否为变异步。
+
+    变异步定义：对局中采样方的一步，该步引擎实际落子位置
+    **不在**模型输出概率分布的 argmax 集合中。
+
+    Args:
+        step: history 中的单步字典，需含 ``output``（225 维概率分布）
+            和 ``position``（[row, col]）字段。
+
+    Returns:
+        True 表示变异步（实际位置 ∉ argmax）；
+        False 表示非变异步、越界步或 output 长度异常。
+    """
+    output = step["output"]
+    pos = step["position"]
+    idx = pos[0] * 15 + pos[1]
+
+    # 越界兜底：返回 False，跳过该步
+    if not (0 <= pos[0] < 15 and 0 <= pos[1] < 15):
+        return False
+    # output 长度异常兜底
+    if len(output) != 225:
+        return False
+
+    max_val = max(output)
+    # 判定：落子位是否不在 argmax 集合中
+    return output[idx] != max_val
 
 
 def is_sample_game(result: dict) -> bool:
@@ -68,17 +103,18 @@ def main():
     parser = argparse.ArgumentParser(
         description='AI 对弈样本生成器',
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        allow_abbrev=False,
         epilog="""
 示例:
-  # winning_move 模式（默认）：仅取每局最后一步，启用 D4 增强
-  python ai/create_samples.py --model cnn_v3.1 --output ai/train_data/win_samples.json
-  python ai/create_samples.py --model cnn_v3.1 --mode winning_move --games 200 --output ai/train_data/win_samples.json
+  # 默认模式（winner_path）：取获胜方每一步，启用 D4 增强
+  python ai/create_samples.py --model cnn_v3.1 --output ai/train_data/samples.json
+  python ai/create_samples.py --model cnn_v3.1 --games 200 --output ai/train_data/samples.json
 
-  # winner_path 模式：取获胜方每一步，强制不做 D4 增强
-  python ai/create_samples.py --model cnn_v3.1 --mode winner_path --games 200 --output ai/train_data/winner_path_samples.json
+  # 禁用增强
+  python ai/create_samples.py --model cnn_v3.1 --no-augment --games 200 --output ai/train_data/samples.json
 
   # 样本局驱动模式：持续对弈直到收集到目标数量的样本局
-  python ai/create_samples.py --model cnn_v3.1 --sample_games 50 --output ai/train_data/win_samples.json
+  python ai/create_samples.py --model cnn_v3.1 --sample_games 50 --output ai/train_data/samples.json
 
   # 其它模型
   python ai/create_samples.py --model fc_v1 --output ai/train_data/fc_samples.json
@@ -90,14 +126,6 @@ def main():
         type=str,
         required=True,
         help='模型指定，如 cnn_v3.1、fc_v1'
-    )
-
-    parser.add_argument(
-        '--mode',
-        type=str,
-        default='winning_move',
-        choices=['winning_move', 'winner_path'],
-        help='sample_creator 模式，默认 winning_move；winner_path 为获胜方整条路径（强制不做 D4 增强）'
     )
 
     parser.add_argument(
@@ -128,13 +156,7 @@ def main():
         help='禁用数据增强（默认启用 D4 群 8 变换）'
     )
 
-    # ---- 温度采样参数（默认启用，用于自对弈探索）----
-    parser.add_argument(
-        '--no-temp-sampling',
-        action='store_true',
-        default=False,
-        help='禁用开局阶段温度采样，全程走 argmax'
-    )
+    # ---- 温度采样参数（始终启用，用于自对弈探索）----
     parser.add_argument(
         '--temperature',
         type=float,
@@ -150,9 +172,9 @@ def main():
     parser.add_argument(
         '--temp-side',
         type=str,
-        default=TEMP_SIDE_BOTH,
+        default=TEMP_SIDE_RANDOM,
         choices=list(SUPPORTED_TEMP_SIDES),
-        help='启用温度采样的一方，默认 both'
+        help='启用温度采样的一方，默认 random'
     )
     parser.add_argument(
         '--temp-seed',
@@ -185,30 +207,14 @@ def main():
     # 确定运行模式
     use_sample_mode = (args.sample_games is not None)
 
-    # ---- 构造 TempConfig ----
-    if args.no_temp_sampling:
-        # 若用户显式传了温度相关参数，提示被忽略
-        user_set_temp = (
-            args.temperature != 1.0
-            or args.temp_moves != 12
-            or args.temp_side != TEMP_SIDE_BOTH
-            or args.temp_seed is not None
-        )
-        if user_set_temp:
-            warnings.warn(
-                "已启用 --no-temp-sampling，以下参数被忽略："
-                "--temperature / --temp-moves / --temp-side / --temp-seed",
-                stacklevel=2,
-            )
-        temp_config = None
-    else:
-        temp_config = TempConfig(
-            temperature=args.temperature,
-            temp_moves=args.temp_moves,
-            temp_side=args.temp_side,
-            top_k=None,
-            seed=args.temp_seed,
-        )
+    # ---- 构造 TempConfig（温度采样始终启用）----
+    temp_config = TempConfig(
+        temperature=args.temperature,
+        temp_moves=args.temp_moves,
+        temp_side=args.temp_side,
+        top_k=None,
+        seed=args.temp_seed,
+    )
 
     # 加载模型
     print(f"加载模型: {args.model}")
@@ -227,7 +233,6 @@ def main():
         print(f"  目标样本局数 (sample_games): {args.sample_games}")
     else:
         print(f"  对局数 (games): {args.games}")
-    print(f"  模式 (mode):    {args.mode}")
 
     if use_sample_mode:
         # ---- --sample_games 模式：逐局对弈，样本局达标即停 ----
@@ -288,9 +293,13 @@ def main():
     # 获取轮次目录
     round_dir = recorder.get_round_dir()
 
-    # 生成样本（传入 record_filter 实现对局级过滤）
-    creator = SampleCreator(mode=args.mode, augment=not args.no_augment)
-    samples = creator.create_from_round_dir(round_dir, record_filter=should_keep_game)
+    # 生成样本（传入 record_filter 实现对局级过滤，传入 move_filter 实现变异步过滤）
+    creator = SampleCreator(augment=not args.no_augment)
+    samples, move_stats = creator.create_from_round_dir(
+        round_dir,
+        record_filter=should_keep_game,
+        move_filter=is_variant_move,
+    )
 
     # 确保输出目录存在
     output_dir = os.path.dirname(os.path.abspath(args.output))
@@ -307,23 +316,23 @@ def main():
     if use_sample_mode:
         actual_sample_count = sum(1 for r in results if is_sample_game(r))
         print(f"  样本局数:   {actual_sample_count}")
-    # 以 creator.augment 运行时属性为真相源：winner_path 模式会在 __init__ 中
-    # 强制禁用增强，即使命令行未传 --no-augment，这里也必须打印"禁用"。
-    print(f"  数据增强:   {'启用 (8 变换)' if creator.augment else '禁用'}")
+    print(f"  数据增强:   {'启用 (D4 群 8 变换)' if creator.augment else '禁用'}")
     print(f"  样本数:     {len(samples)}")
     print(f"  输出路径:   {args.output}")
 
-    # 过滤统计输出（复用 should_keep_game 消除重复逻辑和类型比较 bug）
-    _print_filter_stats(results, temp_config)
+    # 统计输出（对局级 + 步级）
+    _print_filter_stats(results, temp_config, move_stats)
 
 
-def _print_filter_stats(results, temp_config):
-    """输出对局级过滤统计信息。
+def _print_filter_stats(results, temp_config, move_stats=None):
+    """输出对局级过滤统计信息和步级过滤统计信息。
 
     Args:
         results: start_ai_vs_ai() 返回的对局结果列表，
             每项字典含 winner / temp_side_this_game 键。
         temp_config: 温度采样配置，None 表示未启用。
+        move_stats: 步级过滤统计信息 dict，含 total_moves、variant_moves、
+            skipped_moves、move_filter_active 键。None 表示不输出步级统计。
     """
     filter_active = (
         temp_config is not None
@@ -339,6 +348,15 @@ def _print_filter_stats(results, temp_config):
         print(f"  过滤对局: {filtered_out}")
     else:
         print(f"\n样本过滤: 未启用 (非单方采样模式)")
+
+    # 步级过滤统计
+    if move_stats is not None and move_stats.get("move_filter_active"):
+        print(f"步级过滤: 启用 (变异步过滤)")
+        print(f"  总步数:     {move_stats['total_moves']}")
+        print(f"  变异步:     {move_stats['variant_moves']}")
+        print(f"  跳过:       {move_stats['skipped_moves']}")
+    elif move_stats is not None:
+        print(f"步级过滤: 未启用")
 
 
 if __name__ == "__main__":

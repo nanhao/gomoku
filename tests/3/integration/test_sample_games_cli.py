@@ -45,10 +45,14 @@ def _setup_common_mocks(tmpdir, mock_get_model, mock_engine_cls,
     os.makedirs(round_dir, exist_ok=True)
     game_dir = os.path.join(round_dir, "1")
     os.makedirs(game_dir, exist_ok=True)
+    # 构造变异步：position [0,0] 位置概率 0.1，其他位置有 0.9 的最大值
+    variant_output = [0.0] * 225
+    variant_output[0] = 0.1  # position [0,0] → idx 0，不是最大值
+    variant_output[1] = 0.9  # 最大值在 idx 1
     record = {
         "winner": 1,
         "history": [
-            {"input": [0.0] * 226, "output": [0.0] * 225, "position": [0, 0]},
+            {"input": [0.0] * 226, "output": variant_output, "position": [0, 0]},
         ],
         "end_board": [0.0] * 226,
     }
@@ -63,8 +67,13 @@ def _create_record_json(round_dir, game_num, winner, history=None):
     game_dir = os.path.join(round_dir, str(game_num))
     os.makedirs(game_dir, exist_ok=True)
     if history is None:
+        # 构造变异步：position 位置概率 0.1，相邻位置有 0.9 的最大值
+        idx = (game_num % 15) * 15 + (game_num % 15)
+        variant_output = [0.0] * 225
+        variant_output[idx] = 0.1
+        variant_output[(idx + 1) % 225] = 0.9
         history = [
-            {"input": [float(game_num)] * 226, "output": [0.0] * 225,
+            {"input": [float(game_num)] * 226, "output": variant_output,
              "position": [game_num % 15, game_num % 15]},
         ]
     record = {
@@ -246,7 +255,7 @@ class TestGameLoop(unittest.TestCase):
                 _create_record_json(round_dir, i, winner=1)
 
             argv = ['create_samples.py', '--model', 'test_model',
-                    '--sample_games', '10', '--no-temp-sampling',
+                    '--sample_games', '10',
                     '--output', output_path]
             with patch('sys.argv', argv):
                 main()
@@ -355,7 +364,7 @@ class TestGameLoop(unittest.TestCase):
                 _create_record_json(round_dir, i, winner=1)
 
             argv = ['create_samples.py', '--model', 'test_model',
-                    '--sample_games', '50', '--no-temp-sampling',
+                    '--sample_games', '50',
                     '--output', output_path]
             with patch('sys.argv', argv):
                 main()
@@ -387,7 +396,7 @@ class TestGameLoop(unittest.TestCase):
                 _create_record_json(round_dir, i, winner=1)
 
             argv = ['create_samples.py', '--model', 'test_model',
-                    '--sample_games', '50', '--no-temp-sampling',
+                    '--sample_games', '50',
                     '--no-augment', '--output', output_path]
             with patch('sys.argv', argv):
                 main()
@@ -411,19 +420,24 @@ class TestGameLoop(unittest.TestCase):
             mock_manager_cls.play_single_game.return_value = \
                 SingleGameResult(winner=1, temp_side_this_game=None)
 
-            # 构造含5步黑胜的 record.json
+            # 构造含5步黑胜的 record.json（每步均为变异步）
             round_dir = os.path.join(tmpdir, "round_1")
             for i in range(1, 11):
-                history = [
-                    {"input": [float(j)] * 226, "output": [0.0] * 225,
-                     "position": [j % 15, j % 15]}
-                    for j in range(5)
-                ]
+                history = []
+                for j in range(5):
+                    idx_j = (j % 15) * 15 + (j % 15)
+                    v_output = [0.0] * 225
+                    v_output[idx_j] = 0.1
+                    v_output[(idx_j + 1) % 225] = 0.9
+                    history.append(
+                        {"input": [float(j)] * 226, "output": v_output,
+                         "position": [j % 15, j % 15]}
+                    )
                 _create_record_json(round_dir, i, winner=1, history=history)
 
             argv = ['create_samples.py', '--model', 'test_model',
-                    '--sample_games', '10', '--no-temp-sampling',
-                    '--mode', 'winner_path', '--output', output_path]
+                    '--sample_games', '10',
+                    '--output', output_path]
             with patch('sys.argv', argv):
                 main()
 
@@ -462,7 +476,7 @@ class TestProgressTiming(unittest.TestCase):
 
             captured = StringIO()
             argv = ['create_samples.py', '--model', 'test_model',
-                    '--sample_games', '100', '--no-temp-sampling',
+                    '--sample_games', '100',
                     '--output', output_path]
             with patch('sys.argv', argv), patch('sys.stdout', captured):
                 main()
@@ -495,7 +509,7 @@ class TestProgressTiming(unittest.TestCase):
 
             captured = StringIO()
             argv = ['create_samples.py', '--model', 'test_model',
-                    '--sample_games', '5', '--no-temp-sampling',
+                    '--sample_games', '5',
                     '--output', output_path]
             with patch('sys.argv', argv), patch('sys.stdout', captured):
                 main()
@@ -524,7 +538,7 @@ class TestProgressTiming(unittest.TestCase):
 
             captured = StringIO()
             argv = ['create_samples.py', '--model', 'test_model',
-                    '--sample_games', '7', '--no-temp-sampling',
+                    '--sample_games', '7',
                     '--output', output_path]
             with patch('sys.argv', argv), patch('sys.stdout', captured):
                 main()
@@ -566,7 +580,7 @@ class TestKeyboardInterrupt(unittest.TestCase):
 
             captured = StringIO()
             argv = ['create_samples.py', '--model', 'test_model',
-                    '--sample_games', '10', '--no-temp-sampling',
+                    '--sample_games', '10',
                     '--output', output_path]
             with patch('sys.argv', argv), patch('sys.stdout', captured):
                 main()
@@ -598,7 +612,7 @@ class TestKeyboardInterrupt(unittest.TestCase):
                 _create_record_json(round_dir, i, winner=1)
 
             argv = ['create_samples.py', '--model', 'test_model',
-                    '--sample_games', '10', '--no-temp-sampling',
+                    '--sample_games', '10',
                     '--no-augment', '--output', output_path]
             with patch('sys.argv', argv):
                 main()
@@ -636,7 +650,7 @@ class TestKeyboardInterrupt(unittest.TestCase):
                 _create_record_json(round_dir, i, winner=1)
 
             argv = ['create_samples.py', '--model', 'test_model',
-                    '--sample_games', '10', '--no-temp-sampling',
+                    '--sample_games', '10',
                     '--no-augment', '--output', output_path]
             with patch('sys.argv', argv):
                 main()

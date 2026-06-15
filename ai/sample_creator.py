@@ -1,20 +1,21 @@
 """SampleCreator 样本生成器模块
 
-支持多种模式从 record.json 生成训练样本。
-目前实现模式：
-    - winning_move: 取每局最后一步的 input 作为 sample input，
-      最后一步 position 对应位置 output=1，其余=0，mask 全为 1
-    - winner_path:  取整局中获胜方的每一步，每一步的 input/mask
-      构造同 winning_move；output 采用**软标签**
+从 record.json 生成训练样本。
+
+当前行为：
+    - winner_path: 取整局中获胜方的每一步，output 采用**软标签**
       （第三十九次追加）——在模型自身 softmax 输出的基础上，把落子位
       最小增强为严格 top1，增量由其他 224 位等额汲取、clip 到 0、再归一化
-      回 sum=1。此模式**强制不做** D4 增强，详见
-      design/sample_creator_design.md "第三十八/三十九次追加"。
+      回 sum=1。
+    - 默认启用 D4 增强（8 变换），可通过 ``augment=False`` 禁用
+    - 支持步级过滤（变异步过滤），通过 ``move_filter`` 参数注入
+
+注意：winning_move 模式已移除（意图 9）。
 """
 
 import json
 import os
-from typing import Callable, List, Dict, Optional
+from typing import Callable, List, Dict, Optional, Tuple
 
 
 # ----------------------------------------------------------------------
@@ -30,50 +31,52 @@ WINNER_PATH_TOP1_EPS = 1e-3
 
 
 class SampleCreator:
-    """样本生成器，支持多种模式从 record.json 生成 sample"""
+    """样本生成器，从 record.json 生成训练样本
 
-    # 支持的模式白名单
-    SUPPORTED_MODES = ("winning_move", "winner_path")
+    仅支持 winner_path 模式（取获胜方每一步，软标签 output）。
+    支持可选的步级过滤（变异步过滤）和 D4 数据增强。
+    """
 
-    def __init__(self, mode: str = "winning_move", augment: bool = True):
+    def __init__(self, augment: bool = True):
         """
         初始化样本生成器
 
         Args:
-            mode: 样本生成模式，取值范围见 ``SUPPORTED_MODES``
-            augment: 是否启用数据增强（D4 群 8 变换），默认 True。
-                     注意：当 mode="winner_path" 时会强制禁用增强，
-                     以避免数据量失控（该模式本身已每局产出多个 sample）。
-
-        Raises:
-            ValueError: mode 不在支持列表内
+            augment: 是否启用数据增强（D4 群 8 变换），默认 True
         """
-        if mode not in self.SUPPORTED_MODES:
-            raise ValueError(
-                f"不支持的样本生成模式: '{mode}'，"
-                f"目前支持: {self.SUPPORTED_MODES}"
-            )
-        self.mode = mode
-        # winner_path 模式强制禁用增强（设计决策，详见设计文档）
-        self.augment = augment and mode != "winner_path"
+        self.augment = augment
 
     def create(self, record_files: List[str],
-               record_filter: Optional[Callable[[dict], bool]] = None) -> List[Dict]:
+               record_filter: Optional[Callable[[dict], bool]] = None,
+               move_filter: Optional[Callable[[dict], bool]] = None) -> Tuple[List[Dict], dict]:
         """从 record.json 文件列表生成 sample 列表
 
-        按 ``self.mode`` 分派到对应的处理路径：
-        - ``winning_move``：每局产出 1 条（取最后一步），可选 D4 增强
-        - ``winner_path``：每局产出 ``获胜方步数`` 条，不增强
+        固定使用 winner_path 逻辑：取获胜方每一步，构造软标签 output。
 
         Args:
             record_files: record.json 文件路径列表
             record_filter: 可选的记录过滤函数。接收 record 字典，
                 返回 True 保留、False 跳过。None 表示不过滤。
+            move_filter: 可选的步级过滤函数。接收单个 history step dict
+                （含 ``output`` 和 ``position`` 字段），
+                返回 True 保留、False 跳过。None 表示不过滤。
+                始终生效（温度采样始终启用）。
 
         Returns:
-            sample 数据列表，每个元素为 {"input": [...], "output": [...], "mask": [...]}
+            (samples, stats) 二元组：
+            - samples: sample 数据列表
+            - stats: 步级过滤统计信息 dict，含以下键：
+                - total_moves: 获胜方总步数
+                - variant_moves: 变异步数（通过 move_filter 的步）
+                - skipped_moves: 被 move_filter 跳过的步数
+                - move_filter_active: 是否有任何对局启用了步级过滤
         """
         samples = []
+        total_moves = 0
+        variant_moves = 0
+        skipped_moves = 0
+        move_filter_active = False
+
         for file_path in record_files:
             with open(file_path, 'r', encoding='utf-8') as f:
                 record = json.load(f)
@@ -88,77 +91,58 @@ class SampleCreator:
                 continue
 
             # 外部过滤：调用方注入的自定义过滤逻辑
-            # 注意：此过滤在"平局/空history跳过"之后执行，
-            # 即使 record_filter 保留某对局，若其 history 为空仍会被跳过
             if record_filter is not None and not record_filter(record):
                 continue
 
-            # 按 mode 分派：每种模式返回"本局待产出的 sample 原型列表"（未增强）
-            if self.mode == "winning_move":
-                raw_samples = self._build_winning_move_samples(history)
-            elif self.mode == "winner_path":
-                raw_samples = self._build_winner_path_samples(winner, history)
-            else:
-                # SUPPORTED_MODES 在 __init__ 已拦截；此分支理论不可达，
-                # 万一未来新增模式而忘记在此分派，立即暴露。
-                raise AssertionError(f"unreachable: mode={self.mode!r}")
+            # 固定使用 winner_path 逻辑：取获胜方每一步
+            raw_samples, game_total, game_variant, game_skipped = \
+                self._build_winner_path_samples(winner, history, move_filter)
 
-            # 可选 D4 增强（winner_path 已在 __init__ 中强制禁用）
+            total_moves += game_total
+            variant_moves += game_variant
+            skipped_moves += game_skipped
+            if move_filter is not None:
+                move_filter_active = True
+
+            # 可选 D4 增强（直接按 augment 属性决定）
             for raw in raw_samples:
                 if self.augment:
                     samples.extend(self._augment_sample(raw))
                 else:
                     samples.append(raw)
 
-        return samples
+        stats = {
+            "total_moves": total_moves,
+            "variant_moves": variant_moves,
+            "skipped_moves": skipped_moves,
+            "move_filter_active": move_filter_active,
+        }
+        return samples, stats
 
     # ------------------------------------------------------------------
-    # 各模式的样本构造
+    # winner_path 样本构造
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _build_sample(input_vector: list, position: list, step_id: str = None) -> Dict:
-        """构造单个 sample：output 落子位=1.0（行/列任一越界则保持全 0），mask 全 1
-
-        Args:
-            input_vector: 226 维棋盘+玩家向量
-            position: [x, y] 落子坐标
-            step_id: 全局唯一步标识，从 record.json 透传；None 时不写入（向后兼容）
-
-        Returns:
-            sample 字典
-
-        Note:
-            严格按 (r, c) 双维度各自在 [0, 15) 内判断越界，
-            而不是只看一维索引 ``r*15+c`` 是否在 [0, 225) 内——
-            后者会把"行合法列越界"（如 [0, 20]）的 idx=20 误写到 (1, 5)。
-        """
-        output = [0.0] * 225
-        r, c = position[0], position[1]
-        if 0 <= r < 15 and 0 <= c < 15:
-            output[r * 15 + c] = 1.0
-        mask = [1] * 225
-        sample = {}
-        # step_id 首字段：仅当 record.json 中含 step_id 时写入样本
-        if step_id is not None:
-            sample["step_id"] = step_id
-        sample["input"] = input_vector
-        sample["output"] = output
-        sample["mask"] = mask
-        return sample
-
-    def _build_winning_move_samples(self, history: list) -> List[Dict]:
-        """winning_move 模式：仅取最后一步"""
-        last_step = history[-1]
-        step_id = last_step.get("step_id")
-        return [self._build_sample(last_step["input"], last_step["position"], step_id)]
-
-    def _build_winner_path_samples(self, winner: int, history: list) -> List[Dict]:
+    def _build_winner_path_samples(self, winner: int, history: list,
+                                    move_filter: Optional[Callable[[dict], bool]] = None
+                                    ) -> Tuple[List[Dict], int, int, int]:
         """winner_path 模式：取获胜方每一步
 
         - winner=1（黑胜）：获胜方在 history 中的偶数索引 [0, 2, 4, ...]
         - winner=2（白胜）：奇数索引 [1, 3, 5, ...]
-        - 获胜方步索引：winner=1 → [0, 2, 4, ...]；winner=2 → [1, 3, 5, ...]
+        - 支持可选的步级过滤（move_filter）
+
+        Args:
+            winner: 胜者（1=黑，2=白）
+            history: 对局历史步列表
+            move_filter: 可选的步级过滤函数，None 表示不过滤
+
+        Returns:
+            (samples, total, variant, skipped) 四元组：
+            - samples: 本局的样本列表（未增强）
+            - total: 获胜方总步数
+            - variant: 通过 move_filter 的步数
+            - skipped: 被 move_filter 跳过的步数
 
         Note:
             output 构造采用第三十九次追加的**软标签**算法，详见
@@ -168,9 +152,21 @@ class SampleCreator:
         winner_indices = list(range(start_idx, len(history), 2))
         kept_indices = winner_indices
 
+        total = len(kept_indices)
+        variant = 0
+        skipped = 0
+
         samples = []
         for i in kept_indices:
             step = history[i]
+
+            # 步级过滤（始终生效，move_filter 传入时即执行）
+            if move_filter is not None:
+                if not move_filter(step):
+                    skipped += 1
+                    continue
+            variant += 1
+
             # 软标签 output：基于当步模型概率分布构造
             output = self._build_winner_path_output(
                 step["output"], step["position"]
@@ -183,7 +179,7 @@ class SampleCreator:
             s["output"] = output
             s["mask"] = [1] * 225
             samples.append(s)
-        return samples
+        return samples, total, variant, skipped
 
     @staticmethod
     def _build_winner_path_output(model_output: list, position: list) -> list:
@@ -332,19 +328,22 @@ class SampleCreator:
         return augmented
 
     def create_from_round_dir(self, round_dir: str,
-                              record_filter: Optional[Callable[[dict], bool]] = None) -> List[Dict]:
+                              record_filter: Optional[Callable[[dict], bool]] = None,
+                              move_filter: Optional[Callable[[dict], bool]] = None) -> Tuple[List[Dict], dict]:
         """从轮次目录自动发现所有 record.json 并生成 sample
 
         Args:
             round_dir: 轮次目录路径（含子目录如 1/record.json, 2/record.json）
             record_filter: 可选的记录过滤函数，透传给 create()
+            move_filter: 可选的步级过滤函数，透传给 create()
 
         Returns:
-            sample 数据列表
+            (samples, stats) 二元组，与 create() 一致
         """
         record_files = []
         if not os.path.exists(round_dir):
-            return []
+            return [], {"total_moves": 0, "variant_moves": 0,
+                        "skipped_moves": 0, "move_filter_active": False}
 
         for entry in os.listdir(round_dir):
             entry_path = os.path.join(round_dir, entry)
@@ -353,4 +352,5 @@ class SampleCreator:
                 if os.path.exists(record_path):
                     record_files.append(record_path)
 
-        return self.create(record_files, record_filter=record_filter)
+        return self.create(record_files, record_filter=record_filter,
+                           move_filter=move_filter)

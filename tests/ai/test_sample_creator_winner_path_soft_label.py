@@ -78,7 +78,8 @@ class TestSoftLabelAlreadyStrictTop1(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = _write_record(tmpdir, record)
-            samples = SampleCreator(mode="winner_path").create([path])
+            # augment=False 用于隔离测试软标签逻辑
+            samples, stats = SampleCreator(augment=False).create([path])
 
         self.assertEqual(len(samples), 2)
         # 原样保留，精确等于 history[2] 中记录的 output
@@ -100,7 +101,8 @@ class TestSoftLabelBoostsToStrictTop1(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = _write_record(tmpdir, record)
-            samples = SampleCreator(mode="winner_path").create([path])
+            # augment=False 用于隔离测试软标签逻辑
+            samples, stats = SampleCreator(augment=False).create([path])
 
         out = samples[1]["output"]
         # 落子位严格大于其他所有位置
@@ -119,7 +121,8 @@ class TestSoftLabelSumIsOne(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = _write_record(tmpdir, record)
-            samples = SampleCreator(mode="winner_path").create([path])
+            # augment=False 用于隔离测试软标签逻辑
+            samples, stats = SampleCreator(augment=False).create([path])
 
         self.assertAlmostEqual(sum(samples[1]["output"]), 1.0, places=9)
 
@@ -139,7 +142,8 @@ class TestSoftLabelNoNegative(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = _write_record(tmpdir, record)
-            samples = SampleCreator(mode="winner_path").create([path])
+            # augment=False 用于隔离测试软标签逻辑
+            samples, stats = SampleCreator(augment=False).create([path])
 
         for v in samples[1]["output"]:
             self.assertGreaterEqual(v, 0.0)
@@ -183,8 +187,8 @@ class TestSoftLabelUsesRecordedOutput(unittest.TestCase):
                 _make_black_wins_record(p_b, pos),
                 filename="b.json",
             )
-            samples_a = SampleCreator(mode="winner_path").create([path_a])
-            samples_b = SampleCreator(mode="winner_path").create([path_b])
+            samples_a, stats_a = SampleCreator(augment=False).create([path_a])
+            samples_b, stats_b = SampleCreator(augment=False).create([path_b])
 
         # 同一 position、不同 p → 生成的 output 必然不同
         self.assertNotEqual(samples_a[1]["output"], samples_b[1]["output"])
@@ -206,7 +210,8 @@ class TestSoftLabelTieTop1IsBoosted(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = _write_record(tmpdir, record)
-            samples = SampleCreator(mode="winner_path").create([path])
+            # augment=False 用于隔离测试软标签逻辑
+            samples, stats = SampleCreator(augment=False).create([path])
 
         out = samples[1]["output"]
         # 落子位必须严格大于并列的那个对手位置
@@ -232,7 +237,8 @@ class TestSoftLabelClipExtremeDistribution(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = _write_record(tmpdir, record)
-            samples = SampleCreator(mode="winner_path").create([path])
+            # augment=False 用于隔离测试软标签逻辑
+            samples, stats = SampleCreator(augment=False).create([path])
 
         out = samples[1]["output"]
         # 非负 + sum=1 + 落子位严格 top1
@@ -270,7 +276,8 @@ class TestSoftLabelEpsRespected(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = _write_record(tmpdir, record)
-            samples = SampleCreator(mode="winner_path").create([path])
+            # augment=False 用于隔离测试软标签逻辑
+            samples, stats = SampleCreator(augment=False).create([path])
 
         out = samples[1]["output"]
 
@@ -300,7 +307,8 @@ class TestSoftLabelNotOneHot(unittest.TestCase):
         record = _make_black_wins_record(keep_output=p, keep_position=pos)
         with tempfile.TemporaryDirectory() as tmpdir:
             path = _write_record(tmpdir, record)
-            samples = SampleCreator(mode="winner_path").create([path])
+            # augment=False 用于隔离测试软标签逻辑
+            samples, stats = SampleCreator(augment=False).create([path])
 
         out = samples[1]["output"]
         # 落子位绝不会等于 1.0
@@ -322,7 +330,8 @@ class TestSoftLabelInvalidPositionReturnsModelOutput(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = _write_record(tmpdir, record)
-            samples = SampleCreator(mode="winner_path").create([path])
+            # augment=False 用于隔离测试软标签逻辑
+            samples, stats = SampleCreator(augment=False).create([path])
 
         self.assertEqual(len(samples), 2)
         # 越界兜底：output 直接等于模型原分布
@@ -364,7 +373,8 @@ class TestSoftLabelPreservesProportions(unittest.TestCase):
         record = _make_black_wins_record(keep_output=p, keep_position=pos)
         with tempfile.TemporaryDirectory() as tmpdir:
             path = _write_record(tmpdir, record)
-            samples = SampleCreator(mode="winner_path").create([path])
+            # augment=False 用于隔离测试软标签逻辑
+            samples, stats = SampleCreator(augment=False).create([path])
 
         out = samples[1]["output"]
 
@@ -390,7 +400,8 @@ class TestSoftLabelPreservesProportions(unittest.TestCase):
         record = _make_black_wins_record(keep_output=p, keep_position=pos)
         with tempfile.TemporaryDirectory() as tmpdir:
             path = _write_record(tmpdir, record)
-            samples = SampleCreator(mode="winner_path").create([path])
+            # augment=False 用于隔离测试软标签逻辑
+            samples, stats = SampleCreator(augment=False).create([path])
 
         out = samples[1]["output"]
 

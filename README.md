@@ -103,39 +103,35 @@ python ai/create_samples.py --model <模型名称> --output <输出文件路径>
 |------|------|--------|
 | `--model` | 模型指定（如 cnn_v3.1、fc_v1） | 必填 |
 | `--output` | 输出 `.json` 文件路径 | 必填 |
-| `--mode` | sample_creator 模式，可选 `winning_move` / `winner_path` | `winning_move` |
 | `--games` | 对局数（与 `--sample_games` 互斥，两者都不传则默认 100） | 100 |
 | `--sample_games` | 目标样本局数（与 `--games` 互斥）；持续对弈直到收集到足够样本局后停止 | None |
-| `--no-augment` | 禁用数据增强（默认启用 D4 群 8 变换；`winner_path` 模式下强制不增强，该开关无作用） | - |
-| `--no-temp-sampling` | 关闭温度采样，全程 argmax 贪婪落子 | - |
+| `--no-augment` | 禁用数据增强（默认启用 D4 群 8 变换） | - |
 | `--temperature` | 温度采样温度 T（越大越探索） | 1.0 |
 | `--temp-moves` | 前 N 步启用温度采样，之后切回 argmax | 12 |
-| `--temp-side` | 温度采样作用方：`black` / `white` / `both` / `random` | `both` |
+| `--temp-side` | 温度采样作用方：`black` / `white` / `both` / `random` | `random` |
 | `--temp-seed` | 温度采样随机种子（便于复现） | None |
 
 **模式说明**：
-- `winning_move`：仅取每局最后一步（制胜那步）作为样本，默认启用 D4 8 变换增强。
-- `winner_path`：取整局中**获胜方的每一步**作为样本，让模型拟合获胜方整条路径；由于每局已产出多条样本，**强制不做 D4 增强**以避免数据量失控。每步的 output 采用**软标签**（基于模型当步 softmax 输出，将落子位最小增强为严格 top1 后归一化），而非 one-hot，以保留模型分布、避免信号过于刚性。
+- `winner_path`（唯一模式）：取整局中**获胜方的每一步**作为样本，让模型拟合获胜方整条路径。每步的 output 采用**软标签**（基于模型当步 softmax 输出，将落子位最小增强为严格 top1 后归一化），而非 one-hot，以保留模型分布、避免信号过于刚性。默认启用 D4 增强（8 变换），可通过 `--no-augment` 禁用。
+- **变异步过滤**（始终生效）：仅保留引擎实际落子不在模型 argmax 集合中的"变异步"，跳过模型已能准确预测的步，提高样本训练价值。
 
 **运行模式**：
 - **`--games` 模式**（默认）：固定对局数，打完即停。
 - **`--sample_games` 模式**：以"样本局数量"为目标驱动，持续对弈直到收集到目标数量的有效样本局；适合需要精确控制样本量的场景。支持 Ctrl+C 中断并保留已收集数据。
 
-> **对局级过滤**：当 `--temp-side` 为单方模式（`black`/`white`/`random`）时，仅保留采样方获胜的对局用于样本生成，贪婪方获胜的对局将被丢弃。`--temp-side both`（默认）和 `--no-temp-sampling` 模式下不做过滤。运行结束会输出过滤统计（保留/过滤对局数）。
+> **过滤机制**：对局级过滤（`--temp-side` 为单方模式时仅保留采样方获胜对局）+ 步级过滤（变异步过滤始终生效）。运行结束会输出对局级和步级过滤统计。
 
 ```bash
 # 示例
-# winning_move 模式（默认）
-python ai/create_samples.py --model cnn_v3.1 --output ai/train_data/win_samples.json
-python ai/create_samples.py --model cnn_v3.1 --games 200 --output ai/train_data/win_samples.json
-python ai/create_samples.py --model cnn_v3.1 --no-augment --output ai/train_data/win_samples.json
-python ai/create_samples.py --model random  --output ai/merge_samples/winning/win_samples2.json --games 5000
+# 默认模式（winner_path）：取获胜方每一步，启用 D4 增强 + 变异步过滤
+python ai/create_samples.py --model cnn_v3.1 --output ai/train_data/samples.json
+python ai/create_samples.py --model cnn_v3.1 --games 200 --output ai/train_data/samples.json
 
-# winner_path 模式：获胜方整条路径
-python ai/create_samples.py --model cnn_v3.1 --mode winner_path --games 200 --output ai/train_data/winner_path_samples.json
+# 禁用增强
+python ai/create_samples.py --model cnn_v3.1 --no-augment --games 200 --output ai/train_data/samples.json
 
 # sample_games 模式：以样本局数量为目标驱动
-python ai/create_samples.py --model cnn_v3.1 --sample_games 50 --output ai/train_data/win_samples.json
+python ai/create_samples.py --model cnn_v3.1 --sample_games 50 --output ai/train_data/samples.json
 ```
 
 > **提示**：运行结束后可用 `--train-from-dir` 加载生成的 `.json` 文件继续训练。
@@ -344,7 +340,7 @@ python -m pytest tests/ -v -s
 python tests/run_tests.py
 ```
 
-> 覆盖全部 1519 个测试（自动发现，无需手工维护测试列表）
+> 覆盖全部 1594 个测试（自动发现，无需手工维护测试列表）
 >
 > 附加参数示例：
 > - `python -m pytest tests/ -q` —— 静默模式
