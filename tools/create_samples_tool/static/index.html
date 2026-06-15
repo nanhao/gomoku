@@ -21,15 +21,13 @@
                     <option value="" disabled selected>— 请选择模型 —</option>
                 </select>
             </div>
-            <div class="param-row"><label>mode</label><select id="modeSelect"><option value="winning_move" selected>winning_move</option><option value="winner_path">winner_path</option></select></div>
             <div class="param-row"><label>games</label><input id="gamesInput" type="number" placeholder="可选，对局数（默认100）"></div>
             <div class="param-row"><label>sample_games</label><input id="sampleGamesInput" type="number" placeholder="可选，目标样本局数"></div>
             <div class="param-row"><label>output <span class="required-mark">*</span></label><input id="outputInput" type="text" placeholder="必填，如 ai/train_data/samples.json" required></div>
             <div class="param-row"><label>数据增强</label><div class="switch-wrap"><input id="noAugmentCheck" type="checkbox"><span class="switch-label">禁用 (--no-augment)</span></div></div>
-            <div class="param-row"><label>温度采样</label><div class="switch-wrap"><input id="noTempSamplingCheck" type="checkbox"><span class="switch-label">禁用 (--no-temp-sampling)</span></div></div>
             <div class="param-row"><label>temperature</label><input id="temperatureInput" type="number" value="1.0" step="0.1" min="0.01"></div>
             <div class="param-row"><label>temp-moves</label><input id="tempMovesInput" type="number" value="12" min="0"></div>
-            <div class="param-row"><label>temp-side</label><select id="tempSideSelect"><option value="both" selected>both</option><option value="black">black</option><option value="white">white</option><option value="random">random</option></select></div>
+            <div class="param-row"><label>temp-side</label><select id="tempSideSelect"><option value="random" selected>random</option><option value="both">both</option><option value="black">black</option><option value="white">white</option></select></div>
             <div class="param-row"><label>temp-seed</label><input id="tempSeedInput" type="number" placeholder="可选，用于复现"></div>
             <button class="btn-run" id="btnRun">▶ 执行</button>
         </div>

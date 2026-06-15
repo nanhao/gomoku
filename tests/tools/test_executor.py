@@ -41,18 +41,16 @@ class TestBuildCliCommand:
         params = {
             "model": "cnn_v1",
             "output": "test.json",
-            "mode": "winning_move",
             "games": 100,
             "temperature": 1.0,
             "temp_moves": 12,
-            "temp_side": "both",
+            "temp_side": "random",
         }
         cmd = build_cli_command(params)
-        assert "--mode" in cmd and "winning_move" in cmd
         assert "--games" in cmd and "100" in cmd
         assert "--temperature" in cmd and "1.0" in cmd
         assert "--temp-moves" in cmd and "12" in cmd
-        assert "--temp-side" in cmd and "both" in cmd
+        assert "--temp-side" in cmd and "random" in cmd
 
     def test_boolean_flags_true_only(self):
         """布尔开关仅 true 时追加 flag"""
@@ -60,11 +58,9 @@ class TestBuildCliCommand:
             "model": "cnn_v1",
             "output": "test.json",
             "no_augment": True,
-            "no_temp_sampling": True,
         }
         cmd = build_cli_command(params)
         assert "--no-augment" in cmd
-        assert "--no-temp-sampling" in cmd
 
     def test_boolean_flags_false_not_added(self):
         """布尔开关 false 时不追加"""
@@ -72,11 +68,9 @@ class TestBuildCliCommand:
             "model": "cnn_v1",
             "output": "test.json",
             "no_augment": False,
-            "no_temp_sampling": False,
         }
         cmd = build_cli_command(params)
         assert "--no-augment" not in cmd
-        assert "--no-temp-sampling" not in cmd
 
     def test_temp_seed_null_not_added(self):
         """temp_seed 为 null 时不追加"""

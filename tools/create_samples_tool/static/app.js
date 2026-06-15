@@ -85,12 +85,10 @@ function collectParams() {
     const sampleGamesVal = document.getElementById('sampleGamesInput').value;
     return {
         model: document.getElementById('modelSelect').value,
-        mode: document.getElementById('modeSelect').value,
         games: gamesVal ? parseInt(gamesVal) : null,
         sample_games: sampleGamesVal ? parseInt(sampleGamesVal) : null,
         output: document.getElementById('outputInput').value,
         no_augment: document.getElementById('noAugmentCheck').checked,
-        no_temp_sampling: document.getElementById('noTempSamplingCheck').checked,
         temperature: parseFloat(document.getElementById('temperatureInput').value) || 1.0,
         temp_moves: parseInt(document.getElementById('tempMovesInput').value) || 12,
         temp_side: document.getElementById('tempSideSelect').value,
@@ -171,19 +169,17 @@ async function onExecute() {
  */
 function renderTempInfo(params) {
     const container = document.getElementById('tempInfoContent');
-    // 判断是否禁用了温度采样
-    const isDisabled = params.no_temp_sampling;
     const tempSideMap = {
         'both': '双方', 'black': '黑方', 'white': '白方', 'random': '随机'
     };
     container.innerHTML = `
         <div class="temp-info-grid">
             <span class="info-label">温度值</span>
-            <span class="info-value ${isDisabled ? '' : 'highlight'}">${isDisabled ? '禁用' : 'T = ' + params.temperature}</span>
+            <span class="info-value highlight">T = ${params.temperature}</span>
             <span class="info-label">采样步数阈值</span>
-            <span class="info-value">${isDisabled ? '—' : '前 ' + params.temp_moves + ' 步'}</span>
+            <span class="info-value">前 ${params.temp_moves} 步</span>
             <span class="info-label">采样方</span>
-            <span class="info-value">${isDisabled ? '—' : (tempSideMap[params.temp_side] || params.temp_side)}</span>
+            <span class="info-value">${tempSideMap[params.temp_side] || params.temp_side}</span>
         </div>
     `;
 }

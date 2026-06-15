@@ -40,8 +40,6 @@ def build_cli_command(params: Dict) -> List[str]:
     parts.extend(["--output", str(params["output"])])
 
     # 有默认值的参数
-    if "mode" in params:
-        parts.extend(["--mode", str(params["mode"])])
 
     # 互斥参数: sample_games 优先，有值时不追加 --games
     sample_games = params.get("sample_games")
@@ -53,8 +51,6 @@ def build_cli_command(params: Dict) -> List[str]:
     # 布尔开关：仅 true 时追加
     if params.get("no_augment"):
         parts.append("--no-augment")
-    if params.get("no_temp_sampling"):
-        parts.append("--no-temp-sampling")
 
     # 温度参数
     if "temperature" in params:

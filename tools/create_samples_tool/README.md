@@ -40,14 +40,12 @@ python -m tools.create_samples_tool.app
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
 | model | 模型名称（必填） | — |
-| mode | sample_creator 模式：`winning_move` / `winner_path` | `winning_move` |
 | games | 对局数 | 100 |
 | output | 输出 `.json` 文件路径（必填） | — |
 | 数据增强 | 勾选"禁用"则传 `--no-augment` | 不禁用 |
-| 温度采样 | 勾选"禁用"则传 `--no-temp-sampling` | 不禁用 |
 | temperature | 温度值 T | 1.0 |
 | temp-moves | 前 N 步启用温度采样 | 12 |
-| temp-side | 采样方：`both` / `black` / `white` / `random` | `both` |
+| temp-side | 采样方：`random` / `both` / `black` / `white` | `random` |
 | temp-seed | 随机种子（可选，便于复现） | — |
 
 ### 热力图说明
@@ -58,7 +56,7 @@ python -m tools.create_samples_tool.app
 |----|----------|------|
 | **原始输出** | `step.output` | 模型原始 softmax 输出 |
 | **温度分布** | `step.sampling_probs` | 温度采样后的概率分布（argmax 步显示为"argmax"占位） |
-| **样本分布** | `sample.output` | 样本标签（无样本的步显示为"无样本"占位；winner_path 模式下仅获胜方有样本） |
+| **样本分布** | `sample.output` | 样本标签（仅获胜方变异步有样本，其他步显示为"无样本"占位） |
 
 色板：白→黄→橙→红（与 `visualization/heatmap_color.py` 的 `DEFAULT_COLOR_STOPS` 一致）。
 落子位以粗绿框标记（不画棋子），其余棋子正常渲染。
@@ -86,14 +84,12 @@ python -m tools.create_samples_tool.app
 ```json
 {
   "model": "cnn_v3.1",
-  "mode": "winning_move",
   "games": 1,
   "output": "ai/train_data/test.json",
   "no_augment": false,
-  "no_temp_sampling": false,
   "temperature": 1.0,
   "temp_moves": 12,
-  "temp_side": "both",
+  "temp_side": "random",
   "temp_seed": null
 }
 ```
