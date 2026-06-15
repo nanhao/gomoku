@@ -1,0 +1,62 @@
+@startuml
+!theme plain
+
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam classFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title 变异步过滤 —— 样本生成完整流程
+
+actor "CLI\n(create_samples.py)" as CLI
+
+participant "SampleCreator" as SC
+participant "game_filter\n(should_keep_game)" as GF
+
+database "record.json" as REC
+database "samples.json" as OUT
+
+== ① 对局级过滤（不变）==
+
+CLI -> REC : 遍历 record.json 文件列表
+CLI -> SC : create(record_files,\n  record_filter=should_keep_game,\n  move_filter=is_variant_move)
+
+loop 每局 record
+    SC -> REC : ② 读取 record.json
+    SC -> SC : ③ winner ∈ {0,3} or history 为空?\n→ 跳过本局
+
+    SC -> GF : ④ record_filter(record)
+    alt record_filter 返回 False
+        SC -> SC : 跳过本局
+    else record_filter 返回 True (采样方获胜)
+        note right
+          --temp-side 默认 random\n每局随机决定采样方
+        end note
+    end
+
+== ⑤ 步级过滤（始终生效）==
+
+    loop 获胜方每一步
+        SC -> SC : ⑥ move_filter(step)
+        alt 非变异步 (实际位置 ∈ argmax 集合)
+            SC -> SC : 跳过此步, skipped_moves++
+        else 变异步 (实际位置 ∉ argmax 集合)
+            SC -> SC : ⑦ 保留, variant_moves++
+            SC -> SC : ⑧ 构造软标签 output
+            SC -> SC : ⑨ D4 增强 (默认 8 变换)
+        end
+    end
+end
+
+== ⑩ 统计输出 ==
+
+SC --> CLI : ⑪ 返回 (samples, stats)
+CLI -> CLI : ⑫ 打印统计信息
+note right
+  对局级: 保留对局 / 过滤对局
+  步级: 总步数 / 变异步 / 跳过
+  最终样本数
+end note
+
+CLI -> OUT : ⑬ 写入 samples.json
+
+@enduml
