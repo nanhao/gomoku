@@ -68,8 +68,8 @@ winning_path 模式，不再禁用数据增强。改为默认开启，可以用�
 6, 判断 5 的胜负方，如果 cnn_v3.5 的胜率超过 50%，i++; mv ai\models\cnn_v3\gen5\cnn_v3.pth ai\models\cnn_v3\gen4\cnn_v3.pth; 然后回到2进行循环。如果 cnn_v3.5 的胜率不超过 50%，停下并报告完整统计信息
 新逻辑：
 1, i=1
-2, cp ai\models\cnn_v3\gen4\cnn_v3.pth ai\models\cnn_v3\gen5\cnn_v3.pth
-3，python ai/create_samples.py --model cnn_v3.4 --sample_games 500 --output ai\merge_samples\v4\path{i}.json
-4, python ai/train_main.py --model cnn_v3.5 --train-from-dir ai/merge_samples/v4/path{i}.json --epochs 100 --batch-size 4096 --shuffle
-5, python ai/battle.py --ai1 cnn_v3.4 --ai2 cnn_v3.5 --games 100
-6, i++，mv ai\models\cnn_v3\gen5\cnn_v3.pth ai\models\cnn_v3\gen4\cnn_v3.pth; 然后回到2进行循环
+2, cp ai\models\cnn_v4\gen99\cnn_v4.pth ai\models\cnn_v4\gen100\cnn_v4.pth
+3，python ai/create_samples.py --model cnn_v4.99 --sample_games 500 --output ai\merge_samples2\v100\path.json
+4, python ai/train_main.py --model cnn_v4.100 --train-from-dir ai/merge_samples2/v100 --epochs 300 --batch-size 4096 --shuffle
+5, python ai/battle.py --ai1 cnn_v4.99 --ai2 cnn_v4.100 --games 100 --temp-moves=2 --temperature 2，打印出 cnn_v4.100 的胜率和 i 的值
+6, 不管胜率如何，都 i++，mv ai\models\cnn_v4\gen100\cnn_v4.pth ai\models\cnn_v4\gen99\cnn_v4.pth; 然后回到2进行循环
