@@ -1,4 +1,4 @@
-"""CNN 训练器参数化测试（v1/v2/v3 统一）
+"""CNN 训练器参数化测试（v1/v2/v3/v4 统一）
 
 按 task_reports/2026-05-01/test_suite_review.md Top #5 执行：
 合并原三个文件（test_cnn_trainer.py / test_cnn_v2_trainer.py / test_cnn_v3_trainer.py）

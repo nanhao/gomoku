@@ -1,4 +1,4 @@
-"""CNN 模型参数化测试（v1/v2/v3 统一）
+"""CNN 模型参数化测试（v1/v2/v3/v4 统一）
 
 按 task_reports/2026-05-01/test_suite_review.md Top #4 执行：
 合并原三个文件（test_cnn_model.py / test_cnn_v2_model.py / test_cnn_v3_model.py）的
