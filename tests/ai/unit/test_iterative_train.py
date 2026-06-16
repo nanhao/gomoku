@@ -31,7 +31,6 @@ from ai.iterative_train import (
     CHILD_GEN,
     MODELS_DIR,
     SAMPLE_OUTPUT_DIR,
-    WIN_RATE_THRESHOLD,
 )
 from tests.ai.helpers import _make_completed_process
 
@@ -181,30 +180,11 @@ class TestModelFileOperations:
         assert gen4_content == gen5_content
         assert gen5_content != b"old_different_content"
 
-    def test_promote_updates_gen4(self, trainer, temp_project):
-        """UT-2.3：晋升操作正确更新 gen4 权重（copy2 + remove）。"""
-        # 初始化 gen5
-        trainer._init_model()
-        gen5_dir = os.path.join(temp_project, MODELS_DIR, f"gen{CHILD_GEN}")
-        gen5_path = os.path.join(gen5_dir, "cnn_v3.pth")
-        gen4_path = os.path.join(temp_project, MODELS_DIR, f"gen{PARENT_GEN}", "cnn_v3.pth")
-
-        # 修改 gen5 内容（模拟训练后权重变化）
-        with open(gen5_path, 'w') as f:
-            f.write("trained_weights")
-        with open(gen5_path, 'rb') as f:
-            gen5_trained = f.read()
-
-        # 执行晋升
-        trainer._promote()
-
-        # gen4 应为训练后的权重
-        with open(gen4_path, 'rb') as f:
-            gen4_after = f.read()
-        assert gen4_after == gen5_trained
-
-        # gen5 应被删除
-        assert not os.path.isfile(gen5_path)
+    def test_promote_method_removed(self, trainer):
+        """UT-2.3（意图 12 更新）：_promote() 方法已移除，不再有晋升操作。"""
+        assert not hasattr(trainer, '_promote'), (
+            "意图 12 不再需要晋升逻辑，_promote() 应已移除"
+        )
 
     def test_sample_output_dir_auto_create(self, trainer, temp_project):
         """UT-2.4：样本输出目录不存在时自动创建。"""
@@ -218,32 +198,14 @@ class TestModelFileOperations:
 
         assert os.path.isdir(sample_dir)
 
-    def test_promote_copy2_succeeds_remove_fails(self, trainer, temp_project):
-        """UT-2.5：晋升 copy2 成功后 remove 失败。
+    def test_promote_method_removed_confirm_no_copy2(self, trainer, temp_project):
+        """UT-2.5（意图 12 更新）：_promote() 已移除，gen4 不会被 gen5 覆盖。
 
-        验证 gen4 已更新（晋升语义正确），gen5 副本残留。
+        验证：对 trainer 实例调用 hasattr 确认 _promote 不存在。
         """
-        trainer._init_model()
-        gen5_dir = os.path.join(temp_project, MODELS_DIR, f"gen{CHILD_GEN}")
-        gen5_path = os.path.join(gen5_dir, "cnn_v3.pth")
-        gen4_path = os.path.join(temp_project, MODELS_DIR, f"gen{PARENT_GEN}", "cnn_v3.pth")
-
-        # 修改 gen5 内容
-        with open(gen5_path, 'w') as f:
-            f.write("trained_weights")
-
-        # mock os.remove 抛异常，但 copy2 应正常执行
-        with patch('os.remove', side_effect=IOError("disk full")):
-            with pytest.raises(IOError):
-                trainer._promote()
-
-        # gen4 应已被更新（copy2 成功）
-        with open(gen4_path, 'rb') as f:
-            gen4_after = f.read()
-        assert gen4_after == b"trained_weights"
-
-        # gen5 应残留
-        assert os.path.isfile(gen5_path)
+        assert not hasattr(trainer, '_promote'), (
+            "_promote() 已在意图 12 中移除"
+        )
 
 
 # ============================================================
@@ -266,18 +228,17 @@ class TestSubprocessArgs:
         assert "create_samples.py" in " ".join(call_args)
         assert "--model" in call_args
         assert "cnn_v3.4" in call_args
-        assert "--mode" in call_args
-        assert "winner_path" in call_args
         assert "--sample_games" in call_args
         assert "500" in call_args
-        assert "--temp-side" in call_args
-        assert "random" in call_args
+        # 意图 12：不应包含 --mode 和 --temp-side
+        assert "--mode" not in call_args
+        assert "--temp-side" not in call_args
         # 输出文件名含 path{round_num}.json
         assert f"path{trainer._round_num}.json" in " ".join(call_args)
 
     @patch('subprocess.run')
     def test_train_main_args(self, mock_run, trainer):
-        """UT-3.2：train_main.py 调用参数正确。"""
+        """UT-3.2：train_main.py 调用参数正确（意图 12：epochs 改为 100）。"""
         mock_run.return_value = _make_completed_process(returncode=0, stdout="ok")
 
         trainer._train_model()
@@ -290,7 +251,7 @@ class TestSubprocessArgs:
         assert "--train-from-dir" in call_args
         assert f"path{trainer._round_num}.json" in " ".join(call_args)
         assert "--epochs" in call_args
-        assert "1" in call_args
+        assert "100" in call_args
         assert "--batch-size" in call_args
         assert "4096" in call_args
         assert "--shuffle" in call_args
@@ -452,13 +413,23 @@ class TestWinRateParsing:
 class TestEdgeCases:
     """UT-8：边界条件和异常场景。"""
 
-    def test_rate_50_stops(self, trainer):
-        """UT-8.1：首轮胜率 50.0% 停止。"""
-        assert not (50.0 > WIN_RATE_THRESHOLD)
+    def test_loop_always_continues(self, trainer):
+        """UT-8.1（意图 12 更新）：循环始终继续，不因胜率低而停止。
 
-    def test_rate_50_1_promotes(self, trainer):
-        """UT-8.2：首轮胜率 50.1% 晋升。"""
-        assert (50.1 > WIN_RATE_THRESHOLD)
+        验证 WIN_RATE_THRESHOLD 常量已移除，不再有胜率判定逻辑。
+        """
+        # 导入模块确认 WIN_RATE_THRESHOLD 已移除
+        import ai.iterative_train as it_mod
+        assert not hasattr(it_mod, 'WIN_RATE_THRESHOLD'), (
+            "意图 12 不再需要 WIN_RATE_THRESHOLD 常量"
+        )
+
+    def test_loop_always_continues_2(self, trainer):
+        """UT-8.2（意图 12 更新）：循环始终继续，不因胜率低而停止。
+
+        确认 _promote() 也已移除（晋升不再发生）。
+        """
+        assert not hasattr(trainer, '_promote')
 
     def test_all_draws(self, trainer):
         """UT-8.3：battle 输出仅有平局（0胜0负100平）→ 胜率 0.0%。"""

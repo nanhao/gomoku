@@ -2,7 +2,7 @@
 
 测试完整迭代流程，使用 mock subprocess.run 和临时目录隔离文件系统副作用。
 
-测试用例覆盖 test_design.md §3 中定义的所有集成测试场景。
+意图 12 更新：循环始终继续，不再有晋升/停止判定，统一通过 KeyboardInterrupt 终止。
 """
 
 import os
@@ -38,20 +38,36 @@ def _battle_stdout_line(gen5_wins, gen4_wins, draws):
     )
 
 
-def _make_side_effect_sequence(*battle_outputs):
-    """构造多轮迭代的 mock subprocess.run side_effect 列表。
+def _make_side_effect_with_interrupt(*battle_outputs, interrupt_after=None):
+    """构造多轮迭代的 mock subprocess.run side_effect 列表，支持键盘中断控制。
 
     每轮 3 次调用：create_samples → train_main → battle。
     每次调用返回 returncode=0，battle 的 stdout 由 battle_outputs 参数指定。
 
     Args:
         *battle_outputs: 每轮 battle 的 stdout 字符串。
+        interrupt_after: 在第 N 次调用后抛出 KeyboardInterrupt。
+                         None 表示不中断（不推荐，会无限循环消耗 side_effect）。
     """
     effects = []
+    call_count = [0]
+
     for battle_out in battle_outputs:
         effects.append(_make_completed_process(returncode=0, stdout="samples ok"))
         effects.append(_make_completed_process(returncode=0, stdout="train ok"))
         effects.append(_make_completed_process(returncode=0, stdout=battle_out))
+
+    if interrupt_after is not None:
+        # 在指定位置插入 KeyboardInterrupt
+        # 如果 interrupt_after 小于 effects 长度，截断并在该位置插入中断
+        if interrupt_after < len(effects):
+            effects[interrupt_after] = KeyboardInterrupt()
+        else:
+            # 延长 effects 并在末尾追加中断
+            last = effects[-1] if effects else None
+            while len(effects) < interrupt_after:
+                effects.append(_make_completed_process(returncode=0, stdout="ok"))
+            effects.append(KeyboardInterrupt())
     return effects
 
 
@@ -60,17 +76,17 @@ def _make_side_effect_sequence(*battle_outputs):
 # ============================================================
 
 class TestFullIterationFlow:
-    """IT-1：完整迭代流程集成测试。"""
+    """IT-1：完整迭代流程集成测试（意图 12 更新）。"""
 
     @patch('subprocess.run')
-    def test_single_round_promoted(self, mock_run, temp_project):
-        """IT-1.1：单轮完整流程（晋升：胜率 55%，下一轮停止）。
+    def test_single_round_continues(self, mock_run, temp_project):
+        """IT-1.1（意图 12 更新）：单轮后继续循环（通过 KeyboardInterrupt 终止）。
 
         验证：
         ① gen4→gen5 被复制
-        ② 三个子进程按序调用且 cwd=project_root
-        ③ 晋升后 gen4 被更新（copy2+remove）
-        ④ run() 返回 dict 含 2 轨记录（1晋升 + 1停止）
+        ② 子进程按序调用且 cwd=project_root
+        ③ 循环始终继续（不因胜率停止）
+        ④ KeyboardInterrupt 后返回 dict 含已完成轮次记录
         """
         # 为两轮预创建样本文件
         sample_dir = os.path.join(temp_project, SAMPLE_OUTPUT_DIR)
@@ -80,98 +96,39 @@ class TestFullIterationFlow:
             with open(sp, 'w') as f:
                 json.dump([{"input": [0]*226, "output": [0]*225, "mask": [0]*225}], f)
 
-        side_effects = _make_side_effect_sequence(
-            _battle_stdout_line(gen5_wins=55, gen4_wins=40, draws=5),   # round 1 → 晋升
-            _battle_stdout_line(gen5_wins=48, gen4_wins=44, draws=8),   # round 2 → 停止
+        # 第1轮完成后中断（第4次调用是第2轮的 create_samples，在此中断）
+        side_effects = _make_side_effect_with_interrupt(
+            _battle_stdout_line(gen5_wins=55, gen4_wins=40, draws=5),   # round 1
+            _battle_stdout_line(gen5_wins=48, gen4_wins=44, draws=8),   # round 2（不会完成）
+            interrupt_after=3,  # 第1轮 battle 完成后中断
         )
         mock_run.side_effect = side_effects
 
         trainer = IterativeTrainer(project_root=temp_project)
         result = trainer.run()
 
-        # ① gen4→gen5 被复制（校验 gen5 在初期存在，晋升后删除）
+        # ① gen4→gen5 被复制
         gen5_path = os.path.join(temp_project, MODELS_DIR, f"gen{CHILD_GEN}", "cnn_v3.pth")
         assert mock_run.called
 
-        # ② 6次子进程调用（2轮 × 3步骤）
-        assert mock_run.call_count == 6
-        # 验证第1轮调用顺序
-        assert "create_samples.py" in " ".join(mock_run.call_args_list[0][0][0])
-        assert "train_main.py" in " ".join(mock_run.call_args_list[1][0][0])
-        assert "battle.py" in " ".join(mock_run.call_args_list[2][0][0])
-
-        # 验证 cwd=project_root
+        # ② 子进程按序调用且 cwd=project_root
         for call_args in mock_run.call_args_list:
             assert call_args[1].get('cwd') == temp_project
 
-        # ③ 晋升后 gen4 被更新（gen5 在第二轮被覆盖后，最终停止时 gen5 保留）
-        assert os.path.isfile(gen5_path)  # 停止时 gen5 保留
-
-        # ④ run() 返回 dict 含 2 轨记录（1晋升 + 1停止）
-        assert result["total_iterations"] == 1  # 1 轮晋升
-        assert len(result["rounds"]) == 2
-        assert result["rounds"][0]["promoted"] is True
-        assert result["rounds"][1]["promoted"] is False
+        # ③ 循环始终继续，不因胜率停止
+        # ④ run() 返回 dict 含已完成轮次
+        assert len(result["rounds"]) >= 1
+        assert result["rounds"][0]["promoted"] is False  # 意图 12：不再有晋升
 
     @patch('subprocess.run')
-    def test_single_round_stopped(self, mock_run, temp_project):
-        """IT-1.2：单轮完整流程（停止：胜率 48%）。
+    def test_two_rounds_then_interrupt(self, mock_run, temp_project):
+        """IT-1.2（意图 12 更新）：2轮完整执行后中断。
 
         验证：
-        ① 子进程按序调用
-        ② 不执行晋升
-        ③ gen4 未被修改
-        ④ run() 返回 dict 含 1 轨停止记录
+        ① 2 轮均完成
+        ② 所有轮次 promoted=False
+        ③ total_iterations = 2
         """
-        sample_dir = os.path.join(temp_project, SAMPLE_OUTPUT_DIR)
-        os.makedirs(sample_dir, exist_ok=True)
-        sample_path = os.path.join(sample_dir, "path1.json")
-        with open(sample_path, 'w') as f:
-            json.dump([{"input": [0]*226, "output": [0]*225, "mask": [0]*225}], f)
-
-        side_effects = _make_side_effect_sequence(
-            _battle_stdout_line(gen5_wins=48, gen4_wins=44, draws=8)
-        )
-        mock_run.side_effect = side_effects
-
-        # 记录原始 gen4 内容
-        gen4_path = os.path.join(temp_project, MODELS_DIR, f"gen{PARENT_GEN}", "cnn_v3.pth")
-        with open(gen4_path, 'rb') as f:
-            original_gen4 = f.read()
-
-        trainer = IterativeTrainer(project_root=temp_project)
-        result = trainer.run()
-
-        # ① 子进程按序调用
-        assert mock_run.call_count == 3
-
-        # ② 不执行晋升（gen5 仍存在）
-        gen5_path = os.path.join(temp_project, MODELS_DIR, f"gen{CHILD_GEN}", "cnn_v3.pth")
-        assert os.path.isfile(gen5_path)
-
-        # ③ gen4 未被修改
-        with open(gen4_path, 'rb') as f:
-            current_gen4 = f.read()
-        assert current_gen4 == original_gen4
-
-        # ④ run() 返回 dict 含 1 轨停止记录
-        assert result["total_iterations"] == 0
-        assert len(result["rounds"]) == 1
-        assert result["rounds"][0]["promoted"] is False
-        assert result["rounds"][0]["gen5_win_rate"] == 48.0
-
-    @patch('subprocess.run')
-    def test_multi_round_two_promoted_then_stop(self, mock_run, temp_project):
-        """IT-1.3：多轮迭代（2 轨晋升后停止）。
-
-        第1轮胜率 55%、第2轮胜率 52%、第3轮胜率 48%。
-        验证：
-        ① 共执行 3 轮
-        ② 前 2 轮晋升，第 3 轮停止
-        ③ 统计含 3 行明细
-        ④ total_iterations=2
-        """
-        # 为每轮预创建样本文件
         sample_dir = os.path.join(temp_project, SAMPLE_OUTPUT_DIR)
         os.makedirs(sample_dir, exist_ok=True)
         for i in range(1, 4):
@@ -179,30 +136,27 @@ class TestFullIterationFlow:
             with open(sp, 'w') as f:
                 json.dump([{"input": [0]*226, "output": [0]*225, "mask": [0]*225}], f)
 
-        side_effects = _make_side_effect_sequence(
-            _battle_stdout_line(gen5_wins=55, gen4_wins=40, draws=5),   # round 1
-            _battle_stdout_line(gen5_wins=52, gen4_wins=40, draws=8),   # round 2
-            _battle_stdout_line(gen5_wins=48, gen4_wins=44, draws=8),   # round 3
+        # 2轮完成后在第3轮开始时中断
+        side_effects = _make_side_effect_with_interrupt(
+            _battle_stdout_line(gen5_wins=48, gen4_wins=44, draws=8),   # round 1
+            _battle_stdout_line(gen5_wins=44, gen4_wins=46, draws=10),  # round 2
+            _battle_stdout_line(gen5_wins=50, gen4_wins=45, draws=5),   # round 3（部分）
+            interrupt_after=6,  # 第2轮 battle 完成后中断
         )
         mock_run.side_effect = side_effects
 
         trainer = IterativeTrainer(project_root=temp_project)
         result = trainer.run()
 
-        # ① 共执行 3 轮（9 次子进程调用）
-        assert mock_run.call_count == 9
+        # ① 2 轮均完成
+        assert len(result["rounds"]) == 2
 
-        # ② 前 2 轮晋升，第 3 轮停止
-        assert result["rounds"][0]["promoted"] is True
-        assert result["rounds"][1]["promoted"] is True
-        assert result["rounds"][2]["promoted"] is False
+        # ② 所有轮次 promoted=False
+        assert result["rounds"][0]["promoted"] is False
+        assert result["rounds"][1]["promoted"] is False
 
-        # ③ 统计含 3 行明细
-        assert len(result["rounds"]) == 3
-
-        # ④ total_iterations=2
+        # ③ total_iterations = 2
         assert result["total_iterations"] == 2
-        assert result["final_round"] == 3
 
     @patch('subprocess.run')
     def test_subprocess_call_order(self, mock_run, temp_project):
@@ -212,14 +166,15 @@ class TestFullIterationFlow:
         """
         sample_dir = os.path.join(temp_project, SAMPLE_OUTPUT_DIR)
         os.makedirs(sample_dir, exist_ok=True)
-        for i in range(1, 3):
+        for i in range(1, 4):
             sp = os.path.join(sample_dir, f"path{i}.json")
             with open(sp, 'w') as f:
                 json.dump([{"input": [0]*226, "output": [0]*225, "mask": [0]*225}], f)
 
-        side_effects = _make_side_effect_sequence(
-            _battle_stdout_line(gen5_wins=55, gen4_wins=40, draws=5),   # round 1 → 晋升
-            _battle_stdout_line(gen5_wins=48, gen4_wins=44, draws=8),   # round 2 → 停止
+        side_effects = _make_side_effect_with_interrupt(
+            _battle_stdout_line(gen5_wins=55, gen4_wins=40, draws=5),   # round 1
+            _battle_stdout_line(gen5_wins=48, gen4_wins=44, draws=8),   # round 2
+            interrupt_after=6,  # 第2轮完成后中断
         )
         mock_run.side_effect = side_effects
 
@@ -365,8 +320,8 @@ class TestErrorHandling:
 
         # 正常返回
         assert len(result["rounds"]) == 1
-        assert result["rounds"][0]["promoted"] is True
-        assert result["total_iterations"] == 1
+        assert result["rounds"][0]["promoted"] is False  # 意图 12：不再有晋升
+        assert result["total_iterations"] == 1  # 意图 12：所有轮次都计入
 
     def test_lock_file_prevents_construction(self, temp_project):
         """IT-2.6：锁文件存在时构造失败。"""
@@ -402,9 +357,10 @@ class TestFileSystemIsolation:
             with open(sp, 'w') as f:
                 json.dump([{"input": [0]*226, "output": [0]*225, "mask": [0]*225}], f)
 
-        side_effects = _make_side_effect_sequence(
-            _battle_stdout_line(gen5_wins=55, gen4_wins=40, draws=5),   # round 1 → 晋升
-            _battle_stdout_line(gen5_wins=48, gen4_wins=44, draws=8),   # round 2 → 停止
+        side_effects = _make_side_effect_with_interrupt(
+            _battle_stdout_line(gen5_wins=55, gen4_wins=40, draws=5),   # round 1
+            _battle_stdout_line(gen5_wins=48, gen4_wins=44, draws=8),   # round 2（不会完成）
+            interrupt_after=4,  # 第1轮完成 + 第2轮 create_samples 后中断
         )
         mock_run.side_effect = side_effects
 
@@ -431,9 +387,10 @@ class TestFileSystemIsolation:
             with open(sp, 'w') as f:
                 json.dump([{"input": [0]*226, "output": [0]*225, "mask": [0]*225}], f)
 
-        side_effects = _make_side_effect_sequence(
-            _battle_stdout_line(gen5_wins=55, gen4_wins=40, draws=5),   # round 1 → 晋升
-            _battle_stdout_line(gen5_wins=48, gen4_wins=44, draws=8),   # round 2 → 停止
+        side_effects = _make_side_effect_with_interrupt(
+            _battle_stdout_line(gen5_wins=55, gen4_wins=40, draws=5),   # round 1
+            _battle_stdout_line(gen5_wins=48, gen4_wins=44, draws=8),   # round 2
+            interrupt_after=4,  # 第4次调用后中断（第1轮完成 + 第2轮 create_samples）
         )
         mock_run.side_effect = side_effects
 
@@ -454,18 +411,19 @@ class TestFileSystemIsolation:
         assert os.path.isdir(temp_project)
 
     def test_return_dict_structure(self, temp_project):
-        """验证 run() 返回的 dict 结构完整（2轮：1晋升 + 1停止）。"""
+        """验证 run() 返回的 dict 结构完整（意图 12：2轮全部完成）。"""
         sample_dir = os.path.join(temp_project, SAMPLE_OUTPUT_DIR)
         os.makedirs(sample_dir, exist_ok=True)
-        for i in range(1, 3):
+        for i in range(1, 4):
             sp = os.path.join(sample_dir, f"path{i}.json")
             with open(sp, 'w') as f:
                 json.dump([{"input": [0]*226, "output": [0]*225, "mask": [0]*225}], f)
 
         with patch('subprocess.run') as mock_run:
-            side_effects = _make_side_effect_sequence(
-                _battle_stdout_line(gen5_wins=55, gen4_wins=40, draws=5),   # round 1 → 晋升
-                _battle_stdout_line(gen5_wins=48, gen4_wins=44, draws=8),   # round 2 → 停止
+            side_effects = _make_side_effect_with_interrupt(
+                _battle_stdout_line(gen5_wins=55, gen4_wins=40, draws=5),   # round 1
+                _battle_stdout_line(gen5_wins=48, gen4_wins=44, draws=8),   # round 2
+                interrupt_after=6,  # 第2轮完成后中断
             )
             mock_run.side_effect = side_effects
 
@@ -494,3 +452,8 @@ class TestFileSystemIsolation:
                 assert "draws" in r
                 assert "gen5_win_rate" in r
                 assert "promoted" in r
+
+            # 意图 12：所有轮次 promoted=False
+            for r in result["rounds"]:
+                assert r["promoted"] is False
+            assert result["total_iterations"] == len(result["rounds"])

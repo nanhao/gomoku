@@ -22,16 +22,15 @@ MODELS_DIR = "ai/models/cnn_v3"          # 权重目录（相对于 project_root
 SAMPLE_OUTPUT_DIR = "ai/merge_samples/v4"  # 样本输出目录
 SAMPLE_GAMES = 500      # 目标样本局数
 BATTLE_GAMES = 100      # 对战局数
-TRAIN_EPOCHS = 1        # 训练 epoch 数
+TRAIN_EPOCHS = 100      # 训练 epoch 数（意图 12：从 1 改为 100）
 TRAIN_BATCH_SIZE = 4096 # 训练 batch size
-WIN_RATE_THRESHOLD = 50.0  # 晋升胜率阈值（%，与 battle.py 输出精度 .1f 对齐）
 PYTHON_EXECUTABLE = sys.executable  # 子进程 Python 解释器
 
 
 class IterativeTrainer:
-    """迭代进化训练编排器。
+    """迭代训练编排器。
 
-    管理 cnn_v3 的迭代进化流程：复制权重→生成样本→训练→对战→判定晋升/停止。
+    管理 cnn_v3 的迭代训练流程：复制权重→生成样本→训练→对战→循环。
     公共接口：__init__(project_root=None) 校验前置条件；run()->dict 执行循环。
     """
 
@@ -86,7 +85,7 @@ class IterativeTrainer:
     # ============================================================
 
     def run(self) -> dict:
-        """执行迭代循环：初始化→生成样本→校验→训练→对战→判定晋升/停止。
+        """执行迭代循环：初始化→生成样本→校验→训练→对战→继续循环。
 
         Returns: 统计字典（total_iterations, final_round, rounds, stop_reason, final_model_path）。
         KeyboardInterrupt 时返回已完成轮次的统计（正常返回，不抛异常）。
@@ -139,20 +138,11 @@ class IterativeTrainer:
                     "promoted": False,
                 }
 
-                # 步骤 i: 胜率判定
-                if win_rate > WIN_RATE_THRESHOLD:
-                    # 晋升
-                    self._promote()
-                    round_record["promoted"] = True
-                    self._rounds.append(round_record)
-                    self._print_round_result(win_rate, promoted=True)
-                    self._round_num += 1
-                else:
-                    # 停止
-                    self._rounds.append(round_record)
-                    self._print_round_result(win_rate, promoted=False)
-                    self._print_final_report()
-                    break
+                # 步骤 i: 记录并继续循环（意图 12：不再做胜率判定和晋升，始终继续）
+                round_record["promoted"] = False
+                self._rounds.append(round_record)
+                self._print_round_result(win_rate, promoted=False)
+                self._round_num += 1
 
         except KeyboardInterrupt:
             # 捕获 Ctrl+C，输出已完成轮次的统计
@@ -201,14 +191,6 @@ class IterativeTrainer:
         """确保样本输出目录存在（不存在则自动创建）。"""
         os.makedirs(self._sample_output_dir, exist_ok=True)
 
-    def _promote(self):
-        """晋升：copy2 gen5 → gen4，成功后删除 gen5。
-
-        copy2 失败时 gen4/gen5 均保留；copy2 成功后 remove 失败时 gen4 已更新、gen5 残留。
-        """
-        shutil.copy2(self._gen5_path, self._gen4_path)
-        os.remove(self._gen5_path)
-
     # ============================================================
     # 内部方法：子进程调用
     # ============================================================
@@ -245,7 +227,7 @@ class IterativeTrainer:
         return result
 
     def _generate_samples(self) -> str:
-        """调用 create_samples.py（cnn_v3.4 自对弈，winner_path 模式）生成训练样本。
+        """调用 create_samples.py（cnn_v3.4 自对弈）生成训练样本。
 
         Returns: 样本文件路径。Raises: RuntimeError（子进程非零退出码）。
         """
@@ -259,10 +241,8 @@ class IterativeTrainer:
             PYTHON_EXECUTABLE,
             "ai/create_samples.py",
             "--model", "cnn_v3.4",
-            "--mode", "winner_path",
             "--sample_games", str(SAMPLE_GAMES),
             "--output", sample_path,
-            "--temp-side", "random",
         ]
 
         result = self._run_subprocess(cmd)
@@ -304,7 +284,7 @@ class IterativeTrainer:
             raise RuntimeError(f"空样本: {sample_path} 包含 0 条样本")
 
     def _train_model(self):
-        """调用 train_main.py 训练 cnn_v3.5（1 epoch, batch 4096, shuffle）。
+        """调用 train_main.py 训练 cnn_v3.5（100 epochs, batch 4096, shuffle）。
 
         Raises: RuntimeError（子进程非零退出码）。
         """
@@ -390,7 +370,7 @@ class IterativeTrainer:
     def _build_stop_reason(self) -> str:
         """构建停止原因文本。
 
-        取最后一轮记录，拼接停止原因描述。_rounds 为空时返回空字符串。
+        取最后一轮记录，描述停止上下文。_rounds 为空时返回空字符串。
         此方法被 _print_final_report() 和 _build_result_dict() 共用，
         避免重复代码。
 
@@ -401,8 +381,8 @@ class IterativeTrainer:
         last = self._rounds[-1]
         return (
             f"第{last['round_num']}轮 "
-            f"cnn_v3.5 胜率 {last['gen5_win_rate']:.1f}% "
-            f"≤ {WIN_RATE_THRESHOLD}%，停止迭代"
+            f"cnn_v3.5 胜率 {last['gen5_win_rate']:.1f}%，"
+            f"用户中断"
         )
 
     def _print_round_header(self):
@@ -410,35 +390,34 @@ class IterativeTrainer:
         print(f"========== 第 {self._round_num} 轨迭代开始 ==========")
 
     def _print_round_result(self, win_rate: float, promoted: bool):
-        """打印轮次结果摘要：第 {n} 轨结果: cnn_v3.5 胜率 = {r}% → {晋升|停止}"""
-        action = "晋升" if promoted else "停止"
+        """打印轮次结果摘要：第 {n} 轨结果: cnn_v3.5 胜率 = {r}% → 继续"""
+        action = "继续"
         print(
             f"第 {self._round_num} 轨结果: "
             f"cnn_v3.5 胜率 = {win_rate:.1f}% → {action}"
         )
 
     def _print_final_report(self):
-        """打印最终统计报告（总迭代次数、逐轮明细表、停止原因、最终优胜模型）。
+        """打印最终统计报告（总迭代次数、逐轮明细表、停止原因、最终模型）。
 
         _rounds 为空时提前返回（防御性编程，避免空记录导致无意义输出）。
         """
         if not self._rounds:
             return
 
-        total_iterations = sum(1 for r in self._rounds if r["promoted"])
+        total_iterations = len(self._rounds)
 
         print("\n========== 最终统计 ==========")
         print(f"总迭代次数: {total_iterations}")
 
         print("逐轮明细:")
         for r in self._rounds:
-            action = "晋升" if r["promoted"] else "停止"
             print(
                 f"  第{r['round_num']}轮: "
                 f"cnn_v3.4 胜 {r['gen4_wins']} | "
                 f"cnn_v3.5 胜 {r['gen5_wins']} | "
                 f"平局 {r['draws']} | "
-                f"cnn_v3.5 胜率 {r['gen5_win_rate']:.1f}% → {action}"
+                f"cnn_v3.5 胜率 {r['gen5_win_rate']:.1f}%"
             )
 
         # 停止原因（通过 _build_stop_reason() 共用逻辑）
@@ -446,8 +425,7 @@ class IterativeTrainer:
         print(f"停止原因: {stop_reason}")
 
         print(
-            f"最终优胜模型: gen{PARENT_GEN}/cnn_v3.pth"
-            f"（经 {total_iterations} 轮进化）"
+            f"最终模型: gen{PARENT_GEN}/cnn_v3.pth"
         )
 
     # ============================================================
@@ -462,7 +440,7 @@ class IterativeTrainer:
         final_round 取 _rounds 最后完成轮次的编号（而非 _round_num），
         避免 KeyboardInterrupt 场景下返回未完成轮次编号。
         """
-        total_iterations = sum(1 for r in self._rounds if r["promoted"])
+        total_iterations = len(self._rounds)
 
         # 取最后完成轮次编号（KeyboardInterrupt 时 _round_num 可能指向未完成轮次）
         if self._rounds:
