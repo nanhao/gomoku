@@ -180,11 +180,26 @@ class TestModelFileOperations:
         assert gen4_content == gen5_content
         assert gen5_content != b"old_different_content"
 
-    def test_promote_method_removed(self, trainer):
-        """UT-2.3（意图 12 更新）：_promote() 方法已移除，不再有晋升操作。"""
-        assert not hasattr(trainer, '_promote'), (
-            "意图 12 不再需要晋升逻辑，_promote() 应已移除"
+    def test_promote_moves_gen5_to_gen4(self, trainer, temp_project):
+        """UT-2.3（意图 12 更新）：_promote() 存在，无条件 mv gen5 → gen4。
+
+        验证晋升后 gen4 内容与 gen5 一致，且 gen5 被删除。
+        """
+        assert hasattr(trainer, '_promote'), (
+            "意图 12 需要无条件晋升，_promote() 应存在"
         )
+        gen4_path = os.path.join(temp_project, MODELS_DIR, f"gen{PARENT_GEN}", "cnn_v3.pth")
+        gen5_path = os.path.join(temp_project, MODELS_DIR, f"gen{CHILD_GEN}", "cnn_v3.pth")
+        os.makedirs(os.path.dirname(gen5_path), exist_ok=True)
+        with open(gen5_path, 'wb') as f:
+            f.write(b"gen5_new_trained_content")
+        # 执行晋升
+        trainer._promote()
+        # gen4 被 gen5 覆盖
+        with open(gen4_path, 'rb') as f:
+            assert f.read() == b"gen5_new_trained_content"
+        # gen5 被删除
+        assert not os.path.exists(gen5_path)
 
     def test_sample_output_dir_auto_create(self, trainer, temp_project):
         """UT-2.4：样本输出目录不存在时自动创建。"""
@@ -198,14 +213,6 @@ class TestModelFileOperations:
 
         assert os.path.isdir(sample_dir)
 
-    def test_promote_method_removed_confirm_no_copy2(self, trainer, temp_project):
-        """UT-2.5（意图 12 更新）：_promote() 已移除，gen4 不会被 gen5 覆盖。
-
-        验证：对 trainer 实例调用 hasattr 确认 _promote 不存在。
-        """
-        assert not hasattr(trainer, '_promote'), (
-            "_promote() 已在意图 12 中移除"
-        )
 
 
 # ============================================================
@@ -423,13 +430,10 @@ class TestEdgeCases:
         assert not hasattr(it_mod, 'WIN_RATE_THRESHOLD'), (
             "意图 12 不再需要 WIN_RATE_THRESHOLD 常量"
         )
-
-    def test_loop_always_continues_2(self, trainer):
-        """UT-8.2（意图 12 更新）：循环始终继续，不因胜率低而停止。
-
-        确认 _promote() 也已移除（晋升不再发生）。
-        """
-        assert not hasattr(trainer, '_promote')
+        # 确认 _promote 存在（无条件晋升）
+        assert hasattr(trainer, '_promote'), (
+            "意图 12 需要 _promote() 无条件晋升"
+        )
 
     def test_all_draws(self, trainer):
         """UT-8.3：battle 输出仅有平局（0胜0负100平）→ 胜率 0.0%。"""

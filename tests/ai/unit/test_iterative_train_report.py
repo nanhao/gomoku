@@ -25,18 +25,18 @@ class TestLogOutput:
         assert "第 1 轨迭代开始" in captured.out
 
     def test_round_result_promoted(self, trainer, capsys):
-        """UT-6.2：每轮结束时打印结果摘要（意图 12：始终显示'继续'）。"""
+        """UT-6.2：每轮结束时打印结果摘要（意图 12：始终显示'晋升'）。"""
         trainer._round_num = 1
-        trainer._print_round_result(win_rate=55.0, promoted=True)
+        trainer._print_round_result(win_rate=55.0)
         captured = capsys.readouterr()
-        assert "第 1 轨结果: cnn_v3.5 胜率 = 55.0% → 继续" in captured.out
+        assert "第 1 轨结果: cnn_v3.5 胜率 = 55.0% → 晋升" in captured.out
 
     def test_round_result_stopped(self, trainer, capsys):
-        """UT-6.3：每轮结束时打印结果摘要（意图 12：始终显示'继续'）。"""
+        """UT-6.3：每轮结束时打印结果摘要（意图 12：始终显示'晋升'）。"""
         trainer._round_num = 1
-        trainer._print_round_result(win_rate=48.0, promoted=False)
+        trainer._print_round_result(win_rate=48.0)
         captured = capsys.readouterr()
-        assert "第 1 轨结果: cnn_v3.5 胜率 = 48.0% → 继续" in captured.out
+        assert "第 1 轨结果: cnn_v3.5 胜率 = 48.0% → 晋升" in captured.out
 
     def test_detail_line_promoted(self, trainer, capsys):
         """UT-6.4：最终统计逐轮明细行格式（意图 12：不再显示晋升/停止标识）。"""
@@ -144,16 +144,17 @@ class TestFinalReport:
         assert "用户中断" in captured.out
 
     def test_report_final_model(self, trainer, capsys):
-        """UT-7.4：报告含最终模型（意图 12：不再显示'优胜'）。"""
+        """UT-7.4：报告含当前模型（意图 12：显示'当前模型'及进化轮次）。"""
         self._add_rounds(trainer, [
             {"round_num": 1, "gen4_wins": 44, "gen5_wins": 47, "draws": 9,
-             "gen5_win_rate": 47.0, "promoted": False},
+             "gen5_win_rate": 47.0, "promoted": True},
         ])
         trainer._print_final_report()
         captured = capsys.readouterr()
-        assert "最终模型" in captured.out
+        assert "当前模型" in captured.out
         assert "gen4" in captured.out
         assert "cnn_v3.pth" in captured.out
+        assert "经 1 轮进化" in captured.out
 
     def test_report_first_round_stop(self, trainer, capsys):
         """UT-7.5：首轮停止时统计正确（意图 12：所有轮次都计入迭代次数，停止原因为用户中断）。

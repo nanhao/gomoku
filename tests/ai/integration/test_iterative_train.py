@@ -2,7 +2,7 @@
 
 测试完整迭代流程，使用 mock subprocess.run 和临时目录隔离文件系统副作用。
 
-意图 12 更新：循环始终继续，不再有晋升/停止判定，统一通过 KeyboardInterrupt 终止。
+意图 12 更新：循环始终继续，无条件晋升（mv gen5→gen4），统一通过 KeyboardInterrupt 终止。
 """
 
 import os
@@ -38,7 +38,7 @@ def _battle_stdout_line(gen5_wins, gen4_wins, draws):
     )
 
 
-def _make_side_effect_with_interrupt(*battle_outputs, interrupt_after=None):
+def _make_side_effect_with_interrupt(*battle_outputs, interrupt_after_round=None):
     """构造多轮迭代的 mock subprocess.run side_effect 列表，支持键盘中断控制。
 
     每轮 3 次调用：create_samples → train_main → battle。
@@ -46,28 +46,25 @@ def _make_side_effect_with_interrupt(*battle_outputs, interrupt_after=None):
 
     Args:
         *battle_outputs: 每轮 battle 的 stdout 字符串。
-        interrupt_after: 在第 N 次调用后抛出 KeyboardInterrupt。
-                         None 表示不中断（不推荐，会无限循环消耗 side_effect）。
+        interrupt_after_round: 在第 N 轮完成后抛出 KeyboardInterrupt。
+                               None 表示不中断（不推荐，会无限循环消耗 side_effect）。
     """
     effects = []
-    call_count = [0]
 
     for battle_out in battle_outputs:
         effects.append(_make_completed_process(returncode=0, stdout="samples ok"))
         effects.append(_make_completed_process(returncode=0, stdout="train ok"))
         effects.append(_make_completed_process(returncode=0, stdout=battle_out))
 
-    if interrupt_after is not None:
-        # 在指定位置插入 KeyboardInterrupt
-        # 如果 interrupt_after 小于 effects 长度，截断并在该位置插入中断
-        if interrupt_after < len(effects):
-            effects[interrupt_after] = KeyboardInterrupt()
+    if interrupt_after_round is not None:
+        # 在第 N 轮完成后中断，即在该轮 battle 之后的第 (N*3) 个位置
+        interrupt_index = interrupt_after_round * 3
+        if interrupt_index < len(effects):
+            effects[interrupt_index] = KeyboardInterrupt()
         else:
-            # 延长 effects 并在末尾追加中断
-            last = effects[-1] if effects else None
-            while len(effects) < interrupt_after:
+            while len(effects) <= interrupt_index:
                 effects.append(_make_completed_process(returncode=0, stdout="ok"))
-            effects.append(KeyboardInterrupt())
+            effects[interrupt_index] = KeyboardInterrupt()
     return effects
 
 
@@ -96,11 +93,11 @@ class TestFullIterationFlow:
             with open(sp, 'w') as f:
                 json.dump([{"input": [0]*226, "output": [0]*225, "mask": [0]*225}], f)
 
-        # 第1轮完成后中断（第4次调用是第2轮的 create_samples，在此中断）
+        # 第1轮完成后中断
         side_effects = _make_side_effect_with_interrupt(
             _battle_stdout_line(gen5_wins=55, gen4_wins=40, draws=5),   # round 1
             _battle_stdout_line(gen5_wins=48, gen4_wins=44, draws=8),   # round 2（不会完成）
-            interrupt_after=3,  # 第1轮 battle 完成后中断
+            interrupt_after_round=1,
         )
         mock_run.side_effect = side_effects
 
@@ -118,7 +115,7 @@ class TestFullIterationFlow:
         # ③ 循环始终继续，不因胜率停止
         # ④ run() 返回 dict 含已完成轮次
         assert len(result["rounds"]) >= 1
-        assert result["rounds"][0]["promoted"] is False  # 意图 12：不再有晋升
+        assert result["rounds"][0]["promoted"] is True  # 意图 12：无条件晋升
 
     @patch('subprocess.run')
     def test_two_rounds_then_interrupt(self, mock_run, temp_project):
@@ -126,7 +123,7 @@ class TestFullIterationFlow:
 
         验证：
         ① 2 轮均完成
-        ② 所有轮次 promoted=False
+        ② 所有轮次 promoted=True（无条件晋升）
         ③ total_iterations = 2
         """
         sample_dir = os.path.join(temp_project, SAMPLE_OUTPUT_DIR)
@@ -141,7 +138,7 @@ class TestFullIterationFlow:
             _battle_stdout_line(gen5_wins=48, gen4_wins=44, draws=8),   # round 1
             _battle_stdout_line(gen5_wins=44, gen4_wins=46, draws=10),  # round 2
             _battle_stdout_line(gen5_wins=50, gen4_wins=45, draws=5),   # round 3（部分）
-            interrupt_after=6,  # 第2轮 battle 完成后中断
+            interrupt_after_round=2,
         )
         mock_run.side_effect = side_effects
 
@@ -151,9 +148,9 @@ class TestFullIterationFlow:
         # ① 2 轮均完成
         assert len(result["rounds"]) == 2
 
-        # ② 所有轮次 promoted=False
-        assert result["rounds"][0]["promoted"] is False
-        assert result["rounds"][1]["promoted"] is False
+        # ② 所有轮次 promoted=True
+        assert result["rounds"][0]["promoted"] is True
+        assert result["rounds"][1]["promoted"] is True
 
         # ③ total_iterations = 2
         assert result["total_iterations"] == 2
@@ -174,7 +171,7 @@ class TestFullIterationFlow:
         side_effects = _make_side_effect_with_interrupt(
             _battle_stdout_line(gen5_wins=55, gen4_wins=40, draws=5),   # round 1
             _battle_stdout_line(gen5_wins=48, gen4_wins=44, draws=8),   # round 2
-            interrupt_after=6,  # 第2轮完成后中断
+            interrupt_after_round=2,
         )
         mock_run.side_effect = side_effects
 
@@ -320,7 +317,7 @@ class TestErrorHandling:
 
         # 正常返回
         assert len(result["rounds"]) == 1
-        assert result["rounds"][0]["promoted"] is False  # 意图 12：不再有晋升
+        assert result["rounds"][0]["promoted"] is True  # 意图 12：无条件晋升
         assert result["total_iterations"] == 1  # 意图 12：所有轮次都计入
 
     def test_lock_file_prevents_construction(self, temp_project):
@@ -360,7 +357,7 @@ class TestFileSystemIsolation:
         side_effects = _make_side_effect_with_interrupt(
             _battle_stdout_line(gen5_wins=55, gen4_wins=40, draws=5),   # round 1
             _battle_stdout_line(gen5_wins=48, gen4_wins=44, draws=8),   # round 2（不会完成）
-            interrupt_after=4,  # 第1轮完成 + 第2轮 create_samples 后中断
+            interrupt_after_round=1,
         )
         mock_run.side_effect = side_effects
 
@@ -390,7 +387,7 @@ class TestFileSystemIsolation:
         side_effects = _make_side_effect_with_interrupt(
             _battle_stdout_line(gen5_wins=55, gen4_wins=40, draws=5),   # round 1
             _battle_stdout_line(gen5_wins=48, gen4_wins=44, draws=8),   # round 2
-            interrupt_after=4,  # 第4次调用后中断（第1轮完成 + 第2轮 create_samples）
+            interrupt_after_round=1,
         )
         mock_run.side_effect = side_effects
 
@@ -423,7 +420,7 @@ class TestFileSystemIsolation:
             side_effects = _make_side_effect_with_interrupt(
                 _battle_stdout_line(gen5_wins=55, gen4_wins=40, draws=5),   # round 1
                 _battle_stdout_line(gen5_wins=48, gen4_wins=44, draws=8),   # round 2
-                interrupt_after=6,  # 第2轮完成后中断
+                interrupt_after_round=2,
             )
             mock_run.side_effect = side_effects
 
@@ -453,7 +450,7 @@ class TestFileSystemIsolation:
                 assert "gen5_win_rate" in r
                 assert "promoted" in r
 
-            # 意图 12：所有轮次 promoted=False
+            # 意图 12：所有轮次 promoted=True
             for r in result["rounds"]:
-                assert r["promoted"] is False
+                assert r["promoted"] is True
             assert result["total_iterations"] == len(result["rounds"])
