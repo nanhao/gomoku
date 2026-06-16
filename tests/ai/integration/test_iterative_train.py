@@ -32,8 +32,8 @@ def _battle_stdout_line(gen5_wins, gen4_wins, draws):
     return (
         f"=== 对战结果 ===\n"
         f"总局数: {total}\n"
-        f"cnn_v4.4 胜: {gen4_wins} 局 ({gen4_rate:.1f}%)\n"
-        f"cnn_v4.5 胜: {gen5_wins} 局 ({gen5_rate:.1f}%)\n"
+        f"cnn_v4.99 胜: {gen4_wins} 局 ({gen4_rate:.1f}%)\n"
+        f"cnn_v4.100 胜: {gen5_wins} 局 ({gen5_rate:.1f}%)\n"
         f"平局: {draws} 局 ({draw_rate:.1f}%)\n"
     )
 
@@ -88,10 +88,9 @@ class TestFullIterationFlow:
         # 为两轮预创建样本文件
         sample_dir = os.path.join(temp_project, SAMPLE_OUTPUT_DIR)
         os.makedirs(sample_dir, exist_ok=True)
-        for i in range(1, 3):
-            sp = os.path.join(sample_dir, f"path{i}.json")
-            with open(sp, 'w') as f:
-                json.dump([{"input": [0]*226, "output": [0]*225, "mask": [0]*225}], f)
+        sp = os.path.join(sample_dir, "path.json")
+        with open(sp, 'w') as f:
+            json.dump([{"input": [0]*226, "output": [0]*225, "mask": [0]*225}], f)
 
         # 第1轮完成后中断
         side_effects = _make_side_effect_with_interrupt(
@@ -128,10 +127,9 @@ class TestFullIterationFlow:
         """
         sample_dir = os.path.join(temp_project, SAMPLE_OUTPUT_DIR)
         os.makedirs(sample_dir, exist_ok=True)
-        for i in range(1, 4):
-            sp = os.path.join(sample_dir, f"path{i}.json")
-            with open(sp, 'w') as f:
-                json.dump([{"input": [0]*226, "output": [0]*225, "mask": [0]*225}], f)
+        sp = os.path.join(sample_dir, "path.json")
+        with open(sp, 'w') as f:
+            json.dump([{"input": [0]*226, "output": [0]*225, "mask": [0]*225}], f)
 
         # 2轮完成后在第3轮开始时中断
         side_effects = _make_side_effect_with_interrupt(
@@ -163,10 +161,9 @@ class TestFullIterationFlow:
         """
         sample_dir = os.path.join(temp_project, SAMPLE_OUTPUT_DIR)
         os.makedirs(sample_dir, exist_ok=True)
-        for i in range(1, 4):
-            sp = os.path.join(sample_dir, f"path{i}.json")
-            with open(sp, 'w') as f:
-                json.dump([{"input": [0]*226, "output": [0]*225, "mask": [0]*225}], f)
+        sp = os.path.join(sample_dir, "path.json")
+        with open(sp, 'w') as f:
+            json.dump([{"input": [0]*226, "output": [0]*225, "mask": [0]*225}], f)
 
         side_effects = _make_side_effect_with_interrupt(
             _battle_stdout_line(gen5_wins=55, gen4_wins=40, draws=5),   # round 1
@@ -225,7 +222,7 @@ class TestErrorHandling:
         """
         sample_dir = os.path.join(temp_project, SAMPLE_OUTPUT_DIR)
         os.makedirs(sample_dir, exist_ok=True)
-        sample_path = os.path.join(sample_dir, "path1.json")
+        sample_path = os.path.join(sample_dir, "path.json")
         with open(sample_path, 'w') as f:
             json.dump([{"input": [0]*226, "output": [0]*225, "mask": [0]*225}], f)
 
@@ -253,7 +250,7 @@ class TestErrorHandling:
         """
         sample_dir = os.path.join(temp_project, SAMPLE_OUTPUT_DIR)
         os.makedirs(sample_dir, exist_ok=True)
-        sample_path = os.path.join(sample_dir, "path1.json")
+        sample_path = os.path.join(sample_dir, "path.json")
         with open(sample_path, 'w') as f:
             json.dump([{"input": [0]*226, "output": [0]*225, "mask": [0]*225}], f)
 
@@ -288,10 +285,9 @@ class TestErrorHandling:
         """
         sample_dir = os.path.join(temp_project, SAMPLE_OUTPUT_DIR)
         os.makedirs(sample_dir, exist_ok=True)
-        for i in range(1, 3):
-            sp = os.path.join(sample_dir, f"path{i}.json")
-            with open(sp, 'w') as f:
-                json.dump([{"input": [0]*226, "output": [0]*225, "mask": [0]*225}], f)
+        sp = os.path.join(sample_dir, "path.json")
+        with open(sp, 'w') as f:
+            json.dump([{"input": [0]*226, "output": [0]*225, "mask": [0]*225}], f)
 
         # 第1轮成功，第2轮 create_samples 时抛 KeyboardInterrupt
         call_count = [0]
@@ -349,10 +345,9 @@ class TestFileSystemIsolation:
         """IT-3.2：验证 create_samples 的 --output 参数指向临时目录。"""
         sample_dir = os.path.join(temp_project, SAMPLE_OUTPUT_DIR)
         os.makedirs(sample_dir, exist_ok=True)
-        for i in range(1, 3):
-            sp = os.path.join(sample_dir, f"path{i}.json")
-            with open(sp, 'w') as f:
-                json.dump([{"input": [0]*226, "output": [0]*225, "mask": [0]*225}], f)
+        sp = os.path.join(sample_dir, "path.json")
+        with open(sp, 'w') as f:
+            json.dump([{"input": [0]*226, "output": [0]*225, "mask": [0]*225}], f)
 
         side_effects = _make_side_effect_with_interrupt(
             _battle_stdout_line(gen5_wins=55, gen4_wins=40, draws=5),   # round 1
@@ -379,10 +374,9 @@ class TestFileSystemIsolation:
         """验证 run() 结束后锁文件被清理。"""
         sample_dir = os.path.join(temp_project, SAMPLE_OUTPUT_DIR)
         os.makedirs(sample_dir, exist_ok=True)
-        for i in range(1, 3):
-            sp = os.path.join(sample_dir, f"path{i}.json")
-            with open(sp, 'w') as f:
-                json.dump([{"input": [0]*226, "output": [0]*225, "mask": [0]*225}], f)
+        sp = os.path.join(sample_dir, "path.json")
+        with open(sp, 'w') as f:
+            json.dump([{"input": [0]*226, "output": [0]*225, "mask": [0]*225}], f)
 
         side_effects = _make_side_effect_with_interrupt(
             _battle_stdout_line(gen5_wins=55, gen4_wins=40, draws=5),   # round 1
@@ -411,10 +405,9 @@ class TestFileSystemIsolation:
         """验证 run() 返回的 dict 结构完整（意图 12：2轮全部完成）。"""
         sample_dir = os.path.join(temp_project, SAMPLE_OUTPUT_DIR)
         os.makedirs(sample_dir, exist_ok=True)
-        for i in range(1, 4):
-            sp = os.path.join(sample_dir, f"path{i}.json")
-            with open(sp, 'w') as f:
-                json.dump([{"input": [0]*226, "output": [0]*225, "mask": [0]*225}], f)
+        sp = os.path.join(sample_dir, "path.json")
+        with open(sp, 'w') as f:
+            json.dump([{"input": [0]*226, "output": [0]*225, "mask": [0]*225}], f)
 
         with patch('subprocess.run') as mock_run:
             side_effects = _make_side_effect_with_interrupt(

@@ -14,7 +14,7 @@ from ai.iterative_train import MODELS_DIR, PARENT_GEN
 
 @pytest.fixture
 def temp_project():
-    """创建临时项目目录，包含 gen4/cnn_v4.pth 假文件和必要子目录。
+    """创建临时项目目录，包含 gen99/cnn_v4.pth 假文件和必要子目录。
 
     所有文件系统副作用隔离在临时目录中，测试结束自动清理。
     """

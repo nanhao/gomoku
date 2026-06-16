@@ -1,7 +1,7 @@
 """cnn_v4 迭代进化训练脚本 — 串联 create_samples / train_main / battle 为自动化迭代闭环。
 
 用法: python ai/iterative_train.py
-前置: ai/models/cnn_v4/gen4/cnn_v4.pth 必须存在；不可多实例并发（.iterative_lock 保护）。
+前置: ai/models/cnn_v4/gen99/cnn_v4.pth 必须存在；不可多实例并发（.iterative_lock 保护）。
 v1.0 所有参数硬编码，不做命令行参数化。
 """
 
@@ -16,10 +16,10 @@ from typing import Optional
 
 # --- 硬编码常量（v1.0 不可配置）---
 BASE_MODEL_NAME = "cnn_v4"
-PARENT_GEN = 4          # 父代编号（基线模型）
-CHILD_GEN = 5           # 子代编号（待训练模型）
+PARENT_GEN = 99          # 父代编号（基线模型）
+CHILD_GEN = 100         # 子代编号（待训练模型）
 MODELS_DIR = "ai/models/cnn_v4"          # 权重目录（相对于 project_root）
-SAMPLE_OUTPUT_DIR = "ai/merge_samples2/v5"  # 样本输出目录
+SAMPLE_OUTPUT_DIR = "ai/merge_samples2/v100"  # 样本输出目录
 SAMPLE_GAMES = 500      # 目标样本局数
 BATTLE_GAMES = 100      # 对战局数
 TRAIN_EPOCHS = 300      # 训练 epoch 数（意图 12：从 100 改为 300）
@@ -40,7 +40,7 @@ class IterativeTrainer:
         Args:
             project_root: 项目根目录。None 时自动推导为 Path(__file__).parent.parent。
         Raises:
-            FileNotFoundError: gen4/cnn_v3.pth 不存在。
+            FileNotFoundError: gen99/cnn_v4.pth 不存在。
             RuntimeError: 锁文件存在（多实例并发）。
         """
         # 推导项目根目录
@@ -120,10 +120,10 @@ class IterativeTrainer:
                 gen5_wins = stats["gen5_wins"]
                 draws = stats["draws"]
 
-                # 打印对战结果（cnn_v4.4 胜场、cnn_v4.5 胜场、平局数、cnn_v4.5 胜率、轮次号）
+                # 打印对战结果（cnn_v4.99 胜场、cnn_v4.100 胜场、平局数、cnn_v4.100 胜率、轮次号）
                 print(
-                    f"cnn_v4.4 胜 {gen4_wins} | "
-                    f"cnn_v4.5 胜 {gen5_wins} | "
+                    f"cnn_v4.99 胜 {gen4_wins} | "
+                    f"cnn_v4.100 胜 {gen5_wins} | "
                     f"平局 {draws} | "
                     f"胜率 {win_rate:.1f}% | "
                     f"i={self._round_num}"
@@ -239,20 +239,20 @@ class IterativeTrainer:
         return result
 
     def _generate_samples(self) -> str:
-        """调用 create_samples.py（cnn_v4.4 自对弈）生成训练样本。
+        """调用 create_samples.py（cnn_v4.99 自对弈）生成训练样本。
 
         Returns: 样本文件路径。Raises: RuntimeError（子进程非零退出码）。
         """
         self._ensure_sample_output_dir()
 
         sample_path = os.path.join(
-            self._sample_output_dir, f"path{self._round_num}.json"
+            self._sample_output_dir, "path.json"
         )
 
         cmd = [
             PYTHON_EXECUTABLE,
             "ai/create_samples.py",
-            "--model", "cnn_v4.4",
+            "--model", "cnn_v4.99",
             "--sample_games", str(SAMPLE_GAMES),
             "--output", sample_path,
         ]
@@ -296,7 +296,7 @@ class IterativeTrainer:
             raise RuntimeError(f"空样本: {sample_path} 包含 0 条样本")
 
     def _train_model(self):
-        """调用 train_main.py 训练 cnn_v4.5（300 epochs, batch 4096, shuffle）。
+        """调用 train_main.py 训练 cnn_v4.100（300 epochs, batch 4096, shuffle）。
 
         train-from-dir 指向样本目录，train_main.py 会加载目录下所有 JSON 样本文件。
 
@@ -305,7 +305,7 @@ class IterativeTrainer:
         cmd = [
             PYTHON_EXECUTABLE,
             "ai/train_main.py",
-            "--model", "cnn_v4.5",
+            "--model", "cnn_v4.100",
             "--train-from-dir", self._sample_output_dir,
             "--epochs", str(TRAIN_EPOCHS),
             "--batch-size", str(TRAIN_BATCH_SIZE),
@@ -316,7 +316,7 @@ class IterativeTrainer:
         print("训练完成")
 
     def _run_battle(self) -> str:
-        """调用 battle.py 执行 cnn_v3.4 vs cnn_v3.5 对战。
+        """调用 battle.py 执行 cnn_v4.99 vs cnn_v4.100 对战。
 
         Returns: battle.py 标准输出（含逐局结果和最终统计）。
         Raises: RuntimeError（子进程非零退出码）。
@@ -324,8 +324,10 @@ class IterativeTrainer:
         cmd = [
             PYTHON_EXECUTABLE,
             "ai/battle.py",
-            "--ai1", "cnn_v4.4",
-            "--ai2", "cnn_v4.5",
+            "--ai1", "cnn_v4.99",
+            "--ai2", "cnn_v4.100",
+            "--temp-moves", "2",
+            "--temperature", "2",
             "--games", str(BATTLE_GAMES),
         ]
 
@@ -339,26 +341,26 @@ class IterativeTrainer:
     def _parse_battle_output(self, stdout: str) -> dict:
         """从 battle.py 输出解析对战统计。
 
-        匹配 cnn_v3.5 胜场/胜率、cnn_v3.4 胜场、平局数（精确正则，避免误匹配 cnn_v3.4 行）。
+        匹配 cnn_v4.100 胜场/胜率、cnn_v4.99 胜场、平局数（精确正则，避免误匹配 cnn_v4.99 行）。
 
         Returns: {"gen4_wins", "gen5_wins", "draws", "gen5_win_rate"}。
-        Raises: ValueError（无法解析 cnn_v3.5 胜率）。
+        Raises: ValueError（无法解析 cnn_v4.100 胜率）。
         """
-        # 解析 cnn_v4.5 胜场和胜率（优先匹配，此行为必需的解析目标）
+        # 解析 cnn_v4.100 胜场和胜率（优先匹配，此行为必需的解析目标）
         gen5_match = re.search(
-            r'cnn_v4\.5 胜:\s*(\d+)\s*局\s*\(([\d.]+)%\)', stdout
+            r'cnn_v4\.100 胜:\s*(\d+)\s*局\s*\(([\d.]+)%\)', stdout
         )
         if not gen5_match:
             raise ValueError(
-                f"无法解析 cnn_v3.5 胜率，原始输出:\n{stdout}"
+                f"无法解析 cnn_v4.100 胜率，原始输出:\n{stdout}"
             )
 
         gen5_wins = int(gen5_match.group(1))
         gen5_win_rate = float(gen5_match.group(2))
 
-        # 解析 cnn_v4.4 胜场（可为 0）
+        # 解析 cnn_v4.99 胜场（可为 0）
         gen4_match = re.search(
-            r'cnn_v4\.4 胜:\s*(\d+)\s*局', stdout
+            r'cnn_v4\.99 胜:\s*(\d+)\s*局', stdout
         )
         gen4_wins = int(gen4_match.group(1)) if gen4_match else 0
 
@@ -394,7 +396,7 @@ class IterativeTrainer:
         last = self._rounds[-1]
         return (
             f"第{last['round_num']}轮 "
-            f"cnn_v4.5 胜率 {last['gen5_win_rate']:.1f}%，"
+            f"cnn_v4.100 胜率 {last['gen5_win_rate']:.1f}%，"
             f"{reason}"
         )
 
@@ -403,10 +405,10 @@ class IterativeTrainer:
         print(f"========== 第 {self._round_num} 轨迭代开始 ==========")
 
     def _print_round_result(self, win_rate: float):
-        """打印轮次结果摘要：第 {n} 轨结果: cnn_v3.5 胜率 = {r}% → 晋升"""
+        """打印轮次结果摘要：第 {n} 轨结果: cnn_v4.100 胜率 = {r}% → 晋升"""
         print(
             f"第 {self._round_num} 轨结果: "
-            f"cnn_v4.5 胜率 = {win_rate:.1f}% → 晋升"
+            f"cnn_v4.100 胜率 = {win_rate:.1f}% → 晋升"
         )
 
     def _print_final_report(self):
@@ -426,10 +428,10 @@ class IterativeTrainer:
         for r in self._rounds:
             print(
                 f"  第{r['round_num']}轮: "
-                f"cnn_v4.4 胜 {r['gen4_wins']} | "
-                f"cnn_v4.5 胜 {r['gen5_wins']} | "
+                f"cnn_v4.99 胜 {r['gen4_wins']} | "
+                f"cnn_v4.100 胜 {r['gen5_wins']} | "
                 f"平局 {r['draws']} | "
-                f"cnn_v4.5 胜率 {r['gen5_win_rate']:.1f}%"
+                f"cnn_v4.100 胜率 {r['gen5_win_rate']:.1f}%"
             )
 
         # 停止原因（通过 _build_stop_reason() 共用逻辑）

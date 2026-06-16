@@ -47,7 +47,7 @@ def trainer(temp_project):
 def _battle_stdout(gen4_wins=40, gen5_wins=55, draws=5):
     """构造 battle.py 标准输出文本（模拟最终统计行）。
 
-    包含逐局结果行和最终统计行，验证解析器能正确匹配 cnn_v4.5 统计行。
+    包含逐局结果行和最终统计行，验证解析器能正确匹配 cnn_v4.100 统计行。
     """
     total = gen4_wins + gen5_wins + draws
     gen4_rate = gen4_wins / total * 100 if total > 0 else 0.0
@@ -55,18 +55,18 @@ def _battle_stdout(gen4_wins=40, gen5_wins=55, draws=5):
     draw_rate = draws / total * 100 if total > 0 else 0.0
 
     lines = [
-        "开始 AI 对战: cnn_v4.4 vs cnn_v4.5, 共 100 局",
+        "开始 AI 对战: cnn_v4.99 vs cnn_v4.100, 共 100 局",
         "",
     ]
     for i in range(1, total + 1):
         # 添加逐局结果行（干扰测试）
-        lines.append(f"第 {i} 局: cnn_v4.4(黑) vs cnn_v4.5(白) -> 黑方胜")
+        lines.append(f"第 {i} 局: cnn_v4.99(黑) vs cnn_v4.100(白) -> 黑方胜")
     lines += [
         "",
         "=== 对战结果 ===",
         f"总局数: {total}",
-        f"cnn_v4.4 胜: {gen4_wins} 局 ({gen4_rate:.1f}%)",
-        f"cnn_v4.5 胜: {gen5_wins} 局 ({gen5_rate:.1f}%)",
+        f"cnn_v4.99 胜: {gen4_wins} 局 ({gen4_rate:.1f}%)",
+        f"cnn_v4.100 胜: {gen5_wins} 局 ({gen5_rate:.1f}%)",
         f"平局: {draws} 局 ({draw_rate:.1f}%)",
     ]
     return "\n".join(lines)
@@ -92,7 +92,7 @@ class TestConstructor:
             temp_project, MODELS_DIR, f"gen{PARENT_GEN}", "cnn_v4.pth"
         )
         os.remove(gen4_path)
-        with pytest.raises(FileNotFoundError, match="gen4"):
+        with pytest.raises(FileNotFoundError, match="gen99"):
             IterativeTrainer(project_root=temp_project)
 
     def test_auto_deduce_project_root(self):
@@ -113,7 +113,7 @@ class TestConstructor:
             assert trainer.project_root is not None
         else:
             # gen4 不存在则跳过此测试
-            pytest.skip("gen4 权重文件不存在，跳过自动推导测试")
+            pytest.skip("gen99 权重文件不存在，跳过自动推导测试")
 
     def test_lock_file_exists_raises(self, temp_project):
         """UT-1.4：锁文件存在时抛 RuntimeError。"""
@@ -234,14 +234,14 @@ class TestSubprocessArgs:
         # 验证关键参数
         assert "create_samples.py" in " ".join(call_args)
         assert "--model" in call_args
-        assert "cnn_v4.4" in call_args
+        assert "cnn_v4.99" in call_args
         assert "--sample_games" in call_args
         assert "500" in call_args
         # 意图 12：不应包含 --mode 和 --temp-side
         assert "--mode" not in call_args
         assert "--temp-side" not in call_args
-        # 输出文件名含 path{round_num}.json
-        assert f"path{trainer._round_num}.json" in " ".join(call_args)
+        # 输出文件名固定为 path.json
+        assert "path.json" in " ".join(call_args)
 
     @patch('subprocess.run')
     def test_train_main_args(self, mock_run, trainer):
@@ -254,7 +254,7 @@ class TestSubprocessArgs:
         call_args = mock_run.call_args[0][0]
         assert "train_main.py" in " ".join(call_args)
         assert "--model" in call_args
-        assert "cnn_v4.5" in call_args
+        assert "cnn_v4.100" in call_args
         assert "--train-from-dir" in call_args
         assert trainer._sample_output_dir in " ".join(call_args)
         assert "--epochs" in call_args
@@ -276,15 +276,17 @@ class TestSubprocessArgs:
         call_args = mock_run.call_args[0][0]
         assert "battle.py" in " ".join(call_args)
         assert "--ai1" in call_args
-        assert "cnn_v4.4" in call_args
+        assert "cnn_v4.99" in call_args
         assert "--ai2" in call_args
-        assert "cnn_v4.5" in call_args
+        assert "cnn_v4.100" in call_args
+        assert "--temp-moves" in call_args
+        assert "--temperature" in call_args
         assert "--games" in call_args
         assert "100" in call_args
 
     @patch('subprocess.run')
-    def test_round_num_in_output_filename(self, mock_run, temp_project):
-        """UT-3.4：第 round_num 轨输出文件名为 path{round_num}.json。"""
+    def test_output_filename_is_path_json(self, mock_run, temp_project):
+        """UT-3.4：输出文件名固定为 path.json（不带 round_num 后缀）。"""
         mock_run.return_value = _make_completed_process(returncode=0, stdout="ok")
 
         trainer = IterativeTrainer(project_root=temp_project)
@@ -292,7 +294,7 @@ class TestSubprocessArgs:
         trainer._generate_samples()
 
         call_args = mock_run.call_args[0][0]
-        assert "path3.json" in " ".join(call_args)
+        assert "path.json" in " ".join(call_args)
 
     @patch('subprocess.run')
     def test_subprocess_cwd_set(self, mock_run, trainer):
@@ -347,7 +349,7 @@ class TestWinRateParsing:
     """UT-4：battle.py 输出中的胜率解析。"""
 
     def test_parse_normal_48_percent(self, trainer):
-        """UT-4.1：正常解析 cnn_v4.5 胜率 48.0%。"""
+        """UT-4.1：正常解析 cnn_v4.100 胜率 48.0%。"""
         stdout = _battle_stdout(gen4_wins=42, gen5_wins=48, draws=10)
         result = trainer._parse_battle_output(stdout)
         assert result["gen5_win_rate"] == 48.0
@@ -382,21 +384,21 @@ class TestWinRateParsing:
 
     def test_parse_no_match_raises(self, trainer):
         """UT-4.5：无匹配行时抛 ValueError。"""
-        stdout = "cnn_v4.5 胜: 无效格式"
+        stdout = "cnn_v4.100 胜: 无效格式"
         with pytest.raises(ValueError, match="胜率"):
             trainer._parse_battle_output(stdout)
 
     def test_parse_multi_decimal(self, trainer):
         """UT-4.6：胜率含多位小数。"""
-        stdout = "cnn_v4.5 胜: 48 局 (48.05%)"
+        stdout = "cnn_v4.100 胜: 48 局 (48.05%)"
         result = trainer._parse_battle_output(stdout)
         assert result["gen5_win_rate"] == 48.05
 
     def test_parse_not_confuse_cnn_v34(self, trainer):
-        """UT-4.7：含 cnn_v4.4 干扰行时正确匹配 cnn_v4.5。"""
+        """UT-4.7：含 cnn_v4.99 干扰行时正确匹配 cnn_v4.100。"""
         stdout = (
-            "cnn_v4.4 胜: 52 局 (52.0%)\n"
-            "cnn_v4.5 胜: 48 局 (48.0%)\n"
+            "cnn_v4.99 胜: 52 局 (52.0%)\n"
+            "cnn_v4.100 胜: 48 局 (48.0%)\n"
         )
         result = trainer._parse_battle_output(stdout)
         assert result["gen5_win_rate"] == 48.0
@@ -405,7 +407,7 @@ class TestWinRateParsing:
         """UT-4.8：stdout 含进度等无关行时仍正确解析。"""
         stdout = (
             "进度: 样本局 100/500\n"
-            "加载模型: cnn_v4.5\n"
+            "加载模型: cnn_v4.100\n"
             "训练完成\n"
             + _battle_stdout(gen4_wins=40, gen5_wins=55, draws=5)
         )
@@ -448,7 +450,7 @@ class TestEdgeCases:
         # 构造空样本文件
         sample_dir = os.path.join(temp_project, SAMPLE_OUTPUT_DIR)
         os.makedirs(sample_dir, exist_ok=True)
-        sample_path = os.path.join(sample_dir, "path1.json")
+        sample_path = os.path.join(sample_dir, "path.json")
         with open(sample_path, 'w') as f:
             json.dump([], f)
 
@@ -457,7 +459,7 @@ class TestEdgeCases:
 
     def test_sample_file_not_exists(self, trainer, temp_project):
         """UT-8.5：样本文件不存在时抛 RuntimeError。"""
-        sample_path = os.path.join(temp_project, SAMPLE_OUTPUT_DIR, "path1.json")
+        sample_path = os.path.join(temp_project, SAMPLE_OUTPUT_DIR, "path.json")
         # 确保文件不存在
         if os.path.isfile(sample_path):
             os.remove(sample_path)
@@ -469,7 +471,7 @@ class TestEdgeCases:
         """样本文件 JSON 解析失败时抛 RuntimeError。"""
         sample_dir = os.path.join(temp_project, SAMPLE_OUTPUT_DIR)
         os.makedirs(sample_dir, exist_ok=True)
-        sample_path = os.path.join(sample_dir, "path1.json")
+        sample_path = os.path.join(sample_dir, "path.json")
         with open(sample_path, 'w') as f:
             f.write("not valid json {{{")
 
@@ -480,7 +482,7 @@ class TestEdgeCases:
         """样本文件不是 JSON 数组时抛 RuntimeError。"""
         sample_dir = os.path.join(temp_project, SAMPLE_OUTPUT_DIR)
         os.makedirs(sample_dir, exist_ok=True)
-        sample_path = os.path.join(sample_dir, "path1.json")
+        sample_path = os.path.join(sample_dir, "path.json")
         with open(sample_path, 'w') as f:
             json.dump({"key": "not array"}, f)
 

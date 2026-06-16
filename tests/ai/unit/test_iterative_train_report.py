@@ -29,14 +29,14 @@ class TestLogOutput:
         trainer._round_num = 1
         trainer._print_round_result(win_rate=55.0)
         captured = capsys.readouterr()
-        assert "第 1 轨结果: cnn_v4.5 胜率 = 55.0% → 晋升" in captured.out
+        assert "第 1 轨结果: cnn_v4.100 胜率 = 55.0% → 晋升" in captured.out
 
     def test_round_result_stopped(self, trainer, capsys):
         """UT-6.3：每轮结束时打印结果摘要（意图 12：始终显示'晋升'）。"""
         trainer._round_num = 1
         trainer._print_round_result(win_rate=48.0)
         captured = capsys.readouterr()
-        assert "第 1 轨结果: cnn_v4.5 胜率 = 48.0% → 晋升" in captured.out
+        assert "第 1 轨结果: cnn_v4.100 胜率 = 48.0% → 晋升" in captured.out
 
     def test_detail_line_promoted(self, trainer, capsys):
         """UT-6.4：最终统计逐轮明细行格式（意图 12：不再显示晋升/停止标识）。"""
@@ -51,8 +51,8 @@ class TestLogOutput:
         trainer._print_final_report()
         captured = capsys.readouterr()
         expected = (
-            "第1轮: cnn_v4.4 胜 38 | cnn_v4.5 胜 55 | "
-            "平局 7 | cnn_v4.5 胜率 55.0%"
+            "第1轮: cnn_v4.99 胜 38 | cnn_v4.100 胜 55 | "
+            "平局 7 | cnn_v4.100 胜率 55.0%"
         )
         assert expected in captured.out
 
@@ -69,8 +69,8 @@ class TestLogOutput:
         trainer._print_final_report()
         captured = capsys.readouterr()
         expected = (
-            "第3轮: cnn_v4.4 胜 44 | cnn_v4.5 胜 47 | "
-            "平局 9 | cnn_v4.5 胜率 47.0%"
+            "第3轮: cnn_v4.99 胜 44 | cnn_v4.100 胜 47 | "
+            "平局 9 | cnn_v4.100 胜率 47.0%"
         )
         assert expected in captured.out
 
@@ -122,8 +122,8 @@ class TestFinalReport:
         assert "→ 晋升" not in captured.out
         assert "→ 停止" not in captured.out
         # 验证含胜场和平局
-        assert "cnn_v4.4 胜" in captured.out
-        assert "cnn_v4.5 胜" in captured.out
+        assert "cnn_v4.99 胜" in captured.out
+        assert "cnn_v4.100 胜" in captured.out
         assert "平局" in captured.out
 
     def test_report_stop_reason(self, trainer, capsys):
@@ -152,7 +152,7 @@ class TestFinalReport:
         trainer._print_final_report()
         captured = capsys.readouterr()
         assert "当前模型" in captured.out
-        assert "gen4" in captured.out
+        assert "gen99" in captured.out
         assert "cnn_v4.pth" in captured.out
         assert "经 1 轮进化" in captured.out
 
