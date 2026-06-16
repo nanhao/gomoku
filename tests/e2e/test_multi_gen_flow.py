@@ -11,6 +11,7 @@
 
 import os
 import sys
+import shutil
 import tempfile
 import unittest
 
@@ -35,17 +36,17 @@ from unittest.mock import patch
 # 必须存在，否则抛 ValueError。测试这里只验证属性/流程，不关心权重数值，
 # 因此用 fresh=True 构造的随机权重 state_dict 保存为占位文件即可。
 # ---------------------------------------------------------------------------
-def _setup_fake_gen_weights(gens):
-    """为指定代数列表在真实模型目录下创建占位 .pth 文件
+def _setup_fake_gen_weights(gens, base_dir):
+    """在指定临时目录下创建占位 .pth 文件
 
     Args:
         gens: 要创建的代数列表，如 [1, 2]
+        base_dir: 临时目录路径，gen 子目录将创建在此下
 
     Returns:
-        已创建的 .pth 绝对路径列表（tearDown 时按此清理）
+        已创建的 .pth 绝对路径列表
     """
-    base_dir = os.path.dirname(CNNV3Model.DEFAULT_MODEL_PATH)
-    filename = os.path.basename(CNNV3Model.DEFAULT_MODEL_PATH)
+    filename = "cnn_v3.pth"
     created = []
     for g in gens:
         gen_dir = os.path.join(base_dir, f"gen{g}")
@@ -58,15 +59,6 @@ def _setup_fake_gen_weights(gens):
     return created
 
 
-def _cleanup_fake_gen_weights(paths):
-    """清理 _setup_fake_gen_weights 创建的占位文件及空 gen 目录"""
-    for p in paths:
-        if os.path.exists(p):
-            os.remove(p)
-        gen_dir = os.path.dirname(p)
-        if os.path.isdir(gen_dir) and not os.listdir(gen_dir):
-            os.rmdir(gen_dir)
-
 
 # ---------------------------------------------------------------------------
 # 1. 从 spec 到模型实例的完整流程
@@ -75,10 +67,17 @@ class TestSpecToModelInstance(unittest.TestCase):
     """验证 get_model("cnn_v3.2") 端到端流程"""
 
     def setUp(self):
-        self._fake_pths = _setup_fake_gen_weights([1, 2])
+        self._tmp_dir = tempfile.mkdtemp(prefix="test_multi_gen_spec_")
+        self._patcher = patch.object(
+            CNNV3Model, 'DEFAULT_MODEL_PATH',
+            os.path.join(self._tmp_dir, "cnn_v3.pth")
+        )
+        self._patcher.start()
+        self._fake_pths = _setup_fake_gen_weights([1, 2], self._tmp_dir)
 
     def tearDown(self):
-        _cleanup_fake_gen_weights(self._fake_pths)
+        self._patcher.stop()
+        shutil.rmtree(self._tmp_dir, ignore_errors=True)
 
     def test_gen_attribute(self):
         """get_model("cnn_v3.2") → model.gen == 2"""
@@ -184,10 +183,17 @@ class TestCreateEngineMultiGen(unittest.TestCase):
     """验证 create_engine 多代模型端到端流程"""
 
     def setUp(self):
-        self._fake_pths = _setup_fake_gen_weights([1, 2])
+        self._tmp_dir = tempfile.mkdtemp(prefix="test_multi_gen_engine_")
+        self._patcher = patch.object(
+            CNNV3Model, 'DEFAULT_MODEL_PATH',
+            os.path.join(self._tmp_dir, "cnn_v3.pth")
+        )
+        self._patcher.start()
+        self._fake_pths = _setup_fake_gen_weights([1, 2], self._tmp_dir)
 
     def tearDown(self):
-        _cleanup_fake_gen_weights(self._fake_pths)
+        self._patcher.stop()
+        shutil.rmtree(self._tmp_dir, ignore_errors=True)
 
     def test_create_engine_with_valid_spec(self):
         """create_engine("cnn_v3.2") → 引擎模型的 full_name 为 "cnn_v3.2" """

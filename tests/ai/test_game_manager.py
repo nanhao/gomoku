@@ -28,10 +28,7 @@ class TestAIGameManager(unittest.TestCase):
     def setUp(self):
         """测试前准备"""
         # 创建测试用的存档目录
-        self.test_save_dir = "test_game_save"
-        if os.path.exists(self.test_save_dir):
-            shutil.rmtree(self.test_save_dir)
-        os.makedirs(self.test_save_dir)
+        self.test_save_dir = tempfile.mkdtemp(prefix="test_game_save_")
         
         # 创建 controller 和引擎
         self.controller = GomokuController(self.test_save_dir)
@@ -39,8 +36,7 @@ class TestAIGameManager(unittest.TestCase):
     
     def tearDown(self):
         """测试后清理"""
-        if os.path.exists(self.test_save_dir):
-            shutil.rmtree(self.test_save_dir)
+        shutil.rmtree(self.test_save_dir, ignore_errors=True)
     
     def test_init(self):
         """测试初始化"""
@@ -156,10 +152,7 @@ class TestAIGameManagerAIvsAI(unittest.TestCase):
     def setUp(self):
         """测试前准备"""
         self.test_save_dir = tempfile.mkdtemp(prefix="test_game_save_")
-        self.test_ai_data_dir = "test_ai_data_vs_ai"
-        
-        if os.path.exists(self.test_ai_data_dir):
-            shutil.rmtree(self.test_ai_data_dir)
+        self.test_ai_data_dir = tempfile.mkdtemp(prefix="test_ai_data_vs_ai_")
         
         # Patch GomokuController 使其使用临时目录，避免写入 game/save/
         self._patcher = patch(
@@ -172,8 +165,7 @@ class TestAIGameManagerAIvsAI(unittest.TestCase):
         """测试后清理"""
         self._patcher.stop()
         shutil.rmtree(self.test_save_dir, ignore_errors=True)
-        if os.path.exists(self.test_ai_data_dir):
-            shutil.rmtree(self.test_ai_data_dir)
+        shutil.rmtree(self.test_ai_data_dir, ignore_errors=True)
     
     def test_start_ai_vs_ai_single_game(self):
         """测试 AI 内战，1 局"""
@@ -279,10 +271,7 @@ class TestEndBoardDimension(unittest.TestCase):
     def setUp(self):
         """测试前准备"""
         self.test_save_dir = tempfile.mkdtemp(prefix="test_game_save_eb_")
-        self.test_ai_data_dir = "test_ai_data_end_board"
-        
-        if os.path.exists(self.test_ai_data_dir):
-            shutil.rmtree(self.test_ai_data_dir)
+        self.test_ai_data_dir = tempfile.mkdtemp(prefix="test_ai_data_end_board_")
         
         # Patch GomokuController 使其使用临时目录，避免写入 game/save/
         self._patcher = patch(
@@ -295,8 +284,7 @@ class TestEndBoardDimension(unittest.TestCase):
         """测试后清理"""
         self._patcher.stop()
         shutil.rmtree(self.test_save_dir, ignore_errors=True)
-        if os.path.exists(self.test_ai_data_dir):
-            shutil.rmtree(self.test_ai_data_dir)
+        shutil.rmtree(self.test_ai_data_dir, ignore_errors=True)
 
     def test_start_ai_vs_ai_end_board_dimension(self):
         """Bug M1: start_ai_vs_ai 保存的 end_board 应为 226 维"""
@@ -351,10 +339,7 @@ class TestGameIdConsistency(unittest.TestCase):
     def setUp(self):
         """测试前准备"""
         self.test_save_dir = tempfile.mkdtemp(prefix="test_game_save_id_")
-        self.test_ai_data_dir = "test_ai_data_id"
-        
-        if os.path.exists(self.test_ai_data_dir):
-            shutil.rmtree(self.test_ai_data_dir)
+        self.test_ai_data_dir = tempfile.mkdtemp(prefix="test_ai_data_id_")
         
         # Patch GomokuController 使其使用临时目录，避免写入 game/save/
         self._patcher = patch(
@@ -367,8 +352,7 @@ class TestGameIdConsistency(unittest.TestCase):
         """测试后清理"""
         self._patcher.stop()
         shutil.rmtree(self.test_save_dir, ignore_errors=True)
-        if os.path.exists(self.test_ai_data_dir):
-            shutil.rmtree(self.test_ai_data_dir)
+        shutil.rmtree(self.test_ai_data_dir, ignore_errors=True)
 
     def test_ai_vs_ai_random_uses_recorder_game_id(self):
         """Bug L3: start_ai_vs_ai_random 使用 recorder.current_game_id 而非 game_num"""
