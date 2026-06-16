@@ -14,6 +14,7 @@ gomoku/
 │   ├── ai_data/      # AI 对战记录数据
 │   ├── train_data/   # 训练样本数据
 │   └── merge_samples/# 合并后的训练样本
+├── visualization/    # 热力图等可视化算法（无 UI 依赖）
 ├── tools/            # 验收与辅助工具
 ├── tests/            # 测试脚本
 ├── design/           # 设计文档
@@ -124,7 +125,7 @@ python ai/create_samples.py --model <模型名称> --output <输出文件路径>
 ```bash
 # 示例
 # 默认模式（winner_path）：取获胜方每一步，启用 D4 增强 + 变异步过滤
-python ai/create_samples.py --model cnn_v3.1 --output ai/train_data/samples.json
+python ai/create_samples.py --model cnn_v3.1 --output ai\merge_samples\v4\path.json
 python ai/create_samples.py --model cnn_v3.1 --games 200 --output ai/train_data/samples.json
 
 # 禁用增强
@@ -157,6 +158,8 @@ python ai/train_main.py --model <模型指定> --train-from-dir <数据目录或
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
 | `--train-from-dir` | 训练数据目录或 `.json` 文件路径 | 必填 |
+| `--lr` | 初始学习率，必须为正数 | 0.001 |
+| `--fresh` | 从新模型开始训练（不加载已保存权重） | False |
 | `--epochs` | 训练迭代数 | 1000 |
 | `--batch-size` | 每批次样本数（启用 mini-batch） | 无（全量更新） |
 | `--shuffle` | 每轮打乱数据顺序（mini-batch 有效） | False |
@@ -340,7 +343,7 @@ python -m pytest tests/ -v -s
 python tests/run_tests.py
 ```
 
-> 覆盖全部 1594 个测试（自动发现，无需手工维护测试列表）
+> 覆盖全部 1558 个测试（自动发现，无需手工维护测试列表）
 >
 > 附加参数示例：
 > - `python -m pytest tests/ -q` —— 静默模式
