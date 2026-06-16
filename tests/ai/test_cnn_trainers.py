@@ -27,6 +27,8 @@ from ai.models.cnn_v2.trainer import CNNV2Trainer
 from ai.models.cnn_v2.model import CNNV2Model
 from ai.models.cnn_v3.trainer import CNNV3Trainer
 from ai.models.cnn_v3.model import CNNV3Model
+from ai.models.cnn_v4.trainer import CNNV4Trainer
+from ai.models.cnn_v4.model import CNNV4Model
 from ai.base_trainer import BaseTrainer
 
 
@@ -218,6 +220,13 @@ class TestCNNV3Trainer(CNNTrainerSharedMixin, unittest.TestCase):
     MODEL_CLS = CNNV3Model
     MODEL_NAME = "cnn_v3"
     DEFAULT_FILENAME = "cnn_v3.pth"
+
+
+class TestCNNV4Trainer(CNNTrainerSharedMixin, unittest.TestCase):
+    TRAINER_CLS = CNNV4Trainer
+    MODEL_CLS = CNNV4Model
+    MODEL_NAME = "cnn_v4"
+    DEFAULT_FILENAME = "cnn_v4.pth"
 
 
 if __name__ == '__main__':

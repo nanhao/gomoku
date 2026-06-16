@@ -69,6 +69,9 @@ MODEL_REGISTRY: dict[str, RegistryEntry] = {
     "cnn_v3": RegistryEntry(
         "ai.models.cnn_v3.model.CNNV3Model",
         "ai.models.cnn_v3.trainer.CNNV3Trainer", True),
+    "cnn_v4": RegistryEntry(
+        "ai.models.cnn_v4.model.CNNV4Model",
+        "ai.models.cnn_v4.trainer.CNNV4Trainer", True),
 }
 
 # 注册校验：模型名称禁止包含 '.'
