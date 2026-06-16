@@ -32,8 +32,8 @@ def _battle_stdout_line(gen5_wins, gen4_wins, draws):
     return (
         f"=== 对战结果 ===\n"
         f"总局数: {total}\n"
-        f"cnn_v3.4 胜: {gen4_wins} 局 ({gen4_rate:.1f}%)\n"
-        f"cnn_v3.5 胜: {gen5_wins} 局 ({gen5_rate:.1f}%)\n"
+        f"cnn_v4.4 胜: {gen4_wins} 局 ({gen4_rate:.1f}%)\n"
+        f"cnn_v4.5 胜: {gen5_wins} 局 ({gen5_rate:.1f}%)\n"
         f"平局: {draws} 局 ({draw_rate:.1f}%)\n"
     )
 
@@ -105,7 +105,7 @@ class TestFullIterationFlow:
         result = trainer.run()
 
         # ① gen4→gen5 被复制
-        gen5_path = os.path.join(temp_project, MODELS_DIR, f"gen{CHILD_GEN}", "cnn_v3.pth")
+        gen5_path = os.path.join(temp_project, MODELS_DIR, f"gen{CHILD_GEN}", "cnn_v4.pth")
         assert mock_run.called
 
         # ② 子进程按序调用且 cwd=project_root
@@ -273,7 +273,7 @@ class TestErrorHandling:
     def test_gen4_not_exists(self, temp_project):
         """IT-2.4：gen4 权重不存在时构造失败。"""
         gen4_path = os.path.join(
-            temp_project, MODELS_DIR, f"gen{PARENT_GEN}", "cnn_v3.pth"
+            temp_project, MODELS_DIR, f"gen{PARENT_GEN}", "cnn_v4.pth"
         )
         os.remove(gen4_path)
         with pytest.raises(FileNotFoundError):

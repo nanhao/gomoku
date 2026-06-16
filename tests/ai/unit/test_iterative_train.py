@@ -47,7 +47,7 @@ def trainer(temp_project):
 def _battle_stdout(gen4_wins=40, gen5_wins=55, draws=5):
     """构造 battle.py 标准输出文本（模拟最终统计行）。
 
-    包含逐局结果行和最终统计行，验证解析器能正确匹配 cnn_v3.5 统计行。
+    包含逐局结果行和最终统计行，验证解析器能正确匹配 cnn_v4.5 统计行。
     """
     total = gen4_wins + gen5_wins + draws
     gen4_rate = gen4_wins / total * 100 if total > 0 else 0.0
@@ -55,18 +55,18 @@ def _battle_stdout(gen4_wins=40, gen5_wins=55, draws=5):
     draw_rate = draws / total * 100 if total > 0 else 0.0
 
     lines = [
-        "开始 AI 对战: cnn_v3.4 vs cnn_v3.5, 共 100 局",
+        "开始 AI 对战: cnn_v4.4 vs cnn_v4.5, 共 100 局",
         "",
     ]
     for i in range(1, total + 1):
         # 添加逐局结果行（干扰测试）
-        lines.append(f"第 {i} 局: cnn_v3.4(黑) vs cnn_v3.5(白) -> 黑方胜")
+        lines.append(f"第 {i} 局: cnn_v4.4(黑) vs cnn_v4.5(白) -> 黑方胜")
     lines += [
         "",
         "=== 对战结果 ===",
         f"总局数: {total}",
-        f"cnn_v3.4 胜: {gen4_wins} 局 ({gen4_rate:.1f}%)",
-        f"cnn_v3.5 胜: {gen5_wins} 局 ({gen5_rate:.1f}%)",
+        f"cnn_v4.4 胜: {gen4_wins} 局 ({gen4_rate:.1f}%)",
+        f"cnn_v4.5 胜: {gen5_wins} 局 ({gen5_rate:.1f}%)",
         f"平局: {draws} 局 ({draw_rate:.1f}%)",
     ]
     return "\n".join(lines)
@@ -89,7 +89,7 @@ class TestConstructor:
     def test_gen4_not_exists_raises(self, temp_project):
         """UT-1.2：gen4 权重不存在时抛 FileNotFoundError。"""
         gen4_path = os.path.join(
-            temp_project, MODELS_DIR, f"gen{PARENT_GEN}", "cnn_v3.pth"
+            temp_project, MODELS_DIR, f"gen{PARENT_GEN}", "cnn_v4.pth"
         )
         os.remove(gen4_path)
         with pytest.raises(FileNotFoundError, match="gen4"):
@@ -106,7 +106,7 @@ class TestConstructor:
             os.path.dirname(os.path.dirname(os.path.dirname(
                 os.path.dirname(os.path.abspath(__file__))
             ))),
-            MODELS_DIR, f"gen{PARENT_GEN}", "cnn_v3.pth"
+            MODELS_DIR, f"gen{PARENT_GEN}", "cnn_v4.pth"
         )
         if os.path.isfile(gen4_path):
             trainer = IterativeTrainer()
@@ -149,11 +149,11 @@ class TestModelFileOperations:
 
         trainer._init_model()
 
-        gen5_path = os.path.join(gen5_dir, "cnn_v3.pth")
+        gen5_path = os.path.join(gen5_dir, "cnn_v4.pth")
         assert os.path.isfile(gen5_path)
 
         # 校验内容一致（md5）
-        gen4_path = os.path.join(temp_project, MODELS_DIR, f"gen{PARENT_GEN}", "cnn_v3.pth")
+        gen4_path = os.path.join(temp_project, MODELS_DIR, f"gen{PARENT_GEN}", "cnn_v4.pth")
         with open(gen4_path, 'rb') as f:
             gen4_content = f.read()
         with open(gen5_path, 'rb') as f:
@@ -164,7 +164,7 @@ class TestModelFileOperations:
         """UT-2.2：gen5 目录已存在时直接覆盖。"""
         gen5_dir = os.path.join(temp_project, MODELS_DIR, f"gen{CHILD_GEN}")
         os.makedirs(gen5_dir, exist_ok=True)
-        gen5_path = os.path.join(gen5_dir, "cnn_v3.pth")
+        gen5_path = os.path.join(gen5_dir, "cnn_v4.pth")
         # 写入不同的内容
         with open(gen5_path, 'w') as f:
             f.write("old_different_content")
@@ -172,7 +172,7 @@ class TestModelFileOperations:
         trainer._init_model()
 
         # 校验内容已被覆盖为 gen4 的副本
-        gen4_path = os.path.join(temp_project, MODELS_DIR, f"gen{PARENT_GEN}", "cnn_v3.pth")
+        gen4_path = os.path.join(temp_project, MODELS_DIR, f"gen{PARENT_GEN}", "cnn_v4.pth")
         with open(gen4_path, 'rb') as f:
             gen4_content = f.read()
         with open(gen5_path, 'rb') as f:
@@ -188,8 +188,8 @@ class TestModelFileOperations:
         assert hasattr(trainer, '_promote'), (
             "意图 12 需要无条件晋升，_promote() 应存在"
         )
-        gen4_path = os.path.join(temp_project, MODELS_DIR, f"gen{PARENT_GEN}", "cnn_v3.pth")
-        gen5_path = os.path.join(temp_project, MODELS_DIR, f"gen{CHILD_GEN}", "cnn_v3.pth")
+        gen4_path = os.path.join(temp_project, MODELS_DIR, f"gen{PARENT_GEN}", "cnn_v4.pth")
+        gen5_path = os.path.join(temp_project, MODELS_DIR, f"gen{CHILD_GEN}", "cnn_v4.pth")
         os.makedirs(os.path.dirname(gen5_path), exist_ok=True)
         with open(gen5_path, 'wb') as f:
             f.write(b"gen5_new_trained_content")
@@ -234,7 +234,7 @@ class TestSubprocessArgs:
         # 验证关键参数
         assert "create_samples.py" in " ".join(call_args)
         assert "--model" in call_args
-        assert "cnn_v3.4" in call_args
+        assert "cnn_v4.4" in call_args
         assert "--sample_games" in call_args
         assert "500" in call_args
         # 意图 12：不应包含 --mode 和 --temp-side
@@ -245,7 +245,7 @@ class TestSubprocessArgs:
 
     @patch('subprocess.run')
     def test_train_main_args(self, mock_run, trainer):
-        """UT-3.2：train_main.py 调用参数正确（意图 12：epochs 改为 100）。"""
+        """UT-3.2：train_main.py 调用参数正确（意图 12：epochs 改为 300）。"""
         mock_run.return_value = _make_completed_process(returncode=0, stdout="ok")
 
         trainer._train_model()
@@ -254,11 +254,11 @@ class TestSubprocessArgs:
         call_args = mock_run.call_args[0][0]
         assert "train_main.py" in " ".join(call_args)
         assert "--model" in call_args
-        assert "cnn_v3.5" in call_args
+        assert "cnn_v4.5" in call_args
         assert "--train-from-dir" in call_args
-        assert f"path{trainer._round_num}.json" in " ".join(call_args)
+        assert trainer._sample_output_dir in " ".join(call_args)
         assert "--epochs" in call_args
-        assert "100" in call_args
+        assert "300" in call_args
         assert "--batch-size" in call_args
         assert "4096" in call_args
         assert "--shuffle" in call_args
@@ -276,9 +276,9 @@ class TestSubprocessArgs:
         call_args = mock_run.call_args[0][0]
         assert "battle.py" in " ".join(call_args)
         assert "--ai1" in call_args
-        assert "cnn_v3.4" in call_args
+        assert "cnn_v4.4" in call_args
         assert "--ai2" in call_args
-        assert "cnn_v3.5" in call_args
+        assert "cnn_v4.5" in call_args
         assert "--games" in call_args
         assert "100" in call_args
 
@@ -347,7 +347,7 @@ class TestWinRateParsing:
     """UT-4：battle.py 输出中的胜率解析。"""
 
     def test_parse_normal_48_percent(self, trainer):
-        """UT-4.1：正常解析 cnn_v3.5 胜率 48.0%。"""
+        """UT-4.1：正常解析 cnn_v4.5 胜率 48.0%。"""
         stdout = _battle_stdout(gen4_wins=42, gen5_wins=48, draws=10)
         result = trainer._parse_battle_output(stdout)
         assert result["gen5_win_rate"] == 48.0
@@ -382,21 +382,21 @@ class TestWinRateParsing:
 
     def test_parse_no_match_raises(self, trainer):
         """UT-4.5：无匹配行时抛 ValueError。"""
-        stdout = "cnn_v3.5 胜: 无效格式"
+        stdout = "cnn_v4.5 胜: 无效格式"
         with pytest.raises(ValueError, match="胜率"):
             trainer._parse_battle_output(stdout)
 
     def test_parse_multi_decimal(self, trainer):
         """UT-4.6：胜率含多位小数。"""
-        stdout = "cnn_v3.5 胜: 48 局 (48.05%)"
+        stdout = "cnn_v4.5 胜: 48 局 (48.05%)"
         result = trainer._parse_battle_output(stdout)
         assert result["gen5_win_rate"] == 48.05
 
     def test_parse_not_confuse_cnn_v34(self, trainer):
-        """UT-4.7：含 cnn_v3.4 干扰行时正确匹配 cnn_v3.5。"""
+        """UT-4.7：含 cnn_v4.4 干扰行时正确匹配 cnn_v4.5。"""
         stdout = (
-            "cnn_v3.4 胜: 52 局 (52.0%)\n"
-            "cnn_v3.5 胜: 48 局 (48.0%)\n"
+            "cnn_v4.4 胜: 52 局 (52.0%)\n"
+            "cnn_v4.5 胜: 48 局 (48.0%)\n"
         )
         result = trainer._parse_battle_output(stdout)
         assert result["gen5_win_rate"] == 48.0
@@ -405,7 +405,7 @@ class TestWinRateParsing:
         """UT-4.8：stdout 含进度等无关行时仍正确解析。"""
         stdout = (
             "进度: 样本局 100/500\n"
-            "加载模型: cnn_v3.5\n"
+            "加载模型: cnn_v4.5\n"
             "训练完成\n"
             + _battle_stdout(gen4_wins=40, gen5_wins=55, draws=5)
         )

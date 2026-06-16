@@ -14,7 +14,7 @@ from ai.iterative_train import MODELS_DIR, PARENT_GEN
 
 @pytest.fixture
 def temp_project():
-    """创建临时项目目录，包含 gen4/cnn_v3.pth 假文件和必要子目录。
+    """创建临时项目目录，包含 gen4/cnn_v4.pth 假文件和必要子目录。
 
     所有文件系统副作用隔离在临时目录中，测试结束自动清理。
     """
@@ -22,7 +22,7 @@ def temp_project():
     # 创建模型目录和假权重文件
     gen4_dir = os.path.join(tmp, MODELS_DIR, f"gen{PARENT_GEN}")
     os.makedirs(gen4_dir, exist_ok=True)
-    gen4_path = os.path.join(gen4_dir, "cnn_v3.pth")
+    gen4_path = os.path.join(gen4_dir, "cnn_v4.pth")
     with open(gen4_path, 'w') as f:
         f.write("fake_model_weights")
 

@@ -1,7 +1,7 @@
-"""cnn_v3 迭代进化训练脚本 — 串联 create_samples / train_main / battle 为自动化迭代闭环。
+"""cnn_v4 迭代进化训练脚本 — 串联 create_samples / train_main / battle 为自动化迭代闭环。
 
 用法: python ai/iterative_train.py
-前置: ai/models/cnn_v3/gen4/cnn_v3.pth 必须存在；不可多实例并发（.iterative_lock 保护）。
+前置: ai/models/cnn_v4/gen4/cnn_v4.pth 必须存在；不可多实例并发（.iterative_lock 保护）。
 v1.0 所有参数硬编码，不做命令行参数化。
 """
 
@@ -15,14 +15,14 @@ from pathlib import Path
 from typing import Optional
 
 # --- 硬编码常量（v1.0 不可配置）---
-BASE_MODEL_NAME = "cnn_v3"
+BASE_MODEL_NAME = "cnn_v4"
 PARENT_GEN = 4          # 父代编号（基线模型）
 CHILD_GEN = 5           # 子代编号（待训练模型）
-MODELS_DIR = "ai/models/cnn_v3"          # 权重目录（相对于 project_root）
-SAMPLE_OUTPUT_DIR = "ai/merge_samples/v4"  # 样本输出目录
+MODELS_DIR = "ai/models/cnn_v4"          # 权重目录（相对于 project_root）
+SAMPLE_OUTPUT_DIR = "ai/merge_samples2/v5"  # 样本输出目录
 SAMPLE_GAMES = 500      # 目标样本局数
 BATTLE_GAMES = 100      # 对战局数
-TRAIN_EPOCHS = 100      # 训练 epoch 数（意图 12：从 1 改为 100）
+TRAIN_EPOCHS = 300      # 训练 epoch 数（意图 12：从 100 改为 300）
 TRAIN_BATCH_SIZE = 4096 # 训练 batch size
 PYTHON_EXECUTABLE = sys.executable  # 子进程 Python 解释器
 
@@ -30,7 +30,7 @@ PYTHON_EXECUTABLE = sys.executable  # 子进程 Python 解释器
 class IterativeTrainer:
     """迭代进化训练编排器。
 
-    管理 cnn_v3 的迭代进化流程：复制权重→生成样本→训练→对战→无条件晋升→循环。
+    管理 cnn_v4 的迭代进化流程：复制权重→生成样本→训练→对战→无条件晋升→循环。
     公共接口：__init__(project_root=None) 校验前置条件；run()->dict 执行循环。
     """
 
@@ -50,12 +50,12 @@ class IterativeTrainer:
 
         # 构建关键路径
         self._gen4_path = os.path.join(
-            self.project_root, MODELS_DIR, f"gen{PARENT_GEN}", "cnn_v3.pth"
+            self.project_root, MODELS_DIR, f"gen{PARENT_GEN}", "cnn_v4.pth"
         )
         self._gen5_dir = os.path.join(
             self.project_root, MODELS_DIR, f"gen{CHILD_GEN}"
         )
-        self._gen5_path = os.path.join(self._gen5_dir, "cnn_v3.pth")
+        self._gen5_path = os.path.join(self._gen5_dir, "cnn_v4.pth")
         self._lock_path = os.path.join(
             self.project_root, MODELS_DIR, ".iterative_lock"
         )
@@ -120,12 +120,13 @@ class IterativeTrainer:
                 gen5_wins = stats["gen5_wins"]
                 draws = stats["draws"]
 
-                # 打印对战结果（cnn_v3.4 胜场、cnn_v3.5 胜场、平局数、cnn_v3.5 胜率）
+                # 打印对战结果（cnn_v4.4 胜场、cnn_v4.5 胜场、平局数、cnn_v4.5 胜率、轮次号）
                 print(
-                    f"cnn_v3.4 胜 {gen4_wins} | "
-                    f"cnn_v3.5 胜 {gen5_wins} | "
+                    f"cnn_v4.4 胜 {gen4_wins} | "
+                    f"cnn_v4.5 胜 {gen5_wins} | "
                     f"平局 {draws} | "
-                    f"胜率 {win_rate:.1f}%"
+                    f"胜率 {win_rate:.1f}% | "
+                    f"i={self._round_num}"
                 )
 
                 # 步骤 h: 记录本轮统计
@@ -238,7 +239,7 @@ class IterativeTrainer:
         return result
 
     def _generate_samples(self) -> str:
-        """调用 create_samples.py（cnn_v3.4 自对弈，无 --mode / --temp-side）生成训练样本。
+        """调用 create_samples.py（cnn_v4.4 自对弈）生成训练样本。
 
         Returns: 样本文件路径。Raises: RuntimeError（子进程非零退出码）。
         """
@@ -251,7 +252,7 @@ class IterativeTrainer:
         cmd = [
             PYTHON_EXECUTABLE,
             "ai/create_samples.py",
-            "--model", "cnn_v3.4",
+            "--model", "cnn_v4.4",
             "--sample_games", str(SAMPLE_GAMES),
             "--output", sample_path,
         ]
@@ -295,19 +296,17 @@ class IterativeTrainer:
             raise RuntimeError(f"空样本: {sample_path} 包含 0 条样本")
 
     def _train_model(self):
-        """调用 train_main.py 训练 cnn_v3.5（100 epochs, batch 4096, shuffle）。
+        """调用 train_main.py 训练 cnn_v4.5（300 epochs, batch 4096, shuffle）。
+
+        train-from-dir 指向样本目录，train_main.py 会加载目录下所有 JSON 样本文件。
 
         Raises: RuntimeError（子进程非零退出码）。
         """
-        sample_path = os.path.join(
-            self._sample_output_dir, f"path{self._round_num}.json"
-        )
-
         cmd = [
             PYTHON_EXECUTABLE,
             "ai/train_main.py",
-            "--model", "cnn_v3.5",
-            "--train-from-dir", sample_path,
+            "--model", "cnn_v4.5",
+            "--train-from-dir", self._sample_output_dir,
             "--epochs", str(TRAIN_EPOCHS),
             "--batch-size", str(TRAIN_BATCH_SIZE),
             "--shuffle",
@@ -325,8 +324,8 @@ class IterativeTrainer:
         cmd = [
             PYTHON_EXECUTABLE,
             "ai/battle.py",
-            "--ai1", "cnn_v3.4",
-            "--ai2", "cnn_v3.5",
+            "--ai1", "cnn_v4.4",
+            "--ai2", "cnn_v4.5",
             "--games", str(BATTLE_GAMES),
         ]
 
@@ -345,9 +344,9 @@ class IterativeTrainer:
         Returns: {"gen4_wins", "gen5_wins", "draws", "gen5_win_rate"}。
         Raises: ValueError（无法解析 cnn_v3.5 胜率）。
         """
-        # 解析 cnn_v3.5 胜场和胜率（优先匹配，此行为必需的解析目标）
+        # 解析 cnn_v4.5 胜场和胜率（优先匹配，此行为必需的解析目标）
         gen5_match = re.search(
-            r'cnn_v3\.5 胜:\s*(\d+)\s*局\s*\(([\d.]+)%\)', stdout
+            r'cnn_v4\.5 胜:\s*(\d+)\s*局\s*\(([\d.]+)%\)', stdout
         )
         if not gen5_match:
             raise ValueError(
@@ -357,9 +356,9 @@ class IterativeTrainer:
         gen5_wins = int(gen5_match.group(1))
         gen5_win_rate = float(gen5_match.group(2))
 
-        # 解析 cnn_v3.4 胜场（可为 0）
+        # 解析 cnn_v4.4 胜场（可为 0）
         gen4_match = re.search(
-            r'cnn_v3\.4 胜:\s*(\d+)\s*局', stdout
+            r'cnn_v4\.4 胜:\s*(\d+)\s*局', stdout
         )
         gen4_wins = int(gen4_match.group(1)) if gen4_match else 0
 
@@ -395,7 +394,7 @@ class IterativeTrainer:
         last = self._rounds[-1]
         return (
             f"第{last['round_num']}轮 "
-            f"cnn_v3.5 胜率 {last['gen5_win_rate']:.1f}%，"
+            f"cnn_v4.5 胜率 {last['gen5_win_rate']:.1f}%，"
             f"{reason}"
         )
 
@@ -407,7 +406,7 @@ class IterativeTrainer:
         """打印轮次结果摘要：第 {n} 轨结果: cnn_v3.5 胜率 = {r}% → 晋升"""
         print(
             f"第 {self._round_num} 轨结果: "
-            f"cnn_v3.5 胜率 = {win_rate:.1f}% → 晋升"
+            f"cnn_v4.5 胜率 = {win_rate:.1f}% → 晋升"
         )
 
     def _print_final_report(self):
@@ -427,10 +426,10 @@ class IterativeTrainer:
         for r in self._rounds:
             print(
                 f"  第{r['round_num']}轮: "
-                f"cnn_v3.4 胜 {r['gen4_wins']} | "
-                f"cnn_v3.5 胜 {r['gen5_wins']} | "
+                f"cnn_v4.4 胜 {r['gen4_wins']} | "
+                f"cnn_v4.5 胜 {r['gen5_wins']} | "
                 f"平局 {r['draws']} | "
-                f"cnn_v3.5 胜率 {r['gen5_win_rate']:.1f}%"
+                f"cnn_v4.5 胜率 {r['gen5_win_rate']:.1f}%"
             )
 
         # 停止原因（通过 _build_stop_reason() 共用逻辑）
@@ -438,7 +437,7 @@ class IterativeTrainer:
         print(f"停止原因: {stop_reason}")
 
         print(
-            f"当前模型: gen{PARENT_GEN}/cnn_v3.pth"
+            f"当前模型: gen{PARENT_GEN}/cnn_v4.pth"
             f"（经 {total_iterations} 轮进化）"
         )
 
