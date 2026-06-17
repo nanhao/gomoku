@@ -6,6 +6,7 @@
 import sys
 import os
 import time
+import tempfile
 
 # 添加项目根目录到路径
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -25,8 +26,7 @@ class TestGUIHelper(unittest.TestCase):
 
     def setUp(self):
         """测试前准备"""
-        self.test_save_dir = os.path.join(os.path.dirname(__file__), 'primary', '_test_saves')
-        os.makedirs(self.test_save_dir, exist_ok=True)
+        self.test_save_dir = tempfile.mkdtemp(prefix="test_gui_helper_")
 
         self.controller = GomokuController()
         self.controller.save = GomokuSave(self.test_save_dir)

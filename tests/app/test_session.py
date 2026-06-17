@@ -8,6 +8,9 @@
 
 import sys
 import os
+import tempfile
+import atexit
+import shutil
 
 import pytest
 
@@ -20,11 +23,17 @@ from game.save import GomokuSave
 from app import GameSession
 
 
+_temp_dirs = []
+
+def _cleanup_temp_dirs():
+    for d in _temp_dirs:
+        shutil.rmtree(d, ignore_errors=True)
+
+atexit.register(_cleanup_temp_dirs)
+
 def _make_controller():
-    test_save_dir = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "_test_saves"
-    )
-    os.makedirs(test_save_dir, exist_ok=True)
+    test_save_dir = tempfile.mkdtemp(prefix="test_session_")
+    _temp_dirs.append(test_save_dir)
     c = GomokuController()
     c.save = GomokuSave(test_save_dir)
     return c
