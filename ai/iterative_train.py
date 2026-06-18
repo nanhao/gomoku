@@ -1,82 +1,93 @@
-"""cnn_v4 迭代进化训练脚本 — 串联 create_samples / train_main / battle 为自动化迭代闭环。
+"""迭代进化训练脚本 — 串联 create_samples / train_main / battle 为自动化迭代闭环。
 
-用法: python ai/iterative_train.py
-前置: ai/models/cnn_v4/gen99/cnn_v4.pth 必须存在；不可多实例并发（.iterative_lock 保护）。
-v1.0 所有参数硬编码，不做命令行参数化。
+用法: python ai/iterative_train.py --ai1 cnn_v4.99 --ai2 cnn_v4.100 --sample_dir ai/merge_samples2
+前置: ai1 对应的 .pth 文件必须存在；不可多实例并发（.iterative_lock 保护）。
+意图 13：模型标识和样本目录通过 CLI 参数指定，不再硬编码。
 """
 
-import sys
-import os
-import re
-import json
-import shutil
-import subprocess
+import sys, os, re, json, shutil, subprocess, argparse
 from pathlib import Path
 from typing import Optional
 
-# --- 硬编码常量（v1.0 不可配置）---
-BASE_MODEL_NAME = "cnn_v4"
-PARENT_GEN = 99          # 父代编号（基线模型）
-CHILD_GEN = 100         # 子代编号（待训练模型）
-MODELS_DIR = "ai/models/cnn_v4"          # 权重目录（相对于 project_root）
-SAMPLE_OUTPUT_DIR = "ai/merge_samples2/v100"  # 样本输出目录
-SAMPLE_GAMES = 500      # 目标样本局数
-BATTLE_GAMES = 100      # 对战局数
-TRAIN_EPOCHS = 300      # 训练 epoch 数（意图 12：从 100 改为 300）
-TRAIN_BATCH_SIZE = 4096 # 训练 batch size
-PYTHON_EXECUTABLE = sys.executable  # 子进程 Python 解释器
+# --- 模块级常量（意图 13：保留）---
+SAMPLE_GAMES = 500
+BATTLE_GAMES = 100
+TRAIN_EPOCHS = 300
+TRAIN_BATCH_SIZE = 4096
+TEMP_MOVES = 2
+TEMPERATURE = 2
+PYTHON_EXECUTABLE = sys.executable
 
 
 class IterativeTrainer:
     """迭代进化训练编排器。
 
-    管理 cnn_v4 的迭代进化流程：复制权重→生成样本→训练→对战→无条件晋升→循环。
-    公共接口：__init__(project_root=None) 校验前置条件；run()->dict 执行循环。
+    管理模型的迭代进化流程：复制权重→生成样本→训练→对战→无条件晋升→循环。
+    意图 13：ai1/ai2 为模型 spec（如 "cnn_v4.99"），sample_dir 为样本输出目录基路径。
     """
 
-    def __init__(self, project_root: Optional[str] = None):
-        """校验前置条件：gen4 权重存在、锁文件不存在。
+    def __init__(self, ai1: str, ai2: str, sample_dir: str,
+                 project_root: Optional[str] = None):
+        """解析模型 spec、计算路径并校验前置条件。
 
         Args:
-            project_root: 项目根目录。None 时自动推导为 Path(__file__).parent.parent。
+            ai1: 父代模型 spec，如 "cnn_v4.99"。格式为 模型名.代数。
+            ai2: 子代模型 spec，如 "cnn_v4.100"。
+            sample_dir: 样本输出目录基路径，如 "ai/merge_samples2"。
+            project_root: 项目根目录。None 时自动推导。
+
         Raises:
-            FileNotFoundError: gen99/cnn_v4.pth 不存在。
+            ValueError: ai1 与 ai2 模型名不一致。
+            FileNotFoundError: ai1 的 .pth 文件不存在。
             RuntimeError: 锁文件存在（多实例并发）。
         """
-        # 推导项目根目录
+        self._ai1 = ai1
+        self._ai2 = ai2
+
+        # 解析 spec：rsplit(".", 1) 仅分割最右侧点号
+        self._model_name, gen_str1 = ai1.rsplit(".", 1)
+        self._gen_of_ai1 = int(gen_str1)
+        name2, gen_str2 = ai2.rsplit(".", 1)
+        self._gen_of_ai2 = int(gen_str2)
+
+        # 校验模型名一致
+        if self._model_name != name2:
+            raise ValueError(
+                f"--ai1 和 --ai2 的模型名必须一致，"
+                f"当前: {self._model_name} vs {name2}"
+            )
+
         if project_root is None:
             project_root = str(Path(__file__).resolve().parent.parent)
         self.project_root = project_root
 
-        # 构建关键路径
-        self._gen4_path = os.path.join(
-            self.project_root, MODELS_DIR, f"gen{PARENT_GEN}", "cnn_v4.pth"
+        # 动态计算路径: ai/models/{model_name}/gen{gen}/{model_name}.pth
+        models_base = os.path.join(
+            self.project_root, "ai", "models", self._model_name
         )
-        self._gen5_dir = os.path.join(
-            self.project_root, MODELS_DIR, f"gen{CHILD_GEN}"
+        self._ai1_path = os.path.join(
+            models_base, f"gen{self._gen_of_ai1}", f"{self._model_name}.pth"
         )
-        self._gen5_path = os.path.join(self._gen5_dir, "cnn_v4.pth")
-        self._lock_path = os.path.join(
-            self.project_root, MODELS_DIR, ".iterative_lock"
+        self._ai2_dir = os.path.join(models_base, f"gen{self._gen_of_ai2}")
+        self._ai2_path = os.path.join(
+            self._ai2_dir, f"{self._model_name}.pth"
         )
+        self._lock_path = os.path.join(models_base, ".iterative_lock")
         self._sample_output_dir = os.path.join(
-            self.project_root, SAMPLE_OUTPUT_DIR
+            self.project_root, sample_dir, f"v{self._gen_of_ai2}"
         )
 
-        # 前置校验：gen4 权重存在
-        if not os.path.isfile(self._gen4_path):
+        # 前置校验
+        if not os.path.isfile(self._ai1_path):
             raise FileNotFoundError(
-                f"gen{PARENT_GEN} 权重文件不存在: {self._gen4_path}"
+                f"{self._ai1} 权重文件不存在: {self._ai1_path}"
             )
-
-        # 前置校验：锁文件不存在（防止多实例并发）
         if os.path.isfile(self._lock_path):
             raise RuntimeError(
                 f"检测到锁文件 {self._lock_path}，"
                 f"可能有另一个迭代训练实例正在运行"
             )
 
-        # 内部状态
         self._round_num = 1
         self._rounds: list = []
 
@@ -85,10 +96,9 @@ class IterativeTrainer:
     # ============================================================
 
     def run(self) -> dict:
-        """执行迭代循环：初始化→生成样本→校验→训练→对战→晋升→继续循环。
+        """执行迭代循环：初始化→生成样本→校验→训练→对战→晋升→循环。
 
-        Returns: 统计字典（total_iterations, final_round, rounds, stop_reason, final_model_path）。
-        KeyboardInterrupt 时返回已完成轮次的统计（正常返回，不抛异常）。
+        Returns: 统计字典。KeyboardInterrupt 时正常返回已完成轮次统计。
         """
         # 创建锁文件
         self._create_lock()
@@ -98,7 +108,7 @@ class IterativeTrainer:
                 # 步骤 a: 打印轮次头
                 self._print_round_header()
 
-                # 步骤 b: 模型初始化（copy gen4 → gen5）
+                # 步骤 b: 模型初始化（copy ai1 → ai2）
                 self._init_model()
 
                 # 步骤 c: 样本生成
@@ -120,10 +130,10 @@ class IterativeTrainer:
                 gen5_wins = stats["gen5_wins"]
                 draws = stats["draws"]
 
-                # 打印对战结果（cnn_v4.99 胜场、cnn_v4.100 胜场、平局数、cnn_v4.100 胜率、轮次号）
+                # 打印对战结果（ai1 胜场、ai2 胜场、平局数、ai2 胜率、轮次号）
                 print(
-                    f"cnn_v4.99 胜 {gen4_wins} | "
-                    f"cnn_v4.100 胜 {gen5_wins} | "
+                    f"{self._ai1} 胜 {gen4_wins} | "
+                    f"{self._ai2} 胜 {gen5_wins} | "
                     f"平局 {draws} | "
                     f"胜率 {win_rate:.1f}% | "
                     f"i={self._round_num}"
@@ -139,7 +149,7 @@ class IterativeTrainer:
                     "promoted": True,
                 }
 
-                # 步骤 i: 无条件晋升并继续循环（意图 12：不做胜率判定，始终 mv gen5→gen4）
+                # 步骤 i: 无条件晋升并继续循环（意图 12：不做胜率判定，始终 mv ai2→ai1）
                 self._promote()
                 self._rounds.append(round_record)
                 self._print_round_result(win_rate)
@@ -161,13 +171,7 @@ class IterativeTrainer:
     # ============================================================
 
     def _create_lock(self):
-        """创建锁文件（原子操作，写入当前 PID），防多实例并发运行。
-
-        使用 O_CREAT | O_EXCL 确保原子性，消除 __init__ 检查与创建之间的 TOCTOU 竞态窗口。
-
-        Raises:
-            RuntimeError: 锁文件已存在（多实例并发）。
-        """
+        """创建锁文件（原子操作），防多实例并发。Raises: RuntimeError。"""
         try:
             fd = os.open(self._lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             with os.fdopen(fd, 'w', encoding='utf-8') as f:
@@ -179,48 +183,38 @@ class IterativeTrainer:
             )
 
     def _remove_lock(self):
-        """删除锁文件（幂等操作）。"""
+        """删除锁文件（幂等）。"""
         if os.path.isfile(self._lock_path):
             os.remove(self._lock_path)
 
     def _init_model(self):
-        """复制 gen4 权重 → gen5。若 gen5/ 不存在则自动创建。"""
-        os.makedirs(self._gen5_dir, exist_ok=True)
-        shutil.copy2(self._gen4_path, self._gen5_path)
+        """复制 ai1 权重 → ai2。若 ai2 目录不存在则自动创建。"""
+        os.makedirs(self._ai2_dir, exist_ok=True)
+        shutil.copy2(self._ai1_path, self._ai2_path)
 
     def _ensure_sample_output_dir(self):
-        """确保样本输出目录存在（不存在则自动创建）。"""
+        """确保样本输出目录存在（自动创建）。"""
         os.makedirs(self._sample_output_dir, exist_ok=True)
 
     def _promote(self):
-        """无条件晋升：mv gen5 → gen4（copy2 + remove）。
+        """无条件晋升：mv ai2 → ai1（copy2 + remove）。
 
-        意图 12：不做胜率判定，每轮结束后始终以 gen5 覆盖 gen4。
-        这样下一轮 cp gen4→gen5 时起点为进化后的模型。
+        意图 12：不做胜率判定，每轮结束后始终以 ai2 覆盖 ai1。
+        这样下一轮 cp ai1→ai2 时起点为进化后的模型。
 
-        copy2 失败时 gen4/gen5 均保留；copy2 成功后 remove 失败时 gen4 已更新、gen5 残留。
+        copy2 失败时 ai1/ai2 均保留；copy2 成功后 remove 失败时 ai1 已更新、ai2 残留。
         """
-        shutil.copy2(self._gen5_path, self._gen4_path)
-        os.remove(self._gen5_path)
+        shutil.copy2(self._ai2_path, self._ai1_path)
+        os.remove(self._ai2_path)
 
     # ============================================================
     # 内部方法：子进程调用
     # ============================================================
 
     def _run_subprocess(self, cmd: list) -> subprocess.CompletedProcess:
-        """执行子进程（统一封装公共参数）。
+        """执行子进程（统一封装 cwd/project_root、encoding=utf-8 等公共参数）。
 
-        所有子进程统一使用 cwd=project_root、capture_output=True、
-        encoding='utf-8'、PYTHONIOENCODING=utf-8，避免重复代码。
-
-        Args:
-            cmd: 命令行参数列表。
-
-        Returns:
-            subprocess.CompletedProcess 结果对象。
-
-        Raises:
-            RuntimeError: 子进程返回非零退出码。
+        Raises: RuntimeError（非零退出码）。
         """
         result = subprocess.run(
             cmd,
@@ -239,9 +233,9 @@ class IterativeTrainer:
         return result
 
     def _generate_samples(self) -> str:
-        """调用 create_samples.py（cnn_v4.99 自对弈）生成训练样本。
+        """调用 create_samples.py（ai1 自对弈）生成训练样本。
 
-        Returns: 样本文件路径。Raises: RuntimeError（子进程非零退出码）。
+        Returns: 样本文件路径。Raises: RuntimeError。
         """
         self._ensure_sample_output_dir()
 
@@ -252,7 +246,7 @@ class IterativeTrainer:
         cmd = [
             PYTHON_EXECUTABLE,
             "ai/create_samples.py",
-            "--model", "cnn_v4.99",
+            "--model", self._ai1,
             "--sample_games", str(SAMPLE_GAMES),
             "--output", sample_path,
         ]
@@ -272,10 +266,7 @@ class IterativeTrainer:
         return sample_path
 
     def _validate_samples(self, sample_path: str):
-        """校验样本文件：存在性、JSON 解析、数组类型、非空。
-
-        Raises: RuntimeError（文件不存在/JSON 解析失败/非数组/空数组）。
-        """
+        """校验样本文件：存在性、JSON 解析、数组类型、非空。Raises: RuntimeError。"""
         if not os.path.isfile(sample_path):
             raise RuntimeError(f"样本文件不存在: {sample_path}")
 
@@ -296,16 +287,11 @@ class IterativeTrainer:
             raise RuntimeError(f"空样本: {sample_path} 包含 0 条样本")
 
     def _train_model(self):
-        """调用 train_main.py 训练 cnn_v4.100（300 epochs, batch 4096, shuffle）。
-
-        train-from-dir 指向样本目录，train_main.py 会加载目录下所有 JSON 样本文件。
-
-        Raises: RuntimeError（子进程非零退出码）。
-        """
+        """调用 train_main.py 训练 ai2。Raises: RuntimeError。"""
         cmd = [
             PYTHON_EXECUTABLE,
             "ai/train_main.py",
-            "--model", "cnn_v4.100",
+            "--model", self._ai2,
             "--train-from-dir", self._sample_output_dir,
             "--epochs", str(TRAIN_EPOCHS),
             "--batch-size", str(TRAIN_BATCH_SIZE),
@@ -316,18 +302,14 @@ class IterativeTrainer:
         print("训练完成")
 
     def _run_battle(self) -> str:
-        """调用 battle.py 执行 cnn_v4.99 vs cnn_v4.100 对战。
-
-        Returns: battle.py 标准输出（含逐局结果和最终统计）。
-        Raises: RuntimeError（子进程非零退出码）。
-        """
+        """调用 battle.py 执行 ai1 vs ai2 对战。Returns: stdout。Raises: RuntimeError。"""
         cmd = [
             PYTHON_EXECUTABLE,
             "ai/battle.py",
-            "--ai1", "cnn_v4.99",
-            "--ai2", "cnn_v4.100",
-            "--temp-moves", "2",
-            "--temperature", "2",
+            "--ai1", self._ai1,
+            "--ai2", self._ai2,
+            "--temp-moves", str(TEMP_MOVES),
+            "--temperature", str(TEMPERATURE),
             "--games", str(BATTLE_GAMES),
         ]
 
@@ -339,28 +321,27 @@ class IterativeTrainer:
     # ============================================================
 
     def _parse_battle_output(self, stdout: str) -> dict:
-        """从 battle.py 输出解析对战统计。
-
-        匹配 cnn_v4.100 胜场/胜率、cnn_v4.99 胜场、平局数（精确正则，避免误匹配 cnn_v4.99 行）。
+        """动态正则解析对战统计。使用 re.escape() 支持任意模型名。
 
         Returns: {"gen4_wins", "gen5_wins", "draws", "gen5_win_rate"}。
-        Raises: ValueError（无法解析 cnn_v4.100 胜率）。
+        Raises: ValueError（无法解析 ai2 胜率）。
         """
-        # 解析 cnn_v4.100 胜场和胜率（优先匹配，此行为必需的解析目标）
+        # 解析 ai2 胜场和胜率（优先匹配，此行为必需的解析目标）
         gen5_match = re.search(
-            r'cnn_v4\.100 胜:\s*(\d+)\s*局\s*\(([\d.]+)%\)', stdout
+            rf'{re.escape(self._ai2)} 胜:\s*(\d+)\s*局\s*\(([\d.]+)%\)',
+            stdout
         )
         if not gen5_match:
             raise ValueError(
-                f"无法解析 cnn_v4.100 胜率，原始输出:\n{stdout}"
+                f"无法解析 {self._ai2} 胜率，原始输出:\n{stdout}"
             )
 
         gen5_wins = int(gen5_match.group(1))
         gen5_win_rate = float(gen5_match.group(2))
 
-        # 解析 cnn_v4.99 胜场（可为 0）
+        # 解析 ai1 胜场（可为 0）
         gen4_match = re.search(
-            r'cnn_v4\.99 胜:\s*(\d+)\s*局', stdout
+            rf'{re.escape(self._ai1)} 胜:\s*(\d+)\s*局', stdout
         )
         gen4_wins = int(gen4_match.group(1)) if gen4_match else 0
 
@@ -380,23 +361,13 @@ class IterativeTrainer:
     # ============================================================
 
     def _build_stop_reason(self, reason: str = "用户中断") -> str:
-        """构建停止原因文本。
-
-        取最后一轮记录，描述停止上下文。_rounds 为空时返回空字符串。
-        此方法被 _print_final_report() 和 _build_result_dict() 共用，
-        避免重复代码。
-
-        Args:
-            reason: 停止原因描述，默认"用户中断"。
-
-        Returns: 停止原因字符串。
-        """
+        """构建停止原因文本。_rounds 为空时返回空字符串。"""
         if not self._rounds:
             return ""
         last = self._rounds[-1]
         return (
             f"第{last['round_num']}轮 "
-            f"cnn_v4.100 胜率 {last['gen5_win_rate']:.1f}%，"
+            f"{self._ai2} 胜率 {last['gen5_win_rate']:.1f}%，"
             f"{reason}"
         )
 
@@ -405,17 +376,14 @@ class IterativeTrainer:
         print(f"========== 第 {self._round_num} 轨迭代开始 ==========")
 
     def _print_round_result(self, win_rate: float):
-        """打印轮次结果摘要：第 {n} 轨结果: cnn_v4.100 胜率 = {r}% → 晋升"""
+        """打印轮次结果摘要：第 {n} 轨结果: {ai2} 胜率 = {r}% → 晋升"""
         print(
             f"第 {self._round_num} 轨结果: "
-            f"cnn_v4.100 胜率 = {win_rate:.1f}% → 晋升"
+            f"{self._ai2} 胜率 = {win_rate:.1f}% → 晋升"
         )
 
     def _print_final_report(self):
-        """打印最终统计报告（总迭代次数、逐轮明细表、停止原因、最终模型）。
-
-        _rounds 为空时提前返回（防御性编程，避免空记录导致无意义输出）。
-        """
+        """打印最终统计报告。_rounds 为空时提前返回。"""
         if not self._rounds:
             return
 
@@ -428,10 +396,10 @@ class IterativeTrainer:
         for r in self._rounds:
             print(
                 f"  第{r['round_num']}轮: "
-                f"cnn_v4.99 胜 {r['gen4_wins']} | "
-                f"cnn_v4.100 胜 {r['gen5_wins']} | "
+                f"{self._ai1} 胜 {r['gen4_wins']} | "
+                f"{self._ai2} 胜 {r['gen5_wins']} | "
                 f"平局 {r['draws']} | "
-                f"cnn_v4.100 胜率 {r['gen5_win_rate']:.1f}%"
+                f"{self._ai2} 胜率 {r['gen5_win_rate']:.1f}%"
             )
 
         # 停止原因（通过 _build_stop_reason() 共用逻辑）
@@ -439,7 +407,7 @@ class IterativeTrainer:
         print(f"停止原因: {stop_reason}")
 
         print(
-            f"当前模型: gen{PARENT_GEN}/cnn_v4.pth"
+            f"当前模型: gen{self._gen_of_ai1}/{self._model_name}.pth"
             f"（经 {total_iterations} 轮进化）"
         )
 
@@ -448,13 +416,7 @@ class IterativeTrainer:
     # ============================================================
 
     def _build_result_dict(self) -> dict:
-        """构建 run() 返回的统计字典。
-
-        Returns: {"total_iterations", "final_round", "rounds", "stop_reason", "final_model_path"}。
-
-        final_round 取 _rounds 最后完成轮次的编号（而非 _round_num），
-        避免 KeyboardInterrupt 场景下返回未完成轮次编号。
-        """
+        """构建 run() 返回的统计字典。final_round 取最后完成轮次编号。"""
         total_iterations = len(self._rounds)
 
         # 取最后完成轮次编号（KeyboardInterrupt 时 _round_num 可能指向未完成轮次）
@@ -468,17 +430,43 @@ class IterativeTrainer:
             "final_round": final_round,
             "rounds": list(self._rounds),
             "stop_reason": self._build_stop_reason(),
-            "final_model_path": os.path.abspath(self._gen4_path),
+            "final_model_path": os.path.abspath(self._ai1_path),
         }
 
 
 def main():
-    """CLI 入口：创建 IterativeTrainer 并运行。捕获异常后以非零退出码退出。
+    """CLI 入口：解析 --ai1/--ai2/--sample_dir 参数并运行迭代训练。"""
+    parser = argparse.ArgumentParser(description="迭代进化训练")
+    parser.add_argument('--ai1', type=str, required=True, help='父代模型 spec，如 cnn_v4.99')
+    parser.add_argument('--ai2', type=str, required=True, help='子代模型 spec，如 cnn_v4.100')
+    parser.add_argument('--sample_dir', type=str, required=True, help='样本输出目录基路径，如 ai/merge_samples2')
+    args = parser.parse_args()
 
-    KeyboardInterrupt 由 run() 内部处理，main() 不重复捕获。
-    """
+    # 校验: ai1/ai2 格式（含 . 且 gen 为正整数）
     try:
-        trainer = IterativeTrainer()
+        name1, gen_str1 = args.ai1.rsplit(".", 1)
+        gen1 = int(gen_str1)
+        name2, gen_str2 = args.ai2.rsplit(".", 1)
+        gen2 = int(gen_str2)
+    except (ValueError, IndexError):
+        parser.error(
+            "--ai1 和 --ai2 的格式必须为 模型名.代数，如 cnn_v4.99"
+        )
+        return  # parser.error() 会调用 sys.exit()，此行仅为静态分析
+
+    # 校验: ai1 与 ai2 模型名一致
+    if name1 != name2:
+        parser.error(
+            f"--ai1 和 --ai2 的模型名必须一致，"
+            f"当前: {name1} vs {name2}"
+        )
+
+    try:
+        trainer = IterativeTrainer(
+            ai1=args.ai1,
+            ai2=args.ai2,
+            sample_dir=args.sample_dir,
+        )
         trainer.run()
     except FileNotFoundError as e:
         print(f"错误: {e}", file=sys.stderr)

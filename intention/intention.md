@@ -73,3 +73,19 @@ winning_path 模式，不再禁用数据增强。改为默认开启，可以用�
 4, python ai/train_main.py --model cnn_v4.100 --train-from-dir ai/merge_samples2/v100 --epochs 300 --batch-size 4096 --shuffle
 5, python ai/battle.py --ai1 cnn_v4.99 --ai2 cnn_v4.100 --games 100 --temp-moves=2 --temperature 2，打印出 cnn_v4.100 的胜率和 i 的值
 6, 不管胜率如何，都 i++，mv ai\models\cnn_v4\gen100\cnn_v4.pth ai\models\cnn_v4\gen99\cnn_v4.pth; 然后回到2进行循环
+
+# intention_id=13
+optimze ai/iterative_train.py, extract the following hard-coded arguments into parameters so that it's more flexible.
+- --ai1 eg: cnn_v4.99
+- --ai2 eg: cnn_v4.100
+- --sample_dir eg: ai\merge_samples2
+
+the new logic should be:
+1, i=1
+2, cp {pth_of_ai1} {pth_of_ai2}
+3，python ai/create_samples.py --model {ai1} --sample_games 500 --output {sample_dir}\v{gen_of_ai2}\path.json
+4, python ai/train_main.py --model {ai2} --train-from-dir {sample_dir}\v{gen_of_ai2} --epochs 300 --batch-size 4096 --shuffle
+5, python ai/battle.py --ai1 {ai1} --ai2 {ai2} --games 100 --temp-moves=2 --temperature 2，print info
+6, i++，mv {pth_of_ai2} {pth_of_ai1}; then go back to 2
+
+you should compute {pth_of_ai1} {pth_of_ai2} {gen_of_ai2} correctly.

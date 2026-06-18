@@ -288,22 +288,32 @@ python -m ai.sample_visualizer --sample data.json --count 3 --no-heatmap --seed 
 
 ### 迭代进化训练
 
-自动化「生成样本 → 训练 → 对战评估 → 模型晋升」闭环，使 cnn_v3 模型持续迭代进化：
+自动化「生成样本 → 训练 → 对战评估 → 模型晋升」闭环，使模型持续迭代进化：
 
 ```bash
-python ai/iterative_train.py
+python ai/iterative_train.py --ai1 <父代模型spec> --ai2 <子代模型spec> --sample_dir <样本目录>
 ```
 
-脚本以 `gen4/cnn_v3.pth` 为父代起点，每轮自动执行：
-1. 复制 gen4 → gen5（模型初始化）
-2. 调用 `create_samples.py` 自对弈生成 500 局样本
-3. 调用 `train_main.py` 训练 gen5（1 epoch, batch 4096）
-4. 调用 `battle.py` 父子对战 100 局
-5. 子代胜率 > 50% 则晋升（gen5 → gen4），进入下一轮
-6. 子代胜率 ≤ 50% 则停止，输出完整统计报告
+| 参数 | 说明 | 示例 |
+|------|------|------|
+| `--ai1` | 父代模型 spec（模型名.代数） | 必填，如 `cnn_v4.99` |
+| `--ai2` | 子代模型 spec（模型名.代数） | 必填，如 `cnn_v4.100` |
+| `--sample_dir` | 样本输出目录基路径 | 必填，如 `ai/merge_samples2` |
 
-> 前置条件：`ai/models/cnn_v3/gen4/cnn_v3.pth` 必须存在；不支持多实例并发（`.iterative_lock` 锁保护）。
-> v1.0 所有参数硬编码，不做命令行参数化。
+每轮自动执行：
+1. 复制 ai1 权重 → ai2（模型初始化）
+2. 调用 `create_samples.py` 自对弈生成 500 局样本（输出到 `{sample_dir}/v{gen_of_ai2}/path.json`）
+3. 调用 `train_main.py` 训练 ai2（300 epoch, batch 4096）
+4. 调用 `battle.py` 父子对战 100 局（temperature=2, temp_moves=2）
+5. 无条件晋升（mv ai2 → ai1），进入下一轮
+
+> 前置条件：`ai/models/{model_name}/gen{gen_of_ai1}/{model_name}.pth` 必须存在；不支持多实例并发（`.iterative_lock` 锁保护）。
+> 意图 13：模型标识和样本目录通过 CLI 参数指定，不再硬编码。
+
+```bash
+# 示例：从 cnn_v4.99 开始迭代进化
+python ai/iterative_train.py --ai1 cnn_v4.99 --ai2 cnn_v4.100 --sample_dir ai/merge_samples2
+```
 
 ### LR Range Test
 
@@ -343,7 +353,7 @@ python -m pytest tests/ -v -s
 python tests/run_tests.py
 ```
 
-> 覆盖全部 1558 个测试（自动发现，无需手工维护测试列表）
+> 覆盖全部 1629 个测试（自动发现，无需手工维护测试列表）
 >
 > 附加参数示例：
 > - `python -m pytest tests/ -q` —— 静默模式

@@ -24,24 +24,31 @@ from unittest.mock import patch, Mock, ANY
 import pytest
 
 # 在导入 iterative_train 前需要确保项目根在 sys.path 中
-from ai.iterative_train import (
-    IterativeTrainer,
-    BASE_MODEL_NAME,
-    PARENT_GEN,
-    CHILD_GEN,
-    MODELS_DIR,
-    SAMPLE_OUTPUT_DIR,
-)
+from ai.iterative_train import IterativeTrainer
 from tests.ai.helpers import _make_completed_process
+
+# 意图 13：已删除的常量用硬编码替代
+_GEN4 = 99
+_GEN5 = 100
+_MDIR = "ai/models/cnn_v4"
+_SDIR = "ai/merge_samples2/v100"
 
 
 @pytest.fixture
 def trainer(temp_project):
-    """创建 IterativeTrainer 实例（项目根为临时目录）。"""
-    return IterativeTrainer(project_root=temp_project)
+    """创建 IterativeTrainer 实例（项目根为临时目录）。
+
+    意图 13 更新：使用新的构造器签名。
+    """
+    return IterativeTrainer(
+        ai1="cnn_v4.99",
+        ai2="cnn_v4.100",
+        sample_dir="ai/merge_samples2",
+        project_root=temp_project,
+    )
 
 
-# _make_completed_process 已移入 tests.ai.helpers，从该处导入
+# 意图 13：_battle_stdout 保持不变（仍测试 cnn_v4.99 vs cnn_v4.100 场景）
 
 
 def _battle_stdout(gen4_wins=40, gen5_wins=55, draws=5):
@@ -81,7 +88,7 @@ class TestConstructor:
 
     def test_gen4_exists_succeeds(self, temp_project):
         """UT-1.1：gen4 权重存在时正常构造。"""
-        trainer = IterativeTrainer(project_root=temp_project)
+        trainer = IterativeTrainer(ai1="cnn_v4.99", ai2="cnn_v4.100", sample_dir="ai/merge_samples2", project_root=temp_project)
         assert trainer is not None
         assert trainer._round_num == 1
         assert trainer._rounds == []
@@ -89,11 +96,11 @@ class TestConstructor:
     def test_gen4_not_exists_raises(self, temp_project):
         """UT-1.2：gen4 权重不存在时抛 FileNotFoundError。"""
         gen4_path = os.path.join(
-            temp_project, MODELS_DIR, f"gen{PARENT_GEN}", "cnn_v4.pth"
+            temp_project, _MDIR, f"gen{_GEN4}", "cnn_v4.pth"
         )
         os.remove(gen4_path)
         with pytest.raises(FileNotFoundError, match="gen99"):
-            IterativeTrainer(project_root=temp_project)
+            IterativeTrainer(ai1="cnn_v4.99", ai2="cnn_v4.100", sample_dir="ai/merge_samples2", project_root=temp_project)
 
     def test_auto_deduce_project_root(self):
         """UT-1.3：不传 project_root 时自动推导到项目根目录。
@@ -106,10 +113,13 @@ class TestConstructor:
             os.path.dirname(os.path.dirname(os.path.dirname(
                 os.path.dirname(os.path.abspath(__file__))
             ))),
-            MODELS_DIR, f"gen{PARENT_GEN}", "cnn_v4.pth"
+            _MDIR, f"gen{_GEN4}", "cnn_v4.pth"
         )
         if os.path.isfile(gen4_path):
-            trainer = IterativeTrainer()
+            trainer = IterativeTrainer(
+                ai1="cnn_v4.99", ai2="cnn_v4.100",
+                sample_dir="ai/merge_samples2",
+            )
             assert trainer.project_root is not None
         else:
             # gen4 不存在则跳过此测试
@@ -117,19 +127,19 @@ class TestConstructor:
 
     def test_lock_file_exists_raises(self, temp_project):
         """UT-1.4：锁文件存在时抛 RuntimeError。"""
-        lock_path = os.path.join(temp_project, MODELS_DIR, ".iterative_lock")
+        lock_path = os.path.join(temp_project, _MDIR, ".iterative_lock")
         with open(lock_path, 'w') as f:
             f.write("dummy")
         with pytest.raises(RuntimeError, match="iterative|锁"):
-            IterativeTrainer(project_root=temp_project)
+            IterativeTrainer(ai1="cnn_v4.99", ai2="cnn_v4.100", sample_dir="ai/merge_samples2", project_root=temp_project)
 
     def test_no_lock_file_succeeds(self, temp_project):
         """UT-1.5：锁文件不存在时正常构造。"""
         # 确保锁文件不存在
-        lock_path = os.path.join(temp_project, MODELS_DIR, ".iterative_lock")
+        lock_path = os.path.join(temp_project, _MDIR, ".iterative_lock")
         if os.path.isfile(lock_path):
             os.remove(lock_path)
-        trainer = IterativeTrainer(project_root=temp_project)
+        trainer = IterativeTrainer(ai1="cnn_v4.99", ai2="cnn_v4.100", sample_dir="ai/merge_samples2", project_root=temp_project)
         assert trainer is not None
 
 
@@ -142,7 +152,7 @@ class TestModelFileOperations:
 
     def test_copy_gen4_to_gen5_no_dir(self, trainer, temp_project):
         """UT-2.1：copy gen4→gen5（gen5 目录不存在）时自动创建并复制。"""
-        gen5_dir = os.path.join(temp_project, MODELS_DIR, f"gen{CHILD_GEN}")
+        gen5_dir = os.path.join(temp_project, _MDIR, f"gen{_GEN5}")
         # 确保 gen5 目录不存在
         if os.path.exists(gen5_dir):
             shutil.rmtree(gen5_dir)
@@ -153,7 +163,7 @@ class TestModelFileOperations:
         assert os.path.isfile(gen5_path)
 
         # 校验内容一致（md5）
-        gen4_path = os.path.join(temp_project, MODELS_DIR, f"gen{PARENT_GEN}", "cnn_v4.pth")
+        gen4_path = os.path.join(temp_project, _MDIR, f"gen{_GEN4}", "cnn_v4.pth")
         with open(gen4_path, 'rb') as f:
             gen4_content = f.read()
         with open(gen5_path, 'rb') as f:
@@ -162,7 +172,7 @@ class TestModelFileOperations:
 
     def test_copy_gen4_overwrites_gen5(self, trainer, temp_project):
         """UT-2.2：gen5 目录已存在时直接覆盖。"""
-        gen5_dir = os.path.join(temp_project, MODELS_DIR, f"gen{CHILD_GEN}")
+        gen5_dir = os.path.join(temp_project, _MDIR, f"gen{_GEN5}")
         os.makedirs(gen5_dir, exist_ok=True)
         gen5_path = os.path.join(gen5_dir, "cnn_v4.pth")
         # 写入不同的内容
@@ -172,7 +182,7 @@ class TestModelFileOperations:
         trainer._init_model()
 
         # 校验内容已被覆盖为 gen4 的副本
-        gen4_path = os.path.join(temp_project, MODELS_DIR, f"gen{PARENT_GEN}", "cnn_v4.pth")
+        gen4_path = os.path.join(temp_project, _MDIR, f"gen{_GEN4}", "cnn_v4.pth")
         with open(gen4_path, 'rb') as f:
             gen4_content = f.read()
         with open(gen5_path, 'rb') as f:
@@ -188,8 +198,8 @@ class TestModelFileOperations:
         assert hasattr(trainer, '_promote'), (
             "意图 12 需要无条件晋升，_promote() 应存在"
         )
-        gen4_path = os.path.join(temp_project, MODELS_DIR, f"gen{PARENT_GEN}", "cnn_v4.pth")
-        gen5_path = os.path.join(temp_project, MODELS_DIR, f"gen{CHILD_GEN}", "cnn_v4.pth")
+        gen4_path = os.path.join(temp_project, _MDIR, f"gen{_GEN4}", "cnn_v4.pth")
+        gen5_path = os.path.join(temp_project, _MDIR, f"gen{_GEN5}", "cnn_v4.pth")
         os.makedirs(os.path.dirname(gen5_path), exist_ok=True)
         with open(gen5_path, 'wb') as f:
             f.write(b"gen5_new_trained_content")
@@ -203,7 +213,7 @@ class TestModelFileOperations:
 
     def test_sample_output_dir_auto_create(self, trainer, temp_project):
         """UT-2.4：样本输出目录不存在时自动创建。"""
-        sample_dir = os.path.join(temp_project, SAMPLE_OUTPUT_DIR)
+        sample_dir = os.path.join(temp_project, _SDIR)
         if os.path.exists(sample_dir):
             shutil.rmtree(sample_dir)
 
@@ -289,7 +299,7 @@ class TestSubprocessArgs:
         """UT-3.4：输出文件名固定为 path.json（不带 round_num 后缀）。"""
         mock_run.return_value = _make_completed_process(returncode=0, stdout="ok")
 
-        trainer = IterativeTrainer(project_root=temp_project)
+        trainer = IterativeTrainer(ai1="cnn_v4.99", ai2="cnn_v4.100", sample_dir="ai/merge_samples2", project_root=temp_project)
         trainer._round_num = 3
         trainer._generate_samples()
 
@@ -448,7 +458,7 @@ class TestEdgeCases:
     def test_empty_samples_detected(self, trainer, temp_project):
         """UT-8.4：create_samples 生成空样本（0 条）时检测到并抛异常。"""
         # 构造空样本文件
-        sample_dir = os.path.join(temp_project, SAMPLE_OUTPUT_DIR)
+        sample_dir = os.path.join(temp_project, _SDIR)
         os.makedirs(sample_dir, exist_ok=True)
         sample_path = os.path.join(sample_dir, "path.json")
         with open(sample_path, 'w') as f:
@@ -459,7 +469,7 @@ class TestEdgeCases:
 
     def test_sample_file_not_exists(self, trainer, temp_project):
         """UT-8.5：样本文件不存在时抛 RuntimeError。"""
-        sample_path = os.path.join(temp_project, SAMPLE_OUTPUT_DIR, "path.json")
+        sample_path = os.path.join(temp_project, _SDIR, "path.json")
         # 确保文件不存在
         if os.path.isfile(sample_path):
             os.remove(sample_path)
@@ -469,7 +479,7 @@ class TestEdgeCases:
 
     def test_sample_json_parse_error(self, trainer, temp_project):
         """样本文件 JSON 解析失败时抛 RuntimeError。"""
-        sample_dir = os.path.join(temp_project, SAMPLE_OUTPUT_DIR)
+        sample_dir = os.path.join(temp_project, _SDIR)
         os.makedirs(sample_dir, exist_ok=True)
         sample_path = os.path.join(sample_dir, "path.json")
         with open(sample_path, 'w') as f:
@@ -480,7 +490,7 @@ class TestEdgeCases:
 
     def test_sample_not_array(self, trainer, temp_project):
         """样本文件不是 JSON 数组时抛 RuntimeError。"""
-        sample_dir = os.path.join(temp_project, SAMPLE_OUTPUT_DIR)
+        sample_dir = os.path.join(temp_project, _SDIR)
         os.makedirs(sample_dir, exist_ok=True)
         sample_path = os.path.join(sample_dir, "path.json")
         with open(sample_path, 'w') as f:

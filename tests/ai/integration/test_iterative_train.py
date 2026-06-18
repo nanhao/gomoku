@@ -13,14 +13,14 @@ from unittest.mock import patch, Mock, call, ANY
 
 import pytest
 
-from ai.iterative_train import (
-    IterativeTrainer,
-    MODELS_DIR,
-    PARENT_GEN,
-    CHILD_GEN,
-    SAMPLE_OUTPUT_DIR,
-)
+from ai.iterative_train import IterativeTrainer
 from tests.ai.helpers import _make_completed_process
+
+# 意图 13：已删除的常量用硬编码替代
+_GEN4 = 99
+_GEN5 = 100
+_MDIR = "ai/models/cnn_v4"
+_SDIR = "ai/merge_samples2/v100"
 
 
 def _battle_stdout_line(gen5_wins, gen4_wins, draws):
@@ -86,7 +86,7 @@ class TestFullIterationFlow:
         ④ KeyboardInterrupt 后返回 dict 含已完成轮次记录
         """
         # 为两轮预创建样本文件
-        sample_dir = os.path.join(temp_project, SAMPLE_OUTPUT_DIR)
+        sample_dir = os.path.join(temp_project, _SDIR)
         os.makedirs(sample_dir, exist_ok=True)
         sp = os.path.join(sample_dir, "path.json")
         with open(sp, 'w') as f:
@@ -100,11 +100,11 @@ class TestFullIterationFlow:
         )
         mock_run.side_effect = side_effects
 
-        trainer = IterativeTrainer(project_root=temp_project)
+        trainer = IterativeTrainer(ai1="cnn_v4.99", ai2="cnn_v4.100", sample_dir="ai/merge_samples2", project_root=temp_project)
         result = trainer.run()
 
         # ① gen4→gen5 被复制
-        gen5_path = os.path.join(temp_project, MODELS_DIR, f"gen{CHILD_GEN}", "cnn_v4.pth")
+        gen5_path = os.path.join(temp_project, _MDIR, f"gen{_GEN5}", "cnn_v4.pth")
         assert mock_run.called
 
         # ② 子进程按序调用且 cwd=project_root
@@ -125,7 +125,7 @@ class TestFullIterationFlow:
         ② 所有轮次 promoted=True（无条件晋升）
         ③ total_iterations = 2
         """
-        sample_dir = os.path.join(temp_project, SAMPLE_OUTPUT_DIR)
+        sample_dir = os.path.join(temp_project, _SDIR)
         os.makedirs(sample_dir, exist_ok=True)
         sp = os.path.join(sample_dir, "path.json")
         with open(sp, 'w') as f:
@@ -140,7 +140,7 @@ class TestFullIterationFlow:
         )
         mock_run.side_effect = side_effects
 
-        trainer = IterativeTrainer(project_root=temp_project)
+        trainer = IterativeTrainer(ai1="cnn_v4.99", ai2="cnn_v4.100", sample_dir="ai/merge_samples2", project_root=temp_project)
         result = trainer.run()
 
         # ① 2 轮均完成
@@ -159,7 +159,7 @@ class TestFullIterationFlow:
 
         验证 create_samples → train_main → battle 的固定顺序在每轮中保持。
         """
-        sample_dir = os.path.join(temp_project, SAMPLE_OUTPUT_DIR)
+        sample_dir = os.path.join(temp_project, _SDIR)
         os.makedirs(sample_dir, exist_ok=True)
         sp = os.path.join(sample_dir, "path.json")
         with open(sp, 'w') as f:
@@ -172,7 +172,7 @@ class TestFullIterationFlow:
         )
         mock_run.side_effect = side_effects
 
-        trainer = IterativeTrainer(project_root=temp_project)
+        trainer = IterativeTrainer(ai1="cnn_v4.99", ai2="cnn_v4.100", sample_dir="ai/merge_samples2", project_root=temp_project)
         trainer.run()
 
         calls = mock_run.call_args_list
@@ -204,7 +204,7 @@ class TestErrorHandling:
             returncode=1, stdout="", stderr="create failed"
         )
 
-        trainer = IterativeTrainer(project_root=temp_project)
+        trainer = IterativeTrainer(ai1="cnn_v4.99", ai2="cnn_v4.100", sample_dir="ai/merge_samples2", project_root=temp_project)
         with pytest.raises(RuntimeError):
             trainer.run()
 
@@ -220,7 +220,7 @@ class TestErrorHandling:
         mock train_main 返回 exit_code=1，验证：
         抛 RuntimeError，不执行 battle。
         """
-        sample_dir = os.path.join(temp_project, SAMPLE_OUTPUT_DIR)
+        sample_dir = os.path.join(temp_project, _SDIR)
         os.makedirs(sample_dir, exist_ok=True)
         sample_path = os.path.join(sample_dir, "path.json")
         with open(sample_path, 'w') as f:
@@ -232,7 +232,7 @@ class TestErrorHandling:
         ]
         mock_run.side_effect = side_effects
 
-        trainer = IterativeTrainer(project_root=temp_project)
+        trainer = IterativeTrainer(ai1="cnn_v4.99", ai2="cnn_v4.100", sample_dir="ai/merge_samples2", project_root=temp_project)
         with pytest.raises(RuntimeError):
             trainer.run()
 
@@ -248,7 +248,7 @@ class TestErrorHandling:
 
         mock battle 返回 exit_code=1，验证抛 RuntimeError。
         """
-        sample_dir = os.path.join(temp_project, SAMPLE_OUTPUT_DIR)
+        sample_dir = os.path.join(temp_project, _SDIR)
         os.makedirs(sample_dir, exist_ok=True)
         sample_path = os.path.join(sample_dir, "path.json")
         with open(sample_path, 'w') as f:
@@ -261,7 +261,7 @@ class TestErrorHandling:
         ]
         mock_run.side_effect = side_effects
 
-        trainer = IterativeTrainer(project_root=temp_project)
+        trainer = IterativeTrainer(ai1="cnn_v4.99", ai2="cnn_v4.100", sample_dir="ai/merge_samples2", project_root=temp_project)
         with pytest.raises(RuntimeError):
             trainer.run()
 
@@ -270,11 +270,11 @@ class TestErrorHandling:
     def test_gen4_not_exists(self, temp_project):
         """IT-2.4：gen4 权重不存在时构造失败。"""
         gen4_path = os.path.join(
-            temp_project, MODELS_DIR, f"gen{PARENT_GEN}", "cnn_v4.pth"
+            temp_project, _MDIR, f"gen{_GEN4}", "cnn_v4.pth"
         )
         os.remove(gen4_path)
         with pytest.raises(FileNotFoundError):
-            IterativeTrainer(project_root=temp_project)
+            IterativeTrainer(ai1="cnn_v4.99", ai2="cnn_v4.100", sample_dir="ai/merge_samples2", project_root=temp_project)
 
     @patch('subprocess.run')
     def test_keyboard_interrupt(self, mock_run, temp_project):
@@ -283,7 +283,7 @@ class TestErrorHandling:
         第 2 轮样本生成中触发 KeyboardInterrupt。
         验证：打印"用户中断"，输出已完成轮次的统计，正常返回。
         """
-        sample_dir = os.path.join(temp_project, SAMPLE_OUTPUT_DIR)
+        sample_dir = os.path.join(temp_project, _SDIR)
         os.makedirs(sample_dir, exist_ok=True)
         sp = os.path.join(sample_dir, "path.json")
         with open(sp, 'w') as f:
@@ -308,7 +308,7 @@ class TestErrorHandling:
 
         mock_run.side_effect = side_effect
 
-        trainer = IterativeTrainer(project_root=temp_project)
+        trainer = IterativeTrainer(ai1="cnn_v4.99", ai2="cnn_v4.100", sample_dir="ai/merge_samples2", project_root=temp_project)
         result = trainer.run()
 
         # 正常返回
@@ -318,12 +318,12 @@ class TestErrorHandling:
 
     def test_lock_file_prevents_construction(self, temp_project):
         """IT-2.6：锁文件存在时构造失败。"""
-        lock_path = os.path.join(temp_project, MODELS_DIR, ".iterative_lock")
+        lock_path = os.path.join(temp_project, _MDIR, ".iterative_lock")
         with open(lock_path, 'w') as f:
             f.write("dummy")
 
         with pytest.raises(RuntimeError):
-            IterativeTrainer(project_root=temp_project)
+            IterativeTrainer(ai1="cnn_v4.99", ai2="cnn_v4.100", sample_dir="ai/merge_samples2", project_root=temp_project)
 
 
 # ============================================================
@@ -343,7 +343,7 @@ class TestFileSystemIsolation:
     @patch('subprocess.run')
     def test_sample_file_in_temp_not_real(self, mock_run, temp_project):
         """IT-3.2：验证 create_samples 的 --output 参数指向临时目录。"""
-        sample_dir = os.path.join(temp_project, SAMPLE_OUTPUT_DIR)
+        sample_dir = os.path.join(temp_project, _SDIR)
         os.makedirs(sample_dir, exist_ok=True)
         sp = os.path.join(sample_dir, "path.json")
         with open(sp, 'w') as f:
@@ -356,7 +356,7 @@ class TestFileSystemIsolation:
         )
         mock_run.side_effect = side_effects
 
-        trainer = IterativeTrainer(project_root=temp_project)
+        trainer = IterativeTrainer(ai1="cnn_v4.99", ai2="cnn_v4.100", sample_dir="ai/merge_samples2", project_root=temp_project)
         trainer.run()
 
         # 验证 create_samples 传入的 --output 路径在临时目录下
@@ -372,7 +372,7 @@ class TestFileSystemIsolation:
     @patch('subprocess.run')
     def test_lock_cleaned_up_after_run(self, mock_run, temp_project):
         """验证 run() 结束后锁文件被清理。"""
-        sample_dir = os.path.join(temp_project, SAMPLE_OUTPUT_DIR)
+        sample_dir = os.path.join(temp_project, _SDIR)
         os.makedirs(sample_dir, exist_ok=True)
         sp = os.path.join(sample_dir, "path.json")
         with open(sp, 'w') as f:
@@ -385,9 +385,9 @@ class TestFileSystemIsolation:
         )
         mock_run.side_effect = side_effects
 
-        lock_path = os.path.join(temp_project, MODELS_DIR, ".iterative_lock")
+        lock_path = os.path.join(temp_project, _MDIR, ".iterative_lock")
 
-        trainer = IterativeTrainer(project_root=temp_project)
+        trainer = IterativeTrainer(ai1="cnn_v4.99", ai2="cnn_v4.100", sample_dir="ai/merge_samples2", project_root=temp_project)
         trainer.run()
 
         # 锁文件应在 run() 结束后被删除
@@ -403,7 +403,7 @@ class TestFileSystemIsolation:
 
     def test_return_dict_structure(self, temp_project):
         """验证 run() 返回的 dict 结构完整（意图 12：2轮全部完成）。"""
-        sample_dir = os.path.join(temp_project, SAMPLE_OUTPUT_DIR)
+        sample_dir = os.path.join(temp_project, _SDIR)
         os.makedirs(sample_dir, exist_ok=True)
         sp = os.path.join(sample_dir, "path.json")
         with open(sp, 'w') as f:
@@ -417,7 +417,7 @@ class TestFileSystemIsolation:
             )
             mock_run.side_effect = side_effects
 
-            trainer = IterativeTrainer(project_root=temp_project)
+            trainer = IterativeTrainer(ai1="cnn_v4.99", ai2="cnn_v4.100", sample_dir="ai/merge_samples2", project_root=temp_project)
             result = trainer.run()
 
             # 验证所有必需键存在
