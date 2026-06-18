@@ -7,6 +7,7 @@
 - cnn_v2: CNN v2 轻量化卷积神经网络 AI
 - cnn_v3: CNN v3 极简卷积神经网络 AI
 - cnn_v4: CNN v4 卷积神经网络 AI（cnn_v3 + 额外隐藏层）
+- cnn_v5: CNN v5 卷积神经网络 AI（cnn_v4 + 额外隐藏层）
 """
 
 from .random import RandomModel
@@ -15,6 +16,7 @@ from .cnn_v1 import CNNV1Model, CNNV1Trainer
 from .cnn_v2 import CNNV2Model, CNNV2Trainer
 from .cnn_v3 import CNNV3Model, CNNV3Trainer
 from .cnn_v4 import CNNV4Model, CNNV4Trainer
+from .cnn_v5 import CNNV5Model, CNNV5Trainer
 
 __all__ = [
     "RandomModel",
@@ -28,4 +30,6 @@ __all__ = [
     "CNNV3Trainer",
     "CNNV4Model",
     "CNNV4Trainer",
+    "CNNV5Model",
+    "CNNV5Trainer",
 ]

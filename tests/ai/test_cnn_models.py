@@ -24,6 +24,7 @@ from ai.models.cnn_v1.model import CNNV1Model, CNNV1Network
 from ai.models.cnn_v2.model import CNNV2Model, CNNV2Network
 from ai.models.cnn_v3.model import CNNV3Model, CNNV3Network
 from ai.models.cnn_v4.model import CNNV4Model, CNNV4Network
+from ai.models.cnn_v5.model import CNNV5Model, CNNV5Network
 from ai.base_model import board_vector_to_cnn_tensor
 
 
@@ -396,6 +397,64 @@ class TestCNNV4Model(CNNModelSharedMixin, unittest.TestCase):
     MODEL_CLS = CNNV4Model
     MODEL_NAME = "cnn_v4"
     DEFAULT_FILENAME = "cnn_v4.pth"
+
+
+class TestCNNV5Network(CNNNetworkSharedMixin, unittest.TestCase):
+    NETWORK_CLS = CNNV5Network
+
+    def test_network_no_bn(self):
+        """网络中不包含 BatchNorm 层"""
+        for module in self.NETWORK_CLS().modules():
+            self.assertNotIsInstance(
+                module, (nn.BatchNorm1d, nn.BatchNorm2d),
+                f"不应包含 BatchNorm 层，但发现 {type(module).__name__}"
+            )
+
+    def test_network_no_dropout(self):
+        """网络中不包含 Dropout 层"""
+        for module in self.NETWORK_CLS().modules():
+            self.assertNotIsInstance(
+                module, nn.Dropout,
+                f"不应包含 Dropout 层，但发现 {type(module).__name__}"
+            )
+
+    def test_network_param_count(self):
+        """CNN v5 参数量约 3.8 万（cnn_v4 + 额外 32→32 卷积层）"""
+        total = sum(p.numel() for p in self.NETWORK_CLS().parameters())
+        self.assertGreaterEqual(total, 37_000, f"参数量 {total} 应 >= 3.7 万")
+        self.assertLessEqual(total, 39_000, f"参数量 {total} 应 <= 3.9 万")
+
+    def test_network_conv_channels(self):
+        """5 层卷积层，通道数均为 32"""
+        network = self.NETWORK_CLS()
+        self.assertEqual(network.conv1.in_channels, 3)
+        self.assertEqual(network.conv1.out_channels, 32)
+        self.assertEqual(network.conv2.in_channels, 32)
+        self.assertEqual(network.conv2.out_channels, 32)
+        self.assertEqual(network.conv3.in_channels, 32)
+        self.assertEqual(network.conv3.out_channels, 32)
+        self.assertEqual(network.conv4.in_channels, 32)
+        self.assertEqual(network.conv4.out_channels, 32)
+        self.assertEqual(network.conv5.in_channels, 32)
+        self.assertEqual(network.conv5.out_channels, 32)
+
+    def test_network_fc_direct_output(self):
+        """无 FC 层，输出层为 1×1 卷积(32→1)"""
+        network = self.NETWORK_CLS()
+        for module in network.modules():
+            self.assertNotIsInstance(
+                module, nn.Linear,
+                f"纯卷积网络不应包含 Linear 层，但发现 {type(module).__name__}"
+            )
+        self.assertEqual(network.conv_out.in_channels, 32)
+        self.assertEqual(network.conv_out.out_channels, 1)
+        self.assertEqual(network.conv_out.kernel_size, (1, 1))
+
+
+class TestCNNV5Model(CNNModelSharedMixin, unittest.TestCase):
+    MODEL_CLS = CNNV5Model
+    MODEL_NAME = "cnn_v5"
+    DEFAULT_FILENAME = "cnn_v5.pth"
 
 
 if __name__ == '__main__':
