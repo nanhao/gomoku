@@ -445,10 +445,10 @@ def main():
     # 校验: ai1/ai2 格式（含 . 且 gen 为正整数）
     try:
         name1, gen_str1 = args.ai1.rsplit(".", 1)
-        gen1 = int(gen_str1)
+        _gen1 = int(gen_str1)  # 仅用于格式校验，gen 值由 __init__ 重新解析
         name2, gen_str2 = args.ai2.rsplit(".", 1)
-        gen2 = int(gen_str2)
-    except (ValueError, IndexError):
+        _gen2 = int(gen_str2)  # 仅用于格式校验
+    except ValueError:
         parser.error(
             "--ai1 和 --ai2 的格式必须为 模型名.代数，如 cnn_v4.99"
         )
@@ -477,7 +477,7 @@ def main():
     except ValueError as e:
         print(f"错误: {e}", file=sys.stderr)
         sys.exit(1)
-    except IOError as e:
+    except OSError as e:
         print(f"错误: {e}", file=sys.stderr)
         sys.exit(1)
 

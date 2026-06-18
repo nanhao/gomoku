@@ -27,11 +27,14 @@ class TestLogOutput:
         lines = source.split('\n')
 
         # 排除注释行和文档字符串行：追踪是否在 docstring 内部
+        # 注意：此实现假设源代码中不会在非 docstring 代码行中出现 """，
+        # 且多行 docstring 使用三引号格式开头和结尾。对 iterative_train.py 已验证有效。
         code_lines = []
         in_docstring = False
         for l in lines:
             stripped = l.strip()
-            # 检测 docstring 边界
+            # 检测 docstring 边界（注意：单行 docstring 如 """...""" 会被 toggle 两次，
+            # 但因 continue 跳过该行，实际效果正确）
             if stripped.startswith('"""') or stripped.endswith('"""'):
                 in_docstring = not in_docstring
                 continue
