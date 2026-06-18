@@ -310,6 +310,7 @@ class IterativeTrainer:
             "--ai2", self._ai2,
             "--temp-moves", str(TEMP_MOVES),
             "--temperature", str(TEMPERATURE),
+            "--temp-side", "both",
             "--games", str(BATTLE_GAMES),
         ]
 

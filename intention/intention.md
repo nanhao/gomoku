@@ -85,7 +85,10 @@ the new logic should be:
 2, cp {pth_of_ai1} {pth_of_ai2}
 3，python ai/create_samples.py --model {ai1} --sample_games 500 --output {sample_dir}\v{gen_of_ai2}\path.json
 4, python ai/train_main.py --model {ai2} --train-from-dir {sample_dir}\v{gen_of_ai2} --epochs 300 --batch-size 4096 --shuffle
-5, python ai/battle.py --ai1 {ai1} --ai2 {ai2} --games 100 --temp-moves=2 --temperature 2，print info
+5, python ai/battle.py --ai1 {ai1} --ai2 {ai2} --games 100 --temp-moves=2 --temperature 2 --temp-side both，print info
 6, i++，mv {pth_of_ai2} {pth_of_ai1}; then go back to 2
 
 you should compute {pth_of_ai1} {pth_of_ai2} {gen_of_ai2} correctly.
+
+# intention_id=14
+新增 cnn_v5 模型，在 cnn_v4 的基础上增加一个32通道隐藏层，其他保持和 cnn_v4 一致
