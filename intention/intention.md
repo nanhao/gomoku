@@ -135,3 +135,6 @@ v6：
 
 # intention_id=16
 修改 cnn_v6，增加一个价值头输出。加在 flatten 后面，使用 tanh，输出一个值域为 [-1,1] 的标量，表示当前局面的胜率
+
+# intention_id=17
+把 cnn_v6 升级为 cnn_v7，恢复 intention_id=15里面的 cnn_v6
