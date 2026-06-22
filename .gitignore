@@ -43,3 +43,9 @@ tests/game/save/
 tests/app/primary/_test_saves/
 
 .qoder/repowiki/
+
+ai/models/cnn_v3
+ai/models/cnn_v4
+ai/models/cnn_v5
+ai/merge_samples2/
+ai/merge_samples3/
