@@ -242,10 +242,28 @@ class BaseTrainer(ABC):
         """
         self.model.network.eval()
         with torch.no_grad():
-            outputs = self.model.network(val_inputs)
+            outputs = self._extract_policy(self.model.network(val_inputs))
             val_loss = self._masked_loss(outputs, val_targets, val_masks)
         self.model.network.train()
         return val_loss.item()
+
+    @staticmethod
+    def _extract_policy(network_output):
+        """从网络输出中提取策略张量
+
+        支持两种 forward 签名：
+        - 单头模型（v1~v5）：forward 返回 (batch, 225) 策略张量
+        - 双头模型（v6+）：forward 返回 ((batch,225), (batch,1)) 元组
+
+        Args:
+            network_output: self.model.network(inputs) 的返回值
+
+        Returns:
+            策略张量 (batch, 225)
+        """
+        if isinstance(network_output, tuple):
+            return network_output[0]
+        return network_output
 
     def _forward_backward_step(self, inputs, targets, masks) -> Tuple[torch.Tensor, float]:
         """执行一次前向+反向传播+参数更新，返回 (loss张量, grad_norm标量)
@@ -253,7 +271,7 @@ class BaseTrainer(ABC):
         供 train_single 和 train_batch 复用。train_mini_batch 保持独立实现。
         """
         self.optimizer.zero_grad()
-        outputs = self.model.network(inputs)
+        outputs = self._extract_policy(self.model.network(inputs))
         loss = self._masked_loss(outputs, targets, masks)
         loss.backward()
         grad_norm = sum(
@@ -505,7 +523,7 @@ class BaseTrainer(ABC):
 
                     # 前向传播
                     self.optimizer.zero_grad()
-                    outputs = self.model.network(batch_inputs)
+                    outputs = self._extract_policy(self.model.network(batch_inputs))
 
                     # 计算损失（使用 mask）
                     loss = self._masked_loss(outputs, batch_targets, batch_masks)
