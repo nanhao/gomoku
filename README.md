@@ -70,7 +70,7 @@ python ai/battle.py --ai1 <AI指定> --ai2 <AI指定> [--games <局数>] [温度
 | `--temp-side` | 温度采样作用方：`black` / `white` / `both` / `random` | `both` |
 | `--temp-seed` | 温度采样随机种子（用于复现对战结果） | None（不可复现） |
 
-**可用 AI：** `random` / `fc_v1` / `cnn_v1` / `cnn_v2` / `cnn_v3.1` / `cnn_v3.2` / `cnn_v4.1` / `cnn_v5.1` ...
+**可用 AI：** `random` / `fc_v1` / `cnn_v1` / `cnn_v2` / `cnn_v3.1` / `cnn_v3.2` / `cnn_v4.1` / `cnn_v5.1` / `cnn_v6.1` ...
 
 > **多代模型说明**：`cnn_v3` 支持多代模型，使用 `模型名.代数` 格式指定（如 `cnn_v3.1`、`cnn_v3.2`），不同代数的模型权重存储在 `ai/models/cnn_v3/gen{i}/` 目录下。非多代模型（如 `fc_v1`、`cnn_v1`）直接使用模型名称。
 
@@ -436,6 +436,14 @@ python tests/run_tests.py
 - **特点**：在 cnn_v4 基础上再增加一层 32→32 卷积，纯卷积，无 FC、无 BN、无 Dropout
 - **训练方式**：自我对弈 + 棋型评估奖励 + KL 散度监督学习
 - **模型文件**：`ai/models/cnn_v5/gen{i}/cnn_v5.pth`（多代模型）
+
+### CNN v6 模型（残差卷积 + BatchNorm）
+
+- **网络结构**：卷积层(3→32→32→32→32→32, Conv→BN→ReLU) → 两个残差块 → 1×1卷积(32→1) → Softmax
+- **参数量**：约 3.8 万
+- **特点**：在 cnn_v5 基础上引入 BatchNorm 和残差连接，Conv2+Conv3、Conv4+Conv5 各组成一个残差块
+- **训练方式**：自我对弈 + 棋型评估奖励 + KL 散度监督学习
+- **模型文件**：`ai/models/cnn_v6/gen{i}/cnn_v6.pth`（多代模型）
 
 ---
 

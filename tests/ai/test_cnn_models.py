@@ -25,6 +25,7 @@ from ai.models.cnn_v2.model import CNNV2Model, CNNV2Network
 from ai.models.cnn_v3.model import CNNV3Model, CNNV3Network
 from ai.models.cnn_v4.model import CNNV4Model, CNNV4Network
 from ai.models.cnn_v5.model import CNNV5Model, CNNV5Network
+from ai.models.cnn_v6.model import CNNV6Model, CNNV6Network
 from ai.base_model import board_vector_to_cnn_tensor
 
 
@@ -455,6 +456,223 @@ class TestCNNV5Model(CNNModelSharedMixin, unittest.TestCase):
     MODEL_CLS = CNNV5Model
     MODEL_NAME = "cnn_v5"
     DEFAULT_FILENAME = "cnn_v5.pth"
+
+
+# ---------------------------------------------------------------------------
+# CNN v6 测试
+# ---------------------------------------------------------------------------
+
+class TestCNNV6Network(CNNNetworkSharedMixin, unittest.TestCase):
+    """CNN v6 网络结构测试
+
+    cnn_v6 在 cnn_v5 基础上引入 BatchNorm 和残差连接：
+    - 每层 Conv 后添加 BN（Conv→BN→ReLU）
+    - Conv2+Conv3 组成残差块 1，Conv4+Conv5 组成残差块 2
+    """
+
+    NETWORK_CLS = CNNV6Network
+
+    # --- UT-NET-1：网络中包含 BatchNorm 层（与 v3/v4/v5 相反） ---
+
+    def test_network_has_bn(self):
+        """[UT-NET-1] 网络中至少存在 1 个 BatchNorm2d 层"""
+        network = self.NETWORK_CLS()
+        bn_modules = [m for m in network.modules()
+                      if isinstance(m, nn.BatchNorm2d)]
+        self.assertGreater(
+            len(bn_modules), 0,
+            "cnn_v6 应包含 BatchNorm2d 层"
+        )
+
+    # --- UT-NET-2：网络中不包含 Dropout 层 ---
+
+    def test_network_no_dropout(self):
+        """[UT-NET-2] 网络中不包含 Dropout 层"""
+        network = self.NETWORK_CLS()
+        for module in network.modules():
+            self.assertNotIsInstance(
+                module, nn.Dropout,
+                f"纯卷积网络不应包含 Dropout 层，但发现 {type(module).__name__}"
+            )
+
+    # --- UT-NET-3：网络中不包含 FC 层 ---
+
+    def test_network_no_fc(self):
+        """[UT-NET-3] 网络中不包含 Linear（FC）层"""
+        network = self.NETWORK_CLS()
+        for module in network.modules():
+            self.assertNotIsInstance(
+                module, nn.Linear,
+                f"纯卷积网络不应包含 Linear 层，但发现 {type(module).__name__}"
+            )
+
+    # --- UT-NET-4：BN 层数量 = 5（Conv1~5 各一个 BN） ---
+
+    def test_network_bn_count(self):
+        """[UT-NET-4] BatchNorm2d 层数量精确为 5"""
+        network = self.NETWORK_CLS()
+        bn_count = sum(
+            1 for m in network.modules()
+            if isinstance(m, nn.BatchNorm2d)
+        )
+        self.assertEqual(
+            bn_count, 5,
+            f"应包含 5 个 BatchNorm2d 层（Conv1~5 各一个），实际 {bn_count} 个"
+        )
+
+    # --- UT-NET-5：卷积通道数正确 ---
+
+    def test_network_conv_channels(self):
+        """[UT-NET-5] 卷积层通道数：3→32→32→32→32→32，输出 32→1(1×1)"""
+        network = self.NETWORK_CLS()
+        # conv1: 3→32
+        self.assertEqual(network.conv1.in_channels, 3)
+        self.assertEqual(network.conv1.out_channels, 32)
+        # conv2~5: 32→32
+        for name in ['conv2', 'conv3', 'conv4', 'conv5']:
+            conv = getattr(network, name)
+            self.assertEqual(conv.in_channels, 32,
+                             f"{name}.in_channels 应为 32")
+            self.assertEqual(conv.out_channels, 32,
+                             f"{name}.out_channels 应为 32")
+        # conv_out: 32→1, kernel_size=(1,1)
+        self.assertEqual(network.conv_out.in_channels, 32)
+        self.assertEqual(network.conv_out.out_channels, 1)
+        self.assertEqual(network.conv_out.kernel_size, (1, 1))
+
+    # --- UT-NET-6：参数量在预期范围内 ---
+
+    def test_network_param_count(self):
+        """[UT-NET-6] 参数量在 37,000～41,000 之间（精确值 38,241）"""
+        total = sum(p.numel() for p in self.NETWORK_CLS().parameters())
+        self.assertGreaterEqual(
+            total, 37_000,
+            f"参数量 {total} 应 >= 37,000"
+        )
+        self.assertLessEqual(
+            total, 41_000,
+            f"参数量 {total} 应 <= 41,000"
+        )
+
+    # --- UT-NET-7：残差连接存在性验证 ---
+
+    def test_network_residual_connection_exists(self):
+        """[UT-NET-7] 将残差块权重置零后，输出应与正常前向不同
+
+        验证残差连接存在的策略：
+        1. 正常前向，记录输出 Y_normal
+        2. 将第一个残差块（conv2, bn2, conv3, bn3）的权重和偏置全部置零
+        3. 再次前向，记录输出 Y_zeroed
+        4. 两者应显著不同 —— 因为残差路径的 shortcut 在权重置零后
+           仍传递输入信息，与正常主路径的贡献显然不同
+        """
+        network = self.NETWORK_CLS()
+        network.eval()
+
+        input_tensor = torch.randn(2, 3, 15, 15)
+
+        # 正常前向
+        with torch.no_grad():
+            output_normal = network(input_tensor).clone()
+
+        # 将残差块 1 的主路径参数置零
+        with torch.no_grad():
+            for name, param in network.named_parameters():
+                if any(x in name for x in ['conv2.', 'bn2.', 'conv3.', 'bn3.']):
+                    param.zero_()
+
+        # 置零后前向
+        with torch.no_grad():
+            output_zeroed = network(input_tensor).clone()
+
+        # 两者应显著不同
+        diff = (output_normal - output_zeroed).abs().max().item()
+        self.assertGreater(
+            diff, 1e-4,
+            "置零残差块权重后，输出应与正常前向显著不同，"
+            "以证明残差连接在主路径中存在并正常工作"
+        )
+
+    # --- UT-RES-3：残差连接对梯度的影响 ---
+
+    def test_residual_gradient_flow(self):
+        """[UT-RES-3] 反向传播后 conv2.weight.grad 不为 None"""
+        network = self.NETWORK_CLS()
+        network.train()
+
+        input_tensor = torch.randn(1, 3, 15, 15)
+        output = network(input_tensor)
+
+        # 对输出的总和做反向传播
+        loss = output.sum()
+        loss.backward()
+
+        # conv2 在残差块 1 中，其梯度应不为 None
+        self.assertIsNotNone(
+            network.conv2.weight.grad,
+            "反向传播后 conv2.weight.grad 不应为 None，"
+            "以证明梯度可通过残差连接正常流动"
+        )
+        # 梯度不应全为零
+        self.assertFalse(
+            torch.allclose(network.conv2.weight.grad,
+                           torch.zeros_like(network.conv2.weight.grad)),
+            "conv2.weight.grad 不应全为零"
+        )
+
+
+class TestCNNV6Model(CNNModelSharedMixin, unittest.TestCase):
+    """CNN v6 模型行为测试
+
+    继承 CNNModelSharedMixin 的通用测试，
+    外加 v6 特有的 BN 模式切换测试。
+    """
+
+    MODEL_CLS = CNNV6Model
+    MODEL_NAME = "cnn_v6"
+    DEFAULT_FILENAME = "cnn_v6.pth"
+
+    # --- UT-MOD-3：eval 模式下 BN 使用全局统计量，多次 forward 输出一致 ---
+
+    def test_model_bn_eval_mode_deterministic(self):
+        """[UT-MOD-3] eval 模式下多次 forward 相同输入，输出完全一致"""
+        model = self.MODEL_CLS(fresh=True)
+        model.network.eval()
+
+        # 构造输入张量
+        board_vector = [0] * 225 + [1]
+        device = next(model.network.parameters()).device
+        input_tensor = board_vector_to_cnn_tensor(board_vector, device)
+
+        with torch.no_grad():
+            output1 = model.network(input_tensor).clone()
+            output2 = model.network(input_tensor).clone()
+
+        self.assertTrue(
+            torch.allclose(output1, output2, atol=1e-6),
+            "eval 模式下多次 forward 相同输入应产生完全一致的输出"
+        )
+
+    # --- UT-MOD-4：train 模式下 BN 使用 batch 统计量 ---
+
+    def test_model_bn_train_mode(self):
+        """[UT-MOD-4] train 模式下网络 .training 属性为 True"""
+        model = self.MODEL_CLS(fresh=True)
+        model.network.train()
+
+        self.assertTrue(
+            model.network.training,
+            "train() 后 network.training 应为 True，BN 使用 batch 统计量"
+        )
+
+        # 验证 BN 层在 train 模式
+        bn_modules = [m for m in model.network.modules()
+                      if isinstance(m, nn.BatchNorm2d)]
+        for bn in bn_modules:
+            self.assertTrue(
+                bn.training,
+                f"train 模式下 {bn} 的 training 属性应为 True"
+            )
 
 
 if __name__ == '__main__':

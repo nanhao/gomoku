@@ -1,0 +1,79 @@
+@startuml
+title CNN v6 前向传播流程
+
+skinparam ActivityBackgroundColor #FEFEFE
+skinparam ActivityBorderColor #333333
+skinparam ArrowColor #555555
+
+start
+
+:输入张量 x
+shape: (batch, 3, 15, 15);
+
+partition "Conv1 + BN + ReLU" {
+  :Conv1
+  3→32, 3×3, padding=1;
+  :BN1
+  BatchNorm2d(32);
+  :ReLU1;
+}
+
+note right
+  输出: (batch, 32, 15, 15)
+end note
+
+partition "残差块 1 (Conv2 + Conv3)" {
+  :保存 shortcut = x;
+
+  :Conv2
+  32→32, 3×3, padding=1;
+  :BN2;
+  :ReLU2;
+
+  :Conv3
+  32→32, 3×3, padding=1;
+  :BN3;
+
+  :x = BN3输出 + shortcut;
+  :ReLU3;
+}
+
+note right
+  输出: (batch, 32, 15, 15)
+  shortcut 直接相加，无需投影
+end note
+
+partition "残差块 2 (Conv4 + Conv5)" {
+  :保存 shortcut = x;
+
+  :Conv4
+  32→32, 3×3, padding=1;
+  :BN4;
+  :ReLU4;
+
+  :Conv5
+  32→32, 3×3, padding=1;
+  :BN5;
+
+  :x = BN5输出 + shortcut;
+  :ReLU5;
+}
+
+note right
+  输出: (batch, 32, 15, 15)
+end note
+
+partition "输出层" {
+  :Conv_out
+  32→1, 1×1;
+  :Flatten
+  (batch, 1, 15, 15) → (batch, 225);
+  :LogSoftmax(dim=1);
+}
+
+:输出 log-probability
+形状: (batch, 225), 值域 (-∞, 0];
+
+stop
+
+@enduml
