@@ -465,12 +465,69 @@ class TestCNNV5Model(CNNModelSharedMixin, unittest.TestCase):
 class TestCNNV6Network(CNNNetworkSharedMixin, unittest.TestCase):
     """CNN v6 网络结构测试
 
-    cnn_v6 在 cnn_v5 基础上引入 BatchNorm 和残差连接：
+    cnn_v6 在 cnn_v5 基础上引入 BatchNorm、残差连接和价值头：
     - 每层 Conv 后添加 BN（Conv→BN→ReLU）
     - Conv2+Conv3 组成残差块 1，Conv4+Conv5 组成残差块 2
+    - Flatten 后并行价值头 FC(225→1)→Tanh，输出 [-1,1] 胜率
+    - forward 返回 (policy, value) 元组
     """
 
     NETWORK_CLS = CNNV6Network
+
+    # --- 覆盖 Mixin：forward 现在返回 (policy, value) 元组 ---
+
+    def test_network_structure(self):
+        """forward 返回 (policy, value) 元组，policy 形状 (batch, 225)"""
+        network = self.NETWORK_CLS()
+        input_tensor = torch.randn(4, 3, 15, 15)
+        output = network(input_tensor)
+        self.assertIsInstance(output, tuple, "forward 应返回元组")
+        self.assertEqual(len(output), 2, "forward 应返回 (policy, value) 元组")
+        policy, value = output
+        self.assertEqual(policy.shape, (4, 225), "policy 形状应为 (batch, 225)")
+        self.assertEqual(value.shape, (4, 1), "value 形状应为 (batch, 1)")
+
+    def test_network_log_softmax_output_range(self):
+        """[primary] policy 输出 LogSoftmax 值 <= 0，value 在 [-1, 1] 内"""
+        network = self.NETWORK_CLS()
+        input_tensor = torch.randn(4, 3, 15, 15)
+        policy, value = network(input_tensor)
+        # LogSoftmax 输出应全部 <= 0
+        self.assertTrue(torch.all(policy <= 0), "LogSoftmax 输出应全部 <= 0")
+        # exp 后的值应在 (0, 1)
+        prob = policy.exp()
+        self.assertTrue(torch.all(prob > 0), "exp(log-probability) 应大于 0")
+        self.assertTrue(torch.all(prob < 1), "exp(log-probability) 应小于 1")
+        # value 应在 [-1, 1]
+        self.assertTrue(torch.all(value >= -1), "value 应 >= -1")
+        self.assertTrue(torch.all(value <= 1), "value 应 <= 1")
+
+    def test_network_log_softmax_row_sum(self):
+        """[primary] policy 的 exp 值每行和为 1"""
+        network = self.NETWORK_CLS()
+        input_tensor = torch.randn(4, 3, 15, 15)
+        policy, _ = network(input_tensor)
+        row_sums = policy.exp().sum(dim=1)
+        self.assertTrue(
+            torch.allclose(row_sums, torch.ones(4), atol=1e-5),
+            "exp(LogSoftmax) 每行概率和应接近 1"
+        )
+
+    def test_network_forward_single(self):
+        """单样本前向"""
+        network = self.NETWORK_CLS()
+        policy, value = network(torch.randn(1, 3, 15, 15))
+        self.assertEqual(policy.shape, (1, 225))
+        self.assertEqual(value.shape, (1, 1))
+
+    def test_network_forward_batch(self):
+        """不同 batch size 前向"""
+        network = self.NETWORK_CLS()
+        for batch_size in (2, 8, 16):
+            with self.subTest(batch_size=batch_size):
+                policy, value = network(torch.randn(batch_size, 3, 15, 15))
+                self.assertEqual(policy.shape, (batch_size, 225))
+                self.assertEqual(value.shape, (batch_size, 1))
 
     # --- UT-NET-1：网络中包含 BatchNorm 层（与 v3/v4/v5 相反） ---
 
@@ -495,16 +552,24 @@ class TestCNNV6Network(CNNNetworkSharedMixin, unittest.TestCase):
                 f"纯卷积网络不应包含 Dropout 层，但发现 {type(module).__name__}"
             )
 
-    # --- UT-NET-3：网络中不包含 FC 层 ---
+    # --- UT-NET-3：网络中仅价值头包含 FC 层（策略头为纯卷积） ---
 
-    def test_network_no_fc(self):
-        """[UT-NET-3] 网络中不包含 Linear（FC）层"""
+    def test_network_fc_only_value_head(self):
+        """[UT-NET-3] 网络中有且仅有 value_fc 一个 Linear 层"""
         network = self.NETWORK_CLS()
-        for module in network.modules():
-            self.assertNotIsInstance(
-                module, nn.Linear,
-                f"纯卷积网络不应包含 Linear 层，但发现 {type(module).__name__}"
-            )
+        linear_modules = [m for m in network.modules()
+                          if isinstance(m, nn.Linear)]
+        self.assertEqual(
+            len(linear_modules), 1,
+            f"应有且仅有 value_fc 一个 Linear 层，实际 {len(linear_modules)} 个"
+        )
+        # 验证就是 value_fc
+        self.assertTrue(
+            hasattr(network, 'value_fc'),
+            "网络应有 value_fc 属性"
+        )
+        self.assertEqual(network.value_fc.in_features, 225)
+        self.assertEqual(network.value_fc.out_features, 1)
 
     # --- UT-NET-4：BN 层数量 = 5（Conv1~5 各一个 BN） ---
 
@@ -543,15 +608,15 @@ class TestCNNV6Network(CNNNetworkSharedMixin, unittest.TestCase):
     # --- UT-NET-6：参数量在预期范围内 ---
 
     def test_network_param_count(self):
-        """[UT-NET-6] 参数量在 37,000～41,000 之间（精确值 38,241）"""
+        """[UT-NET-6] 参数量在 38,000～39,000 之间（精确值 38,467）"""
         total = sum(p.numel() for p in self.NETWORK_CLS().parameters())
         self.assertGreaterEqual(
-            total, 37_000,
-            f"参数量 {total} 应 >= 37,000"
+            total, 38_000,
+            f"参数量 {total} 应 >= 38,000"
         )
         self.assertLessEqual(
-            total, 41_000,
-            f"参数量 {total} 应 <= 41,000"
+            total, 39_000,
+            f"参数量 {total} 应 <= 39,000"
         )
 
     # --- UT-NET-7：残差连接存在性验证 ---
@@ -573,7 +638,8 @@ class TestCNNV6Network(CNNNetworkSharedMixin, unittest.TestCase):
 
         # 正常前向
         with torch.no_grad():
-            output_normal = network(input_tensor).clone()
+            policy_normal, _ = network(input_tensor)
+            output_normal = policy_normal.clone()
 
         # 将残差块 1 的主路径参数置零
         with torch.no_grad():
@@ -583,7 +649,8 @@ class TestCNNV6Network(CNNNetworkSharedMixin, unittest.TestCase):
 
         # 置零后前向
         with torch.no_grad():
-            output_zeroed = network(input_tensor).clone()
+            policy_zeroed, _ = network(input_tensor)
+            output_zeroed = policy_zeroed.clone()
 
         # 两者应显著不同
         diff = (output_normal - output_zeroed).abs().max().item()
@@ -601,10 +668,10 @@ class TestCNNV6Network(CNNNetworkSharedMixin, unittest.TestCase):
         network.train()
 
         input_tensor = torch.randn(1, 3, 15, 15)
-        output = network(input_tensor)
+        policy, _ = network(input_tensor)
 
         # 对输出的总和做反向传播
-        loss = output.sum()
+        loss = policy.sum()
         loss.backward()
 
         # conv2 在残差块 1 中，其梯度应不为 None
@@ -702,12 +769,83 @@ class TestCNNV6Model(CNNModelSharedMixin, unittest.TestCase):
     """CNN v6 模型行为测试
 
     继承 CNNModelSharedMixin 的通用测试，
-    外加 v6 特有的 BN 模式切换测试。
+    外加 v6 特有的 BN 模式切换测试和价值头测试。
+    predict 返回 (List[float], float) 元组，覆盖 Mixin 中相应测试。
     """
 
     MODEL_CLS = CNNV6Model
     MODEL_NAME = "cnn_v6"
     DEFAULT_FILENAME = "cnn_v6.pth"
+
+    # --- 覆盖 Mixin：predict 返回 (policy, value) 元组 ---
+
+    def test_model_predict_shape(self):
+        """predict 返回 (List[float], float) 元组，策略长度 225"""
+        model = self.MODEL_CLS()
+        result = model.predict([0] * 225 + [1])
+        self.assertIsInstance(result, tuple, "predict 应返回元组")
+        self.assertEqual(len(result), 2, "元组长度应为 2")
+        policy, value = result
+        self.assertEqual(len(policy), 225, "策略长度应为 225")
+        self.assertIsInstance(value, float, "价值应为 float")
+
+    def test_model_predict_format(self):
+        """predict 返回策略元素均为 float"""
+        model = self.MODEL_CLS()
+        policy, _ = model.predict([0] * 225 + [1])
+        for prob in policy:
+            self.assertIsInstance(prob, float)
+
+    def test_model_predict_probability_range(self):
+        """[primary] predict 返回策略概率均在 (0, 1) 内"""
+        model = self.MODEL_CLS()
+        policy, _ = model.predict([0] * 225 + [1])
+        for prob in policy:
+            self.assertGreater(prob, 0.0, "概率应大于 0")
+            self.assertLess(prob, 1.0, "概率应小于 1")
+
+    def test_model_predict_probability_sum(self):
+        """[primary] predict 返回策略概率总和为 1"""
+        model = self.MODEL_CLS()
+        policy, _ = model.predict([0] * 225 + [1])
+        self.assertAlmostEqual(sum(policy), 1.0, places=5, msg="概率总和应为 1")
+
+    def test_model_predict_different_inputs(self):
+        """黑方/白方输入均能正常输出"""
+        model = self.MODEL_CLS()
+        policy_black, value_black = model.predict([0] * 225 + [1])
+        policy_white, value_white = model.predict([0] * 225 + [2])
+        self.assertEqual(len(policy_black), 225)
+        self.assertEqual(len(policy_white), 225)
+        self.assertIsInstance(value_black, float)
+        self.assertIsInstance(value_white, float)
+
+    def test_model_predict_with_pieces(self):
+        """带有棋子的棋盘输入"""
+        model = self.MODEL_CLS()
+        board = [0] * 225
+        board[7 * 15 + 7] = 1  # 黑棋
+        board[7 * 15 + 8] = 2  # 白棋
+        board.append(1)
+        policy, value = model.predict(board)
+        self.assertEqual(len(policy), 225)
+        self.assertIsInstance(value, float)
+
+    def test_model_predict_value_range(self):
+        """predict 返回价值在 [-1, 1] 范围内"""
+        model = self.MODEL_CLS()
+        _, value = model.predict([0] * 225 + [1])
+        self.assertGreaterEqual(value, -1.0, "价值应 >= -1")
+        self.assertLessEqual(value, 1.0, "价值应 <= 1")
+
+    def test_model_predict_consistency(self):
+        """相同输入产生相同输出"""
+        model = self.MODEL_CLS()
+        board_vector = [0] * 225 + [1]
+        policy1, value1 = model.predict(board_vector)
+        policy2, value2 = model.predict(board_vector)
+        self.assertEqual(policy1, policy2, "相同输入策略应一致")
+        self.assertEqual(value1, value2, "相同输入价值应一致")
 
     # --- UT-MOD-2：fresh=True 不加载任何权重，参数为随机初始化 ---
 
@@ -761,12 +899,16 @@ class TestCNNV6Model(CNNModelSharedMixin, unittest.TestCase):
         input_tensor = board_vector_to_cnn_tensor(board_vector, device)
 
         with torch.no_grad():
-            output1 = model.network(input_tensor).clone()
-            output2 = model.network(input_tensor).clone()
+            policy1, value1 = model.network(input_tensor)
+            policy2, value2 = model.network(input_tensor)
 
         self.assertTrue(
-            torch.allclose(output1, output2, atol=1e-6),
-            "eval 模式下多次 forward 相同输入应产生完全一致的输出"
+            torch.allclose(policy1, policy2, atol=1e-6),
+            "eval 模式下多次 forward 策略输出应完全一致"
+        )
+        self.assertTrue(
+            torch.allclose(value1, value2, atol=1e-6),
+            "eval 模式下多次 forward 价值输出应完全一致"
         )
 
     # --- UT-MOD-4：train 模式下 BN 使用 batch 统计量 ---
