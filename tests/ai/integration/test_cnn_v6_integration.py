@@ -97,25 +97,16 @@ class TestCNNV6Integration(unittest.TestCase):
     # --- UT-INT-3：通过注册表获取模型后 predict 正常 ---
 
     def test_get_model_predict_works(self):
-        """[UT-INT-3] get_model('cnn_v6.1').predict(board) 返回 (列表, 价值) 元组"""
+        """[UT-INT-3] get_model('cnn_v6.1').predict(board) 返回 225 维概率列表"""
         model = get_model("cnn_v6.1")
         board_vector = [0] * 225 + [1]
         result = model.predict(board_vector)
-        self.assertIsInstance(result, tuple,
-                              "predict 应返回元组")
-        self.assertEqual(len(result), 2,
-                         "predict 应返回 (策略, 价值) 元组")
-        policy, value = result
-        self.assertEqual(len(policy), 225,
-                         "策略应为 225 维列表")
-        self.assertIsInstance(policy[0], float,
-                              "策略元素应为 float")
-        self.assertIsInstance(value, float,
-                              "价值应为 float")
-        self.assertGreaterEqual(value, -1.0,
-                                 "价值应 >= -1")
-        self.assertLessEqual(value, 1.0,
-                              "价值应 <= 1")
+        self.assertIsInstance(result, list,
+                              "predict 应返回列表")
+        self.assertEqual(len(result), 225,
+                         "predict 应返回 225 维概率列表")
+        self.assertIsInstance(result[0], float,
+                              "概率元素应为 float")
 
     # --- UT-INT-4：list_models_with_full_name 包含 cnn_v6 条目 ---
 

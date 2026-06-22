@@ -250,9 +250,9 @@ class TestLazyLoading(unittest.TestCase):
 class TestModelRegistryData(unittest.TestCase):
     """测试 MODEL_REGISTRY 数据完整性"""
 
-    def test_registry_has_eight_models(self):
-        """MODEL_REGISTRY 应包含 8 个模型（random, fc_v1, cnn_v1~v6）"""
-        self.assertEqual(len(MODEL_REGISTRY), 8)
+    def test_registry_has_nine_models(self):
+        """MODEL_REGISTRY 应包含 9 个模型（random, fc_v1, cnn_v1~v7）"""
+        self.assertEqual(len(MODEL_REGISTRY), 9)
 
     def test_registry_entry_format(self):
         """每个注册项格式为 RegistryEntry(model_path, trainer_path_or_None, supports_multi_gen)"""

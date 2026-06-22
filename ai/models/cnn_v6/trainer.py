@@ -1,7 +1,7 @@
 """CNN v6 训练器实现
 
 负责训练 CNN v6 模型。
-CNN v6 网络 forward 返回 (policy, value) 元组，训练时仅使用策略部分。
+CNN v6 网络 forward 返回 (batch, 225) 策略 log-probability 张量。
 """
 
 from typing import List, Optional
@@ -18,10 +18,6 @@ class CNNV6Trainer(BaseTrainer):
 
     负责训练 CNN v6 模型，提供单轮次训练和批量训练。
     继承自 BaseTrainer，使用通用训练逻辑。
-
-    注意：CNN v6 网络 forward 返回 (policy, value) 元组，
-    训练时仅提取策略部分用于 KL 散度损失计算，
-    价值头暂不参与训练（后续意图独立处理）。
 
     默认行为：
     - 尝试加载已保存的模型 cnn_v6.pth
