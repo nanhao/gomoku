@@ -620,6 +620,83 @@ class TestCNNV6Network(CNNNetworkSharedMixin, unittest.TestCase):
             "conv2.weight.grad 不应全为零"
         )
 
+    # --- UT-RES-1：残差块 1 输入输出形状一致 ---
+
+    def test_residual_block1_input_output_shape(self):
+        """[UT-RES-1] 残差块 1 输入输出 shape 均为 (1, 32, 15, 15)
+
+        使用 forward hook 捕获 relu1 的输出（= 残差块 1 的输入）
+        和 relu3 的输出（= 残差块 1 的输出），验证形状一致。
+        """
+        network = self.NETWORK_CLS()
+        network.eval()
+
+        # 用 hook 捕获中间张量的形状
+        captured_shapes = {}
+
+        def make_hook(name):
+            def hook(module, input, output):
+                captured_shapes[name] = tuple(output.shape)
+            return hook
+
+        # relu1 的输出 = 残差块 1 的输入
+        handle1 = network.relu1.register_forward_hook(make_hook("block1_input"))
+        # relu3 的输出 = 残差块 1 的输出 / 残差块 2 的输入
+        handle3 = network.relu3.register_forward_hook(make_hook("block1_output"))
+
+        with torch.no_grad():
+            network(torch.randn(1, 3, 15, 15))
+
+        handle1.remove()
+        handle3.remove()
+
+        self.assertEqual(
+            captured_shapes.get("block1_input"), (1, 32, 15, 15),
+            f"残差块 1 输入 shape 应为 (1, 32, 15, 15)，实际 {captured_shapes.get('block1_input')}"
+        )
+        self.assertEqual(
+            captured_shapes.get("block1_output"), (1, 32, 15, 15),
+            f"残差块 1 输出 shape 应为 (1, 32, 15, 15)，实际 {captured_shapes.get('block1_output')}"
+        )
+
+    # --- UT-RES-2：残差块 2 输入输出形状一致 ---
+
+    def test_residual_block2_input_output_shape(self):
+        """[UT-RES-2] 残差块 2 输入输出 shape 均为 (1, 32, 15, 15)
+
+        使用 forward hook 捕获 relu3 的输出（= 残差块 2 的输入）
+        和 relu5 的输出（= 残差块 2 的输出），验证形状一致。
+        """
+        network = self.NETWORK_CLS()
+        network.eval()
+
+        captured_shapes = {}
+
+        def make_hook(name):
+            def hook(module, input, output):
+                captured_shapes[name] = tuple(output.shape)
+            return hook
+
+        # relu3 的输出 = 残差块 2 的输入
+        handle3 = network.relu3.register_forward_hook(make_hook("block2_input"))
+        # relu5 的输出 = 残差块 2 的输出
+        handle5 = network.relu5.register_forward_hook(make_hook("block2_output"))
+
+        with torch.no_grad():
+            network(torch.randn(1, 3, 15, 15))
+
+        handle3.remove()
+        handle5.remove()
+
+        self.assertEqual(
+            captured_shapes.get("block2_input"), (1, 32, 15, 15),
+            f"残差块 2 输入 shape 应为 (1, 32, 15, 15)，实际 {captured_shapes.get('block2_input')}"
+        )
+        self.assertEqual(
+            captured_shapes.get("block2_output"), (1, 32, 15, 15),
+            f"残差块 2 输出 shape 应为 (1, 32, 15, 15)，实际 {captured_shapes.get('block2_output')}"
+        )
+
 
 class TestCNNV6Model(CNNModelSharedMixin, unittest.TestCase):
     """CNN v6 模型行为测试
@@ -631,6 +708,45 @@ class TestCNNV6Model(CNNModelSharedMixin, unittest.TestCase):
     MODEL_CLS = CNNV6Model
     MODEL_NAME = "cnn_v6"
     DEFAULT_FILENAME = "cnn_v6.pth"
+
+    # --- UT-MOD-2：fresh=True 不加载任何权重，参数为随机初始化 ---
+
+    def test_model_fresh_creates_random_weights(self):
+        """[UT-MOD-2] fresh=True 创建的网络参数为随机初始化（非全零）
+
+        验证 fresh=True 时：
+        1. Conv 层权重非全零（PyTorch 默认使用 Kaiming 初始化）
+        2. 两次 fresh=True 创建的模型参数不同（随机种子不同）
+
+        注意：BN 层的 bias 默认为零、weight 默认为一，这是标准初始化，
+        不是"未初始化"的标志，因此跳过 BN 参数的全零检查。
+        """
+        model1 = self.MODEL_CLS(fresh=True)
+        model2 = self.MODEL_CLS(fresh=True)
+
+        # 验证 Conv 层权重非全零（Kaiming 随机初始化）
+        # BN 的 bias 默认为 0、weight 默认为 1，这是标准行为，跳过
+        for name, param in model1.network.named_parameters():
+            if "bn" in name:
+                continue  # BN 参数使用标准初始化（bias=0, weight=1），无需检查
+            self.assertFalse(
+                torch.allclose(param, torch.zeros_like(param)),
+                f"fresh=True 时参数 {name} 不应全为零（应为随机初始化）"
+            )
+
+        # 两次 fresh 创建的模型参数应不同（不同随机种子）
+        params_differ = False
+        for (n1, p1), (n2, p2) in zip(
+            model1.network.named_parameters(),
+            model2.network.named_parameters()
+        ):
+            if not torch.allclose(p1, p2):
+                params_differ = True
+                break
+        self.assertTrue(
+            params_differ,
+            "两次 fresh=True 创建的模型参数应不同（随机初始化种子不同）"
+        )
 
     # --- UT-MOD-3：eval 模式下 BN 使用全局统计量，多次 forward 输出一致 ---
 
