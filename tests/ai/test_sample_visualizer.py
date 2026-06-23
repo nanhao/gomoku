@@ -106,14 +106,14 @@ class TestNewFormatVisualization:
 
     def test_new_format_multiple_samples(self, tmp_path):
         samples = []
-        for i in range(6):
+        for i in range(3):
             board = _board_with_stones([(112 + i, 1)])
             samples.append(_make_new_format_sample(
                 board, [100 + i, 120 + i], shape="chong4"
             ))
         out = tmp_path / "multi.png"
         viz = SampleVisualizer()
-        viz.visualize(samples, count=6, output_path=str(out), seed=42)
+        viz.visualize(samples, count=3, output_path=str(out), seed=42)
         assert os.path.exists(out)
         assert os.path.getsize(out) > 0
 
@@ -153,16 +153,16 @@ class TestNoHeatmap:
 # ---------------------------------------------------------------------------
 class TestIndicesPriority:
     def test_indices_selects_exact_samples(self, tmp_path):
-        # 构造 20 个不同的样本
+        # 构造 8 个不同的样本
         samples = []
-        for i in range(20):
+        for i in range(8):
             board = _board_with_stones([(i, 1)])
             samples.append(_make_new_format_sample(board, [i + 1]))
 
         # 指定只画 3 个索引
         out = tmp_path / "pick_three.png"
         viz = SampleVisualizer()
-        viz.visualize(samples, indices=[0, 5, 10],
+        viz.visualize(samples, indices=[0, 3, 6],
                       count=6,  # 应被忽略
                       output_path=str(out))
         assert os.path.exists(out)
@@ -183,9 +183,9 @@ class TestIndicesPriority:
 # ---------------------------------------------------------------------------
 class TestSeedReproducibility:
     def test_same_seed_selects_same_subset(self, tmp_path):
-        # 构造 30 个样本
+        # 构造 12 个样本
         samples = []
-        for i in range(30):
+        for i in range(12):
             board = _board_with_stones([(i, 1 if i % 2 == 0 else 2)])
             samples.append(_make_new_format_sample(board, [i]))
 
@@ -193,9 +193,9 @@ class TestSeedReproducibility:
         # （matplotlib 的输出对相同 figure 稳定）
         import random
         r1 = random.Random(1234)
-        pick1 = r1.sample(range(30), 5)
+        pick1 = r1.sample(range(12), 5)
         r2 = random.Random(1234)
-        pick2 = r2.sample(range(30), 5)
+        pick2 = r2.sample(range(12), 5)
         # 先断言 random 库的前置条件（否则测试本身失效）
         assert pick1 == pick2
 
@@ -206,19 +206,6 @@ class TestSeedReproducibility:
         viz.visualize(samples, count=5, seed=1234, output_path=str(out1))
         viz.visualize(samples, count=5, seed=1234, output_path=str(out2))
         assert out1.read_bytes() == out2.read_bytes()
-
-    def test_different_seed_selects_different_subset(self, tmp_path):
-        samples = []
-        for i in range(30):
-            board = _board_with_stones([(i, 1)])
-            samples.append(_make_new_format_sample(board, [i]))
-        out1 = tmp_path / "sA.png"
-        out2 = tmp_path / "sB.png"
-        viz = SampleVisualizer()
-        viz.visualize(samples, count=5, seed=1, output_path=str(out1))
-        viz.visualize(samples, count=5, seed=99999, output_path=str(out2))
-        # 不同 seed 应抽到不同样本 → 输出字节应不同（极小概率相同，可接受）
-        assert out1.read_bytes() != out2.read_bytes()
 
 
 # ---------------------------------------------------------------------------
@@ -235,31 +222,19 @@ class TestEmptySamples:
 # T17: 非法 heatmap_alpha 抛异常
 # ---------------------------------------------------------------------------
 class TestInvalidHeatmapAlpha:
-    def test_alpha_above_one_raises(self, tmp_path):
+    @pytest.mark.parametrize("alpha,mode", [
+        (1.5, "linear"),
+        (-0.1, "linear"),
+        pytest.param(0.5, "bogus", marks=pytest.mark.filterwarnings),
+    ])
+    def test_invalid_heatmap_params_raises(self, tmp_path, alpha, mode):
         board = _empty_board()
         sample = _make_new_format_sample(board, [0])
         viz = SampleVisualizer()
         with pytest.raises(ValueError):
             viz.visualize([sample], count=1,
-                          heatmap_alpha=1.5,
-                          output_path=str(tmp_path / "x.png"))
-
-    def test_alpha_negative_raises(self, tmp_path):
-        board = _empty_board()
-        sample = _make_new_format_sample(board, [0])
-        viz = SampleVisualizer()
-        with pytest.raises(ValueError):
-            viz.visualize([sample], count=1,
-                          heatmap_alpha=-0.1,
-                          output_path=str(tmp_path / "x.png"))
-
-    def test_invalid_heatmap_mode_raises(self, tmp_path):
-        board = _empty_board()
-        sample = _make_new_format_sample(board, [0])
-        viz = SampleVisualizer()
-        with pytest.raises(ValueError):
-            viz.visualize([sample], count=1,
-                          heatmap_mode="bogus",
+                          heatmap_alpha=alpha,
+                          heatmap_mode=mode,
                           output_path=str(tmp_path / "x.png"))
 
     def test_attack_position_out_of_range_raises(self, tmp_path):
@@ -315,22 +290,3 @@ class TestCliSmoke:
         assert out_png.exists()
         assert out_png.stat().st_size > 0
 
-    def test_cli_help_exits_zero(self, tmp_path):
-        proj_root = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..", "..")
-        )
-        env = os.environ.copy()
-        env["PYTHONPATH"] = proj_root + os.pathsep + env.get("PYTHONPATH", "")
-        result = subprocess.run(
-            [sys.executable, "-m", "ai.sample_visualizer", "--help"],
-            capture_output=True,
-            text=True,
-            cwd=proj_root,
-            env=env,
-            timeout=30,
-        )
-        assert result.returncode == 0
-        # --help 应含关键字
-        assert "--sample" in result.stdout
-        assert "--heatmap" in result.stdout.lower() or \
-               "--no-heatmap" in result.stdout

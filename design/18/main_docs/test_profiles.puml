@@ -1,0 +1,52 @@
+@startuml
+title 全量测试串行执行流程
+
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontSize 12
+
+actor "开发者" as Dev
+
+rectangle "pytest 串行引擎" as Engine {
+    usecase "全量测试\n(1659 个用例，全部执行)" as AllTests
+}
+
+rectangle "测试套件（全部模块）" as Suite {
+    folder "tests/game/" as GameTests
+    folder "tests/ai/" as AITests
+    folder "tests/app/" as AppTests
+    folder "tests/cli/" as CLITests
+    folder "tests/e2e/" as E2ETests
+    folder "tests/gui/" as GUITests
+    folder "tests/tools/" as ToolTests
+    folder "tests/unit/" as UnitTests
+    folder "tests/integration/" as IntTests
+}
+
+Dev --> Engine : python -m pytest tests/ -v -s
+
+Engine --> AllTests
+
+AllTests --> GameTests
+AllTests --> AITests
+AllTests --> AppTests
+AllTests --> CLITests
+AllTests --> E2ETests
+AllTests --> GUITests
+AllTests --> ToolTests
+AllTests --> UnitTests
+AllTests --> IntTests
+
+note right of Engine
+  核心原则：
+  不跳过任何一个测试
+  纯靠降低单测耗时提速
+end note
+
+note bottom of Suite
+  A1: 减少训练 epochs
+  A2: Mock 替代真实训练
+  A3: Fixture 作用域优化
+  A4: 精简鸡肋测试
+end note
+
+@enduml

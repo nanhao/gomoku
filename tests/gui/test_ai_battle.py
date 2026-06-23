@@ -36,18 +36,11 @@ class TestAIBattleConfigDialog:
         except tk.TclError:
             pass  # 窗口可能已被销毁，忽略
 
-    def test_init_result_is_none(self):
-        """初始化后 result 应为 None"""
+    def test_initial_state(self):
+        """初始化后 result 应为 None，get_result() 返回 None"""
         dialog = AIBattleConfigDialog(self.root)
         assert dialog.result is None
-        dialog.dialog.destroy()
-        self._destroy()
-
-    def test_get_result_returns_none_initially(self):
-        """get_result 初始应返回 None"""
-        dialog = AIBattleConfigDialog(self.root)
-        result = dialog.get_result()
-        assert result is None
+        assert dialog.get_result() is None
         dialog.dialog.destroy()
         self._destroy()
 
@@ -57,20 +50,6 @@ class TestAIBattleConfigDialog:
         ais = dialog._get_available_ais()
         assert isinstance(ais, list)
         assert len(ais) > 0
-        dialog.dialog.destroy()
-        self._destroy()
-
-    def test_get_available_ais_delegates_to_registry(self):
-        """_get_available_ais 应委托给 registry.list_models_with_full_name()"""
-        from unittest.mock import patch
-        dialog = AIBattleConfigDialog(self.root)
-
-        with patch('ai.registry.list_models_with_full_name') as mock_fn:
-            mock_fn.return_value = ["random", "cnn_v3.1"]
-            ais = dialog._get_available_ais()
-
-        mock_fn.assert_called_once()
-        assert ais == ["random", "cnn_v3.1"]
         dialog.dialog.destroy()
         self._destroy()
 
@@ -170,10 +149,12 @@ class TestAIBattleProgressWindow:
         except tk.TclError:
             pass  # 窗口可能已被销毁，忽略
 
-    def test_init_num_games_stored(self):
-        """num_games 应被正确存储"""
+    def test_initial_window_state(self):
+        """初始化后各属性应正确设置"""
         window = self._create_window(num_games=5)
         assert window.num_games == 5
+        assert window.recorder is None
+        assert window.on_complete is None
         self._destroy(window)
 
     def test_init_ai_names_stored(self):
@@ -181,18 +162,6 @@ class TestAIBattleProgressWindow:
         window = self._create_window(ai1="random", ai2="random")
         assert window.ai1_name == "random"
         assert window.ai2_name == "random"
-        self._destroy(window)
-
-    def test_init_recorder_is_none(self):
-        """初始化后 recorder 应为 None"""
-        window = self._create_window()
-        assert window.recorder is None
-        self._destroy(window)
-
-    def test_init_on_complete_is_none(self):
-        """初始化后 on_complete 应为 None"""
-        window = self._create_window()
-        assert window.on_complete is None
         self._destroy(window)
 
     def test_create_ai_engine_random(self):
@@ -278,41 +247,6 @@ class TestAIBattleProgressWindow:
             callback.assert_called_once_with(None, False)
 
         self._destroy(window)
-
-    def test_root_window_created(self):
-        """初始化应创建 root 窗口"""
-        window = self._create_window()
-        assert window.root is not None
-        self._destroy(window)
-
-    def test_status_label_created(self):
-        """status_label 应被创建"""
-        window = self._create_window()
-        assert window.status_label is not None
-        self._destroy(window)
-
-    def test_progress_label_created(self):
-        """progress_label 应被创建"""
-        window = self._create_window()
-        assert window.progress_label is not None
-        self._destroy(window)
-
-
-class TestAIBattleManager:
-    """测试 AI 内战管理器"""
-
-    def test_run_ai_vs_ai_is_static(self):
-        """run_ai_vs_ai 应是可调用的静态方法"""
-        assert callable(AIBattleManager.run_ai_vs_ai)
-
-    def test_manager_has_run_method(self):
-        """AIBattleManager 应有 run_ai_vs_ai 方法"""
-        assert hasattr(AIBattleManager, "run_ai_vs_ai")
-
-
-# ---------------------------------------------------------------------------
-# 第四十一次追加：AIBattleProgressWindow 透传 temp_config 测试
-# ---------------------------------------------------------------------------
 
 class TestAIBattleProgressWindowTempConfig:
     """验证 AIBattleProgressWindow 接受 temp_config 参数。"""

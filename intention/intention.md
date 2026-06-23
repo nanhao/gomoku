@@ -138,3 +138,6 @@ v6：
 
 # intention_id=17
 把 cnn_v6 升级为 cnn_v7，恢复 intention_id=15里面的 cnn_v6
+
+# intention_id=18
+完整 review 整个测试集。现在运行一次全量测试太久了，我需要把单次运行的时间压缩到一分钟左右

@@ -104,7 +104,7 @@ class TestGracefulShutdown(unittest.TestCase):
 
         # 执行训练，应抛出 KeyboardInterrupt
         with self.assertRaises(KeyboardInterrupt):
-            trainer.train_single(self.test_dir, epochs=10)
+            trainer.train_single(self.test_dir, epochs=2)
 
         self.assertTrue(save_called, "中断时应保存模型")
         self.assertTrue(plot_called, "中断时应生成图表")
@@ -130,7 +130,7 @@ class TestGracefulShutdown(unittest.TestCase):
         plot_called, flush_called = self._setup_mock_logger(trainer)
 
         with self.assertRaises(KeyboardInterrupt):
-            trainer.train_batch([self.test_dir], epochs=10)
+            trainer.train_batch([self.test_dir], epochs=2)
 
         self.assertTrue(save_called, "中断时应保存模型")
         self.assertTrue(plot_called, "中断时应生成图表")
@@ -157,7 +157,7 @@ class TestGracefulShutdown(unittest.TestCase):
 
         with self.assertRaises(KeyboardInterrupt):
             trainer.train_mini_batch(
-                [self.test_dir], epochs=10, batch_size=2
+                [self.test_dir], epochs=2, batch_size=2
             )
 
         self.assertTrue(save_called, "中断时应保存模型")
@@ -205,7 +205,7 @@ class TestGracefulShutdown(unittest.TestCase):
         plot_called, _ = self._setup_mock_logger(trainer)
 
         with self.assertRaises(KeyboardInterrupt):
-            trainer.train_single(self.test_dir, epochs=10)
+            trainer.train_single(self.test_dir, epochs=2)
 
         self.assertTrue(save_called, "第 0 个 epoch 中断时也应保存模型")
 

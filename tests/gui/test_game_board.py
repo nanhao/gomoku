@@ -29,13 +29,20 @@ class TestGameBoard(unittest.TestCase):
         except tk.TclError:
             pass  # 窗口可能已被销毁，忽略
 
-    def test_init(self):
-        """测试初始化"""
+    def test_initial_state(self):
+        """初始化应设置正确的常量和画布尺寸"""
         board = GameBoard(self.root)
         assert board is not None
         assert board.BOARD_SIZE == 15
         assert board.CELL_SIZE == 42
         assert board.BOARD_MARGIN == 50
+        assert hasattr(board, 'COLOR_BOARD')
+        assert hasattr(board, 'COLOR_LINE')
+        assert hasattr(board, 'COLOR_BLACK')
+        assert hasattr(board, 'COLOR_WHITE')
+        assert hasattr(board, 'COLOR_LAST_MOVE')
+        expected_size = board.BOARD_MARGIN * 2 + board.CELL_SIZE * (board.BOARD_SIZE - 1)
+        assert board.canvas_size == expected_size
 
     def test_init_with_callback(self):
         """测试带回调函数初始化"""
@@ -141,16 +148,6 @@ class TestGameBoard(unittest.TestCase):
         # 应新增图形对象（3 个棋子各 2 个 oval + 1 个最后落子标记 oval）
         self.assertGreater(count_after, count_before)
 
-    def test_constants(self):
-        """测试常量定义"""
-        board = GameBoard(self.root)
-
-        assert hasattr(board, 'COLOR_BOARD')
-        assert hasattr(board, 'COLOR_LINE')
-        assert hasattr(board, 'COLOR_BLACK')
-        assert hasattr(board, 'COLOR_WHITE')
-        assert hasattr(board, 'COLOR_LAST_MOVE')
-
     def test_get_canvas(self):
         """测试获取画布"""
         board = GameBoard(self.root)
@@ -158,13 +155,6 @@ class TestGameBoard(unittest.TestCase):
 
         assert canvas is not None
         assert isinstance(canvas, tk.Canvas)
-
-    def test_canvas_size(self):
-        """测试画布尺寸计算"""
-        board = GameBoard(self.root)
-        expected_size = board.BOARD_MARGIN * 2 + board.CELL_SIZE * (board.BOARD_SIZE - 1)
-
-        assert board.canvas_size == expected_size
 
     def test_click_callback(self):
         """测试点击回调"""

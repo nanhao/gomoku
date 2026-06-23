@@ -63,11 +63,6 @@ class TestHeatmapCanvas:
         assert heatmap.width == 300
         assert heatmap.height == 300
 
-    def test_clear(self):
-        heatmap = HeatmapCanvas(self.root)
-        heatmap.clear()
-        assert True  # 正常执行即可
-
     # ----- 基础绘制（保留） -----
 
     def test_draw_heatmap_valid(self):

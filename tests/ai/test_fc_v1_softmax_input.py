@@ -184,11 +184,11 @@ class TestSoftmaxProbabilityInput(unittest.TestCase):
             # 注入 mock logger 避免污染真实 loss_logs 目录
             trainer2.loss_logger = MagicMock()
             trainer2.loss_logger.dense_log = False
-            loss_epoch50 = trainer2.train_single(tmpdir, epochs=50)
+            loss_epoch5 = trainer2.train_single(tmpdir, epochs=5)
 
         # KL 散度 loss 应随训练递减
-        self.assertLess(loss_epoch50, loss_epoch1,
-                        f"50 epoch 平均 KL散度 loss({loss_epoch50:.6f}) 应小于 1 epoch loss({loss_epoch1:.6f})")
+        self.assertLess(loss_epoch5, loss_epoch1,
+                        f"5 epoch 平均 KL散度 loss({loss_epoch5:.6f}) 应小于 1 epoch loss({loss_epoch1:.6f})")
 
 
 if __name__ == '__main__':

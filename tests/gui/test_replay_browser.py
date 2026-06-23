@@ -1,5 +1,5 @@
 """
-回放浏览器测试 - TestRoundSelector, TestGameSelector, TestReplayBrowser
+回放浏览器测试 - TestRoundSelector, TestGameSelector
 
 测试回放选择器和浏览器的核心功能。
 使用临时目录结构进行测试。
@@ -18,7 +18,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from gui.components.replay_browser import RoundSelector, GameSelector, ReplayBrowser
+from gui.components.replay_browser import RoundSelector, GameSelector
 
 
 def _create_temp_ai_data():
@@ -187,19 +187,3 @@ class TestGameSelector:
         assert games == []
         root.destroy()
         self._cleanup()
-
-
-class TestReplayBrowser:
-    """测试回放浏览器（静态方法）"""
-
-    def test_select_round_is_static(self):
-        """select_round 应是静态方法"""
-        assert callable(ReplayBrowser.select_round)
-
-    def test_select_game_is_static(self):
-        """select_game 应是静态方法"""
-        assert callable(ReplayBrowser.select_game)
-
-    def test_browse_is_static(self):
-        """browse 应是静态方法"""
-        assert callable(ReplayBrowser.browse)

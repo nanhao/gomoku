@@ -123,12 +123,6 @@ class TestGomokuGUIOnBoardClick:
         _click(self.gui, 7, 7)   # 重复落子
         assert not self.gui._display_update_called, "重复落子不应刷新棋盘"
 
-    def test_is_over_method_exists(self):
-        """controller 应有 is_over() 方法，不应有 is_game_over()"""
-        assert hasattr(self.gui.controller, "is_over"), "controller 应有 is_over()"
-        assert not hasattr(self.gui.controller, "is_game_over"), \
-            "controller 不应有 is_game_over()，应使用 is_over()"
-
     def test_on_board_click_calls_is_over_not_crash(self):
         """落子后调用 is_over() 不应崩溃"""
         try:

@@ -102,14 +102,6 @@ class TestWinnerPathInputAlignment(unittest.TestCase):
             self.assertEqual(samples[2]["input"], [4.0] * 226)
 
 
-class TestWinnerPathOutputOneHot(unittest.TestCase):
-    """[已移除] 原硬标签 one-hot 语义用例已由第三十九次追加替换。
-
-    软标签下的 output 精确值校验统一在
-    tests/ai/test_sample_creator_winner_path_soft_label.py 中覆盖。
-    """
-
-
 class TestWinnerPathMask(unittest.TestCase):
     """mask 全 1"""
 
@@ -243,14 +235,6 @@ class TestWinnerPathNoAugmentation(unittest.TestCase):
             self.assertEqual(samples[0]["output"][0], 1.0)
             self.assertEqual(samples[1]["output"][2], 1.0)
             self.assertEqual(samples[2]["output"][4], 1.0)
-
-
-class TestWinnerPathInvalidPosition(unittest.TestCase):
-    """[已移除] 原"越界 → output 全 0"语义已由第三十九次追加替换为
-    "越界 → output = 模型原分布"。相关用例移至
-    tests/ai/test_sample_creator_winner_path_soft_label.py 中
-    TestSoftLabelInvalidPositionReturnsModelOutput。
-    """
 
 
 class TestWinnerPathMultipleFiles(unittest.TestCase):

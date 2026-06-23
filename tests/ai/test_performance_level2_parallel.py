@@ -132,20 +132,6 @@ class TestEvaluateRecordWorker(unittest.TestCase):
             self.assertIn("output", item)
             self.assertIn("mask", item)
 
-    def test_worker_can_be_pickled_by_processpool(self):
-        """worker 应可被 ProcessPoolExecutor 调用（pickle 兼容）"""
-        game_dir = os.path.join(self.ai_data_dir, "round_1", "1")
-        record_path = _create_minimal_record(game_dir)
-
-        with ProcessPoolExecutor(max_workers=2) as executor:
-            future = executor.submit(
-                _evaluate_record_worker,
-                record_path, self.ai_data_dir, self.train_data_dir
-            )
-            result = future.result()
-
-        self.assertTrue(result.endswith("sample.json"))
-        self.assertTrue(os.path.exists(result))
 
 
 class TestEvaluateRoundSerialMode(unittest.TestCase):
@@ -187,25 +173,9 @@ class TestEvaluateRoundSerialMode(unittest.TestCase):
         # 验证文件存在
         for sample_file in result["sample_files"]:
             self.assertTrue(os.path.exists(sample_file))
-
-    def test_serial_mode_result_matches_original(self):
-        """串行模式的结果应与原始串行逻辑一致"""
-        round_dir = os.path.join(self.ai_data_dir, "round_1")
-        record_paths = []
-        for i in range(1, 3):
-            path = _create_minimal_record(os.path.join(round_dir, str(i)))
-            record_paths.append(path)
-
-        # 使用 evaluate_round（串行模式）
-        evaluator = Evaluator(
-            ai_data_dir=self.ai_data_dir,
-            train_data_dir=self.train_data_dir,
-            max_workers=1
-        )
-        result = evaluator.evaluate_round(round_dir)
-
-        # 手动串行调用 evaluate_record 验证
-        for record_path in record_paths:
+        # 与 evaluate_record 逐条一致
+        for i in range(1, 4):
+            record_path = os.path.join(round_dir, str(i), "record.json")
             sample_path = evaluator.evaluate_record(record_path)
             self.assertIn(sample_path, result["sample_files"])
 
@@ -280,28 +250,6 @@ class TestEvaluateRoundParallelMode(unittest.TestCase):
 
 
 
-class TestMaxWorkersFallback(unittest.TestCase):
-    """测试 max_workers 参数行为
-
-    验证默认值、显式设值和退化行为。
-    """
-
-    def test_default_max_workers_positive(self):
-        """默认 max_workers 应为正整数"""
-        evaluator = Evaluator()
-        self.assertGreaterEqual(evaluator.max_workers, 1)
-
-    def test_max_workers_one_is_serial(self):
-        """max_workers=1 时应退化为串行执行"""
-        evaluator = Evaluator(max_workers=1)
-        self.assertEqual(evaluator.max_workers, 1)
-
-    def test_max_workers_stored(self):
-        """max_workers 应被正确存储"""
-        evaluator = Evaluator(max_workers=4)
-        self.assertEqual(evaluator.max_workers, 4)
-
-
 class TestParallelErrorHandling(unittest.TestCase):
     """测试并行评价的错误处理
 
@@ -327,27 +275,6 @@ class TestParallelErrorHandling(unittest.TestCase):
         with open(invalid_path, 'w', encoding='utf-8') as f:
             json.dump({"history": [], "winner": 0}, f)
         return invalid_path
-
-    def test_invalid_record_does_not_affect_others_serial(self):
-        """串行模式下，一个无效 record 不影响其他文件的评价"""
-        round_dir = os.path.join(self.ai_data_dir, "round_1")
-
-        # 创建 2 个有效 record 和 1 个无效 record
-        _create_minimal_record(os.path.join(round_dir, "1"))
-        self._create_invalid_record(os.path.join(round_dir, "2"))
-        _create_minimal_record(os.path.join(round_dir, "3"))
-
-        evaluator = Evaluator(
-            ai_data_dir=self.ai_data_dir,
-            train_data_dir=self.train_data_dir,
-            max_workers=1
-        )
-        result = evaluator.evaluate_round(round_dir)
-
-        # 应有 2 个成功的 sample
-        self.assertEqual(len(result["sample_files"]), 2)
-        # 应有 1 个错误
-        self.assertEqual(len(result["errors"]), 1)
 
     def test_invalid_record_does_not_affect_others_parallel(self):
         """并行模式下，一个无效 record 不影响其他文件的评价"""

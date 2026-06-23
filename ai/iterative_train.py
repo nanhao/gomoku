@@ -249,7 +249,7 @@ class IterativeTrainer:
             "--model", self._ai1,
             "--sample_games", str(SAMPLE_GAMES),
             "--output", sample_path,
-            "--temp-moves", 100
+            "--temp-moves", "100"
         ]
 
         result = self._run_subprocess(cmd)

@@ -229,7 +229,7 @@ class TestMaxExtraZero(unittest.TestCase):
 class TestCLISmoke(unittest.TestCase):
 
     def test_T10_cli_generate_huo3(self):
-        """CLI 生成 20 个 huo3 样本写到临时文件，结构合格"""
+        """CLI 生成 5 个 huo3 样本写到临时文件，结构合格"""
         proj_root = os.path.abspath(os.path.join(
             os.path.dirname(__file__), "..", ".."))
         with tempfile.TemporaryDirectory() as tmp:
@@ -237,7 +237,7 @@ class TestCLISmoke(unittest.TestCase):
             result = subprocess.run(
                 [sys.executable, "-m", "ai.sample_generator",
                  "--shape", "huo3",
-                 "--num-samples", "20",
+                 "--num-samples", "5",
                  "--output", out,
                  "--print-failures", "0"],
                 cwd=proj_root,
@@ -250,7 +250,7 @@ class TestCLISmoke(unittest.TestCase):
             self.assertTrue(os.path.exists(out))
             with open(out, encoding="utf-8") as f:
                 samples = json.load(f)
-            self.assertEqual(len(samples), 20)
+            self.assertEqual(len(samples), 5)
             for s in samples:
                 self.assertIn("_attack_positions", s)
                 self.assertIn("_shape", s)

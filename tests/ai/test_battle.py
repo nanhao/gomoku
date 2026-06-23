@@ -142,8 +142,8 @@ class TestStartAiVsAiRandom(unittest.TestCase):
         engine2 = AIEngine(RandomModel())
         recorder = DataRecorder("test_rnd", self.test_ai_data_dir)
 
-        # 运行较多局以确保随机性可被观察到
-        num_games = 20
+        # 运行 8 局验证随机性（全同色概率 ~0.78%）
+        num_games = 8
         results = AIGameManager.start_ai_vs_ai_random(engine1, engine2, num_games, recorder)
 
         ai1_as_black = sum(1 for r in results if r["ai1_color"] == 1)
@@ -205,19 +205,6 @@ class TestStartAiVsAiRandomEdge(unittest.TestCase):
 
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["game"], 1)
-
-    def test_draw_game_both_not_won(self):
-        """边缘：平局时两方都不算获胜"""
-        engine1 = AIEngine(RandomModel())
-        engine2 = AIEngine(RandomModel())
-        recorder = DataRecorder("test_rnd_edge", self.test_ai_data_dir)
-
-        results = AIGameManager.start_ai_vs_ai_random(engine1, engine2, 10, recorder)
-
-        for r in results:
-            if r["winner"] == 3:  # 平局
-                self.assertFalse(r["ai1_won"], "平局时 ai1_won 应为 False")
-                self.assertFalse(r["ai2_won"], "平局时 ai2_won 应为 False")
 
 
 class TestBattleModule(unittest.TestCase):

@@ -29,11 +29,18 @@ class TestGameModeSelector(unittest.TestCase):
         except tk.TclError:
             pass  # 窗口可能已被销毁，忽略
 
-    def test_init(self):
-        """测试初始化"""
+    def test_initial_state(self):
+        """初始化后基础状态和常量应正确"""
         selector = GameModeSelector(self.root)
         assert selector is not None
         assert selector.result is None
+        assert hasattr(selector, 'COLOR_BG')
+        assert hasattr(selector, 'COLOR_BEAR')
+        assert hasattr(selector, 'COLOR_BUNNY')
+        assert hasattr(selector, 'COLOR_BUTTON_BG')
+        assert hasattr(selector, 'WINDOW_WIDTH')
+        assert selector.WINDOW_WIDTH == 400
+        assert selector.WINDOW_HEIGHT == 600
 
     def test_select_pvp(self):
         """测试选择人人对战模式"""
@@ -44,46 +51,16 @@ class TestGameModeSelector(unittest.TestCase):
         assert selector.result["mode"] == "pvp"
 
     @patch('gui.components.mode_selector.tk.Toplevel')
-    def test_select_pve_black(self, mock_toplevel):
-        """测试选择人机对战 - 执黑棋，mock Toplevel 不弹窗，验证对话框创建成功"""
-        # 创建一个 mock Toplevel 实例，模拟窗口但不真实弹窗
+    def test_select_pve_creates_dialog(self, mock_toplevel):
+        """PVE 模式下应创建颜色选择对话框"""
         mock_dialog = MagicMock()
         mock_toplevel.return_value = mock_dialog
 
         selector = GameModeSelector(self.root)
-        # 调用 _select_pve 触发 _show_color_selection，Toplevel 被 mock
         selector._select_pve()
 
-        # 验证 Toplevel 被调用（对话框被创建）
         mock_toplevel.assert_called_once()
-        # 验证 result 仍为 None（用户尚未点击颜色按钮）
         self.assertIsNone(selector.result)
-
-    @patch('gui.components.mode_selector.tk.Toplevel')
-    def test_select_pve_white(self, mock_toplevel):
-        """测试选择人机对战 - 执白棋，mock Toplevel 不弹窗，验证对话框创建成功"""
-        mock_dialog = MagicMock()
-        mock_toplevel.return_value = mock_dialog
-
-        selector = GameModeSelector(self.root)
-        selector._select_pve()
-
-        # 验证 Toplevel 被调用（对话框被创建）
-        mock_toplevel.assert_called_once()
-        # 验证 result 仍为 None（用户尚未点击颜色按钮）
-        self.assertIsNone(selector.result)
-
-    @patch('gui.components.mode_selector.tk.Toplevel')
-    def test_select_pve_with_different_ai(self, mock_toplevel):
-        """测试选择人机对战 - 不同 AI 模型，mock Toplevel 不弹窗"""
-        mock_dialog = MagicMock()
-        mock_toplevel.return_value = mock_dialog
-
-        selector = GameModeSelector(self.root)
-        selector._select_pve()
-
-        # 验证 Toplevel 被调用（对话框被创建）
-        mock_toplevel.assert_called_once()
 
     @patch('gui.components.mode_selector.tk.Toplevel')
     def test_select_ai_vs_ai(self, mock_toplevel):
@@ -145,21 +122,3 @@ class TestGameModeSelector(unittest.TestCase):
 
         assert result is not None
         assert result["mode"] == "pvp"
-
-    def test_constants(self):
-        """测试常量定义"""
-        selector = GameModeSelector(self.root)
-
-        # 验证配色方案存在
-        assert hasattr(selector, 'COLOR_BG')
-        assert hasattr(selector, 'COLOR_BEAR')
-        assert hasattr(selector, 'COLOR_BUNNY')
-        assert hasattr(selector, 'COLOR_TEXT')
-        assert hasattr(selector, 'COLOR_BUTTON_BG')
-        assert hasattr(selector, 'COLOR_BORDER')
-
-        # 验证窗口尺寸
-        assert hasattr(selector, 'WINDOW_WIDTH')
-        assert hasattr(selector, 'WINDOW_HEIGHT')
-        assert selector.WINDOW_WIDTH == 400
-        assert selector.WINDOW_HEIGHT == 600

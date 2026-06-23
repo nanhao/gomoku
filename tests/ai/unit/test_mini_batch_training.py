@@ -69,7 +69,7 @@ class TestMiniBatchTraining(unittest.TestCase):
         
         result = trainer.train_mini_batch(
             [dir1, dir2],
-            epochs=10,
+            epochs=5,
             batch_size=2,
             verbose=False
         )
@@ -162,7 +162,7 @@ class TestMiniBatchTraining(unittest.TestCase):
         
         trainer.train_mini_batch(
             [dir1, dir2],
-            epochs=10,
+            epochs=5,
             batch_size=2,
             verbose=False
         )

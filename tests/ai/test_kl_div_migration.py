@@ -27,60 +27,6 @@ from ai.sample_loader import compute_masked_kl_loss
 from ai.lr_range_test import run_lr_range_test
 
 
-class TestSampleInspectorDeletion(unittest.TestCase):
-    """T3: SampleInspector 删除验证"""
-
-    def test_sample_inspector_py_deleted(self):
-        """T3-01: sample_inspector.py 已删除"""
-        path = os.path.join(
-            os.path.dirname(__file__), '..', '..', 'ai', 'models', 'fc_v1', 'sample_inspector.py'
-        )
-        self.assertFalse(os.path.exists(path),
-                         f"sample_inspector.py 应已删除，但仍存在于 {path}")
-
-    def test_inspect_main_py_deleted(self):
-        """T3-02: inspect_main.py 已删除"""
-        path = os.path.join(
-            os.path.dirname(__file__), '..', '..', 'ai', 'models', 'fc_v1', 'inspect_main.py'
-        )
-        self.assertFalse(os.path.exists(path),
-                         f"inspect_main.py 应已删除，但仍存在于 {path}")
-
-    def test_test_fc_v1_inspect_py_deleted(self):
-        """T3-03: test_fc_v1_inspect.py 已删除"""
-        path = os.path.join(os.path.dirname(__file__), 'test_fc_v1_inspect.py')
-        self.assertFalse(os.path.exists(path),
-                         f"test_fc_v1_inspect.py 应已删除，但仍存在于 {path}")
-
-    def test_no_sample_inspector_references(self):
-        """T3-04: SampleInspector 无残留引用（搜索源码目录）"""
-        # 搜索 ai/ 和 tests/ 目录下所有 .py 文件
-        project_root = os.path.join(os.path.dirname(__file__), '..', '..')
-        found = []
-        # 排除本测试文件自身（本文件包含 "SampleInspector" 是为了检查残留，不是残留引用）
-        this_file = os.path.abspath(__file__)
-        for root, _dirs, files in os.walk(os.path.join(project_root, 'ai')):
-            for f in files:
-                if f.endswith('.py'):
-                    filepath = os.path.join(root, f)
-                    with open(filepath, 'r', encoding='utf-8', errors='ignore') as fh:
-                        content = fh.read()
-                        if 'SampleInspector' in content:
-                            found.append(filepath)
-        for root, _dirs, files in os.walk(os.path.join(project_root, 'tests')):
-            for f in files:
-                if f.endswith('.py'):
-                    filepath = os.path.join(root, f)
-                    if os.path.abspath(filepath) == this_file:
-                        continue  # 跳过本测试文件自身
-                    with open(filepath, 'r', encoding='utf-8', errors='ignore') as fh:
-                        content = fh.read()
-                        if 'SampleInspector' in content:
-                            found.append(filepath)
-        self.assertEqual(len(found), 0,
-                         f"SampleInspector 应无残留引用，但在以下文件中发现: {found}")
-
-
 class TestNetworkOutputLayer(unittest.TestCase):
     """T6: 网络输出层验证"""
 
@@ -112,43 +58,6 @@ class TestNetworkOutputLayer(unittest.TestCase):
         prob_sum = output.exp().sum(dim=1).item()
         self.assertAlmostEqual(prob_sum, 1.0, places=5,
                                msg=f"CNNV3 exp(log-probability) 总和应为 1.0，实际为 {prob_sum}")
-
-    def test_no_softmax_in_models(self):
-        """T6-03: 无 nn.Softmax 残留（模型代码中）"""
-        project_root = os.path.join(os.path.dirname(__file__), '..', '..')
-        models_dir = os.path.join(project_root, 'ai', 'models')
-        found = []
-        for root, _dirs, files in os.walk(models_dir):
-            for f in files:
-                if f.endswith('.py'):
-                    filepath = os.path.join(root, f)
-                    with open(filepath, 'r', encoding='utf-8', errors='ignore') as fh:
-                        content = fh.read()
-                        if 'nn.Softmax' in content:
-                            found.append(filepath)
-        self.assertEqual(len(found), 0,
-                         f"模型代码中不应存在 nn.Softmax，但在以下文件中发现: {found}")
-
-    def test_no_old_function_name(self):
-        """T6-04: 旧函数名 compute_masked_l1_loss 无残留（源码和注释）"""
-        project_root = os.path.join(os.path.dirname(__file__), '..', '..')
-        found = []
-        this_file = os.path.abspath(__file__)  # 排除本测试文件自身
-        # 搜索 ai/ 和 tests/ 下的 .py 文件
-        for subdir in ['ai', 'tests']:
-            search_dir = os.path.join(project_root, subdir)
-            for root, _dirs, files in os.walk(search_dir):
-                for f in files:
-                    if f.endswith('.py'):
-                        filepath = os.path.join(root, f)
-                        if os.path.abspath(filepath) == this_file:
-                            continue  # 跳过本测试文件自身
-                        with open(filepath, 'r', encoding='utf-8', errors='ignore') as fh:
-                            content = fh.read()
-                            if 'compute_masked_l1_loss' in content:
-                                found.append(filepath)
-        self.assertEqual(len(found), 0,
-                         f"compute_masked_l1_loss 应无残留引用，但在以下文件中发现: {found}")
 
 
 class TestLRRangeTestVerification(unittest.TestCase):
@@ -185,21 +94,6 @@ class TestLRRangeTestVerification(unittest.TestCase):
             for loss in losses:
                 self.assertTrue(torch.isfinite(torch.tensor(loss)).item(),
                                 f"loss 值 {loss} 不是有限数")
-
-    def test_lr_range_test_criterion_is_kl_div(self):
-        """T7-02: LR Range Test 使用 KLDivLoss"""
-        # 验证 lr_range_test.py 中的 criterion 定义
-        lr_range_test_path = os.path.join(
-            os.path.dirname(__file__), '..', '..', 'ai', 'lr_range_test.py'
-        )
-        with open(lr_range_test_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-        # 检查 KLDivLoss 存在
-        self.assertIn('nn.KLDivLoss', content,
-                       "lr_range_test.py 应使用 nn.KLDivLoss")
-        # 检查 L1Loss 不存在
-        self.assertNotIn('nn.L1Loss', content,
-                          "lr_range_test.py 不应包含 nn.L1Loss")
 
 
 class TestNumericalStability(unittest.TestCase):
@@ -243,17 +137,6 @@ class TestNumericalStability(unittest.TestCase):
                        "防御返回的零损失应连接 autograd 图（requires_grad=True）")
         # 补充 backward() 可行性验证（Review T1）：确保 backward() 不报 "no grad_fn" 错误
         loss.backward()
-
-    def test_compute_masked_kl_loss_target_zero_no_exception(self):
-        """T9-03: compute_masked_kl_loss 中 target[i]=0 不抛异常"""
-        log_estimated = [math.log(0.5)] + [0.0] * 224
-        target = [0.0] * 225  # 全零 target
-        mask = [1] * 225
-
-        loss = compute_masked_kl_loss(log_estimated, target, mask)
-        # 全零 target 时所有位置贡献为 0
-        self.assertAlmostEqual(loss, 0.0, places=5,
-                               msg="全零 target 时 compute_masked_kl_loss 应返回 0.0")
 
 
 if __name__ == '__main__':

@@ -1,44 +1,13 @@
-"""train_main CLI 参数测试
-
-测试已移除的参数（--self-play、--merge-output）和 --train-from-dir 的行为。
-"""
+"""discover_sample_dirs 辅助函数测试"""
 
 import os
 import sys
 import unittest
-from unittest.mock import patch, MagicMock
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from ai.train_main import main
 from ai.runners import discover_sample_dirs
-
-
-class TestSelfPlayParamRemoved(unittest.TestCase):
-    """验证 --self-play 参数已移除"""
-
-    def test_self_play_param_removed(self):
-        """--self-play 参数已不存在，解析时报错"""
-        with patch('sys.argv', ['train_main.py', '--model', 'fc_v1', '--self-play']):
-            with self.assertRaises(SystemExit):
-                main()
-
-    def test_merge_output_param_removed(self):
-        """--merge-output 参数已不存在"""
-        with patch('sys.argv', ['train_main.py', '--model', 'fc_v1', '--merge-output', '/tmp/out.json']):
-            with self.assertRaises(SystemExit):
-                main()
-
-
-class TestRemovedCycleParam(unittest.TestCase):
-    """验证 --cycle 参数已移除"""
-
-    def test_cycle_param_removed(self):
-        """--cycle 参数已不存在，解析时报错"""
-        with patch('sys.argv', ['train_main.py', '--model', 'fc_v1', '--cycle']):
-            with self.assertRaises(SystemExit):
-                main()
 
 
 class TestDiscoverSampleDirs(unittest.TestCase):

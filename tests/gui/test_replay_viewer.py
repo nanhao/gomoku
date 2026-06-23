@@ -156,36 +156,6 @@ class TestReplayViewer:
         # 验证步骤标签更新
         assert viewer.step_label.cget("text") == "第 0 / 2 步"
 
-    def test_draw_board_grid(self):
-        """测试绘制棋盘网格"""
-        viewer = ReplayViewer(self.root, self.record_file)
-        viewer._draw_board_grid()
-
-        assert True  # 应该正常执行
-
-    def test_draw_pieces(self):
-        """测试绘制棋子"""
-        viewer = ReplayViewer(self.root, self.record_file)
-
-        input_vector = [0] * 225
-        input_vector[7 * 15 + 7] = 1  # 黑棋在(7,7)
-        input_vector[7 * 15 + 8] = 2  # 白棋在(7,8)
-
-        move = {"position": [7, 8]}
-        viewer._draw_pieces(input_vector, move)
-
-        assert True
-
-    def test_draw_heatmaps(self):
-        """测试绘制热力图"""
-        viewer = ReplayViewer(self.root, self.record_file, self.sample_file)
-        viewer.current_step = 1
-
-        move = viewer.history[0]
-        viewer._draw_heatmaps(1, move)
-
-        assert True
-
     def test_update_info_text(self):
         """测试更新信息文本"""
         viewer = ReplayViewer(self.root, self.record_file)

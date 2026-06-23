@@ -163,18 +163,26 @@ class TestBattleSessionTempConfig:
         self._patcher.stop()
         shutil.rmtree(self.test_save_dir, ignore_errors=True)
 
-    def test_accepts_temp_config_parameter(self):
-        """BattleSession 应接受 temp_config 参数并存储。"""
+    def test_temp_config_parameter(self):
+        """temp_config 参数：传则存储，不传则为 None。"""
         from ai.move_sampler import TempConfig
+        # 传入时应存储
         cfg = TempConfig(temperature=2.0, temp_moves=5, temp_side="black")
-        session = BattleSession(
+        session_with = BattleSession(
             "random", "random", num_games=1,
             ai_data_dir=os.path.join(_TEST_ROOT, "ai_data"),
             train_data_dir=os.path.join(_TEST_ROOT, "train_data"),
             temp_config=cfg,
         )
-        assert session._temp_config is cfg
-        assert session._temp_config.temperature == 2.0
+        assert session_with._temp_config is cfg
+        assert session_with._temp_config.temperature == 2.0
+        # 不传时应为 None
+        session_without = BattleSession(
+            "random", "random", num_games=1,
+            ai_data_dir=os.path.join(_TEST_ROOT, "ai_data"),
+            train_data_dir=os.path.join(_TEST_ROOT, "train_data"),
+        )
+        assert session_without._temp_config is None
 
     def test_runs_with_temp_config(self):
         """BattleSession.run() 在有 temp_config 时不报错。"""
@@ -189,12 +197,3 @@ class TestBattleSessionTempConfig:
         results = session.run()
         assert len(results) == 1
         assert results[0]["winner"] in (1, 2, 3)
-
-    def test_default_temp_config_is_none(self):
-        """不传 temp_config 时，_temp_config 应为 None（向后兼容）。"""
-        session = BattleSession(
-            "random", "random", num_games=1,
-            ai_data_dir=os.path.join(_TEST_ROOT, "ai_data"),
-            train_data_dir=os.path.join(_TEST_ROOT, "train_data"),
-        )
-        assert session._temp_config is None

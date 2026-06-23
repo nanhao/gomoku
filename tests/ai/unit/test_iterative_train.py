@@ -432,21 +432,6 @@ class TestWinRateParsing:
 class TestEdgeCases:
     """UT-8：边界条件和异常场景。"""
 
-    def test_loop_always_continues(self, trainer):
-        """UT-8.1（意图 12 更新）：循环始终继续，不因胜率低而停止。
-
-        验证 WIN_RATE_THRESHOLD 常量已移除，不再有胜率判定逻辑。
-        """
-        # 导入模块确认 WIN_RATE_THRESHOLD 已移除
-        import ai.iterative_train as it_mod
-        assert not hasattr(it_mod, 'WIN_RATE_THRESHOLD'), (
-            "意图 12 不再需要 WIN_RATE_THRESHOLD 常量"
-        )
-        # 确认 _promote 存在（无条件晋升）
-        assert hasattr(trainer, '_promote'), (
-            "意图 12 需要 _promote() 无条件晋升"
-        )
-
     def test_all_draws(self, trainer):
         """UT-8.3：battle 输出仅有平局（0胜0负100平）→ 胜率 0.0%。"""
         stdout = _battle_stdout(gen4_wins=0, gen5_wins=0, draws=100)
