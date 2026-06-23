@@ -1,0 +1,56 @@
+@startuml
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,sans-serif
+skinparam packageStyle rectangle
+
+title 修复后：gui → app → ai/game 单向依赖
+
+package "gui" as gui #LightCoral {
+  [main.py] as gui_main
+  [display_updater.py] as gui_display
+  [ai_battle.py] as gui_ai_battle
+  package "components" {
+    [constants.py] as gui_constants
+    [ai_battle.py] as gui_comp_ab
+  }
+}
+
+package "app" as app #LightBlue {
+  [__init__.py] as app_init
+  [session.py] as app_session
+  [battle.py] as app_battle
+  [gui_helper.py] as app_helper
+  [exceptions.py] as app_exceptions
+}
+
+package "ai" as ai #LightGreen
+package "game" as game #LightYellow
+
+gui_main --> app_init : imports GameSession,\nGUIHelper, ModelLoadError
+gui_comp_ab --> app_battle : imports BattleSession
+gui_display --> gui_constants : imports ANIMALS\n(用于 _format_player_name)
+gui_main --> gui_constants : imports ANIMALS
+
+app_session --> app_exceptions
+app_battle --> app_exceptions
+app_session --> game
+app_session --> ai
+app_battle --> ai
+
+note top of gui_display
+  新增 _format_player_name()
+  直接使用 ANIMALS 格式化
+  不再依赖 GUIHelper
+end note
+
+note bottom of app_helper
+  删除 get_player_name()
+  删除 animal 构造参数
+  无任何 gui.* 导入
+end note
+
+note right of gui_constants
+  ANIMALS 仅在 gui 层使用
+end note
+
+@enduml

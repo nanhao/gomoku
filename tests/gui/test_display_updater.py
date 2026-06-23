@@ -7,11 +7,10 @@
 
 测试策略：
 1. 创建 tkinter root 窗口（withdraw），构建所有需要的 mock/真实组件
-2. Mock helper 的 get_player_name 方法
-3. Mock board 的 draw_board 和 draw_pieces 方法
-4. 测试各种显示状态下的 label 更新
-5. 测试历史记录更新
-6. 测试游戏结束弹窗（get_winner_text 已从 game 包导入，无需 mock）
+2. Mock board 的 draw_board 和 draw_pieces 方法
+3. 测试各种显示状态下的 label 更新
+4. 测试历史记录更新
+5. 测试游戏结束弹窗（get_winner_text 已从 game 包导入，无需 mock）
 """
 
 import os
@@ -55,12 +54,6 @@ class TestGameDisplayUpdater(unittest.TestCase):
         # Mock board（避免真实绘制）
         self.mock_board = MagicMock()
 
-        # Mock helper
-        self.mock_helper = MagicMock()
-        # 配置 get_player_name 默认返回值
-        self.mock_helper.get_player_name.side_effect = self._mock_get_player_name
-        # get_winner_text 已从 game 包导入，无需 mock，使用真实函数
-
         # 颜色常量
         self.color_text = "#2C2C2C"
         self.color_bear = "#8B4513"
@@ -72,7 +65,6 @@ class TestGameDisplayUpdater(unittest.TestCase):
             status_label=self.status_label,
             game_status_label=self.game_status_label,
             history_listbox=self.history_listbox,
-            helper=self.mock_helper,
             color_text=self.color_text,
             color_bear=self.color_bear,
         )
@@ -88,18 +80,6 @@ class TestGameDisplayUpdater(unittest.TestCase):
             pass
 
     # ==================== 辅助方法 ====================
-
-    @staticmethod
-    def _mock_get_player_name(player, winner=None):
-        """模拟 get_player_name 返回值"""
-        if winner:
-            if winner == 1:
-                return "🐻 黑方"
-            else:
-                return "🐰 白方"
-        if player == 1:
-            return "🐻 黑方"
-        return "🐰 白方"
 
     def _make_display_state(self, has_game=True, save_name="测试存档",
                             board_state=None, last_move=None,
@@ -154,7 +134,7 @@ class TestGameDisplayUpdater(unittest.TestCase):
         # 验证存档名称
         self.assertIn("测试存档", self.save_name_label.cget("text"))
         # 验证当前玩家
-        self.assertIn("黑方", self.status_label.cget("text"))
+        self.assertIn("小熊", self.status_label.cget("text"))
         # 验证游戏状态显示回合信息
         self.assertIn("回合", self.game_status_label.cget("text"))
 
@@ -164,7 +144,7 @@ class TestGameDisplayUpdater(unittest.TestCase):
         self.updater.update(state)
 
         # 验证当前玩家显示白方
-        self.assertIn("白方", self.status_label.cget("text"))
+        self.assertIn("小兔", self.status_label.cget("text"))
 
     def test_update_平局状态(self):
         """测试 has_game=True, winner=3 时，显示平局"""
@@ -184,7 +164,7 @@ class TestGameDisplayUpdater(unittest.TestCase):
 
         # 验证获胜方显示
         self.assertIn("获胜方", self.status_label.cget("text"))
-        self.assertIn("黑方", self.status_label.cget("text"))
+        self.assertIn("小熊", self.status_label.cget("text"))
         # 验证游戏状态显示获胜信息（含动物 emoji）
         self.assertIn("获胜", self.game_status_label.cget("text"))
         self.assertIn("🐻", self.game_status_label.cget("text"))
@@ -196,7 +176,7 @@ class TestGameDisplayUpdater(unittest.TestCase):
 
         # 验证获胜方显示
         self.assertIn("获胜方", self.status_label.cget("text"))
-        self.assertIn("白方", self.status_label.cget("text"))
+        self.assertIn("小兔", self.status_label.cget("text"))
         # 验证游戏状态显示获胜信息（含动物 emoji）
         self.assertIn("获胜", self.game_status_label.cget("text"))
         self.assertIn("🐰", self.game_status_label.cget("text"))
@@ -349,7 +329,6 @@ class TestGameDisplayUpdater(unittest.TestCase):
         self.assertIs(self.updater.status_label, self.status_label)
         self.assertIs(self.updater.game_status_label, self.game_status_label)
         self.assertIs(self.updater.history_listbox, self.history_listbox)
-        self.assertIs(self.updater.helper, self.mock_helper)
         self.assertEqual(self.updater.COLOR_TEXT, self.color_text)
         self.assertEqual(self.updater.COLOR_BEAR, self.color_bear)
 

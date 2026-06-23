@@ -14,7 +14,7 @@ class GameDisplayUpdater:
     """游戏显示更新器"""
     
     def __init__(self, board, save_name_label, status_label,
-                 game_status_label, history_listbox, helper,
+                 game_status_label, history_listbox,
                  color_text, color_bear):
         """初始化
         
@@ -24,7 +24,6 @@ class GameDisplayUpdater:
             status_label: 当前玩家状态标签
             game_status_label: 游戏状态标签
             history_listbox: 历史记录列表框
-            helper: GUIHelper 实例
             color_text: 文本颜色
             color_bear: 主题色（熊/黑方颜色）
         """
@@ -33,7 +32,6 @@ class GameDisplayUpdater:
         self.status_label = status_label
         self.game_status_label = game_status_label
         self.history_listbox = history_listbox
-        self.helper = helper
         self.COLOR_TEXT = color_text
         self.COLOR_BEAR = color_bear
     
@@ -64,7 +62,7 @@ class GameDisplayUpdater:
         current_player = display_state["current_player"]
         
         if winner == 0:
-            player_name = self.helper.get_player_name(current_player)
+            player_name = self._format_player_name(current_player)
             status_text = f"🌲 {player_name.split()[0]}的回合"
             self.status_label.config(text=f"🎯 当前玩家: {player_name}", fg=self.COLOR_TEXT)
             self.game_status_label.config(text=status_text, fg=self.COLOR_BEAR)
@@ -72,7 +70,7 @@ class GameDisplayUpdater:
             self.status_label.config(text="🎯 当前玩家: -")
             self.game_status_label.config(text=f"🌳 游戏状态: {get_winner_text(winner)}", fg="#8B4513")
         else:
-            winner_name = self.helper.get_player_name(winner, winner=winner)
+            winner_name = self._format_player_name(winner, winner=winner)
             win_emoji = ANIMALS["black"] if winner == 1 else ANIMALS["white"]
             self.status_label.config(text=f"🏆 获胜方: {winner_name}", fg=self.COLOR_BEAR)
             self.game_status_label.config(text=f"{win_emoji} {winner_name.split()[0]}获胜！", fg=self.COLOR_BEAR)
@@ -107,3 +105,19 @@ class GameDisplayUpdater:
         """
         winner_text = get_winner_text(winner)
         messagebox.showinfo("游戏结束", f"{winner_text}！")
+
+    @staticmethod
+    def _format_player_name(player: int, winner: int = 0) -> str:
+        """格式化玩家名称（含动物主题，仅用于 GUI 展示）
+
+        Args:
+            player: 玩家 (1=黑, 2=白)
+            winner: 获胜方 (0=未结束)
+
+        Returns:
+            玩家名称文本（含动物 emoji）
+        """
+        if player == 1:
+            return f"小熊 {ANIMALS['black']}"
+        else:
+            return f"小兔 {ANIMALS['white']}"

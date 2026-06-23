@@ -67,77 +67,46 @@ def get_player_name(self, player: int, winner: int = 0) -> str:
 | B: 移除 ANIMALS 硬编码 | GUIHelper 直接硬编码 emoji 字符 | 最小 | ★★☆ | 备选 |
 | C: 新建共享常量模块 | 提取 ANIMALS 到 src 级别共享模块 | 中 | ★★☆ | ❌ |
 
-### 3.2 推荐方案：构造函数注入（方案 A）
+### 3.2 最终方案：将 `get_player_name` 移到 GUI 层（方案 D）
 
-**核心思路**：让 `GUIHelper` 不再直接导入 `ANIMALS`，而是通过构造函数从 GUI 层接收展示用的动物表情字符串。默认值保持向后兼容。
+**核心思路**：`get_player_name` 是纯 GUI 展示方法（格式化含 emoji 的玩家名用于 tkinter Label），仅被 `display_updater.py` 调用，不涉及持久化。将其从 `app` 层移除，内联到 `gui/display_updater.py` 中，`GUIHelper` 恢复为纯粹的"与界面无关的业务逻辑"代理。
 
 **修改点：**
 
 #### ① `app/gui_helper.py`
 
-- **删除**：`from gui.components.constants import ANIMALS`（第 9 行）
-- **修改**：`GUIHelper.__init__` 构造函数新增 `black_animal` 和 `white_animal` 参数
-- **修改**：`get_player_name` 使用实例属性替代 `ANIMALS` 常量
+- **删除**：`get_player_name` 方法（含 `black_animal`/`white_animal` 构造参数）
+- **恢复**：构造函数为 `__init__(self, controller, session)`
+- 该模块再无任何 `gui.*` 导入
 
-```python
-# 修改前
-class GUIHelper:
-    def __init__(self, controller, session):
-        self.controller = controller
-        self.session = session
+#### ② `gui/display_updater.py`
 
-    def get_player_name(self, player, winner=0):
-        if player == 1:
-            return f"小熊 {ANIMALS['black']}"
-        else:
-            return f"小兔 {ANIMALS['white']}"
+- **新增**：`@staticmethod _format_player_name(player, winner=0)`，使用 `ANIMALS` 常量直接格式化
+- **替换**：`self.helper.get_player_name(...)` → `self._format_player_name(...)`
+- **删除**：`helper` 构造参数（display_updater 不再依赖 GUIHelper）
 
-# 修改后
-class GUIHelper:
-    def __init__(self, controller, session,
-                 black_animal: str = "🐻",
-                 white_animal: str = "🐰"):
-        self.controller = controller
-        self.session = session
-        self._black_animal = black_animal
-        self._white_animal = white_animal
+#### ③ `gui/main.py`
 
-    def get_player_name(self, player, winner=0):
-        if player == 1:
-            return f"小熊 {self._black_animal}"
-        else:
-            return f"小兔 {self._white_animal}"
-```
-
-#### ② `gui/main.py`
-
-- **修改**：创建 `GUIHelper` 时传入 `ANIMALS` 中的值
-
-```python
-# 修改前（第 69 行）
-self.helper = GUIHelper(self.controller, self.session)
-
-# 修改后
-self.helper = GUIHelper(
-    self.controller, self.session,
-    black_animal=ANIMALS["black"],
-    white_animal=ANIMALS["white"],
-)
-```
+- **恢复**：`GUIHelper(self.controller, self.session)`（不再传入 animal 参数）
+- **删除**：`GameDisplayUpdater(... helper=self.helper ...)` 中的 `helper` 参数
 
 ### 3.3 修改后依赖关系
+
+![修复后依赖关系图](dependency_graph_after.png)
+
+详见：[dependency_graph_after.puml](dependency_graph_after.puml)
 
 ```
 ┌─────────────────────────────────────────┐
 │              gui 包                      │  上层（纯 UI）
-│  持有 ANIMALS 常量                       │
-│  创建 GUIHelper 时传入展示字符串           │
+│  ANIMALS 常量仅 GUI 层使用               │
+│  _format_player_name 内联在 display 中   │
 └────────────────┬────────────────────────┘
                  │ 单向依赖（无反向）
 ┌────────────────▼────────────────────────┐
 │              app 包                      │  应用层（薄代理）
-│  GUIHelper 通过构造函数接收展示参数       │
-│  不再导入 gui.* 任何内容                  │
+│  GUIHelper 仅含业务逻辑代理              │
+│  无任何 gui.* 导入                        │
 └──────┬───────────────────┬─────────────┘
        │                   │
 ┌──────▼──────┐    ┌───────▼─────────────┐
@@ -145,14 +114,15 @@ self.helper = GUIHelper(
 └─────────────┘    └─────────────────────┘
 ```
 
-循环依赖完全消除。
+循环依赖完全消除，且不再有`gui → app → gui` 的迂回调用——display_updater 直接在自己内部完成玩家名格式化。
 
 ## 4. 影响范围
 
 | 文件 | 变更类型 | 说明 |
 |------|---------|------|
-| `app/gui_helper.py` | 修改 | 删除 `from gui...import ANIMALS`；构造函数新增 2 个可选参数 |
-| `gui/main.py` | 修改 | 创建 `GUIHelper` 时传入 animal 参数 |
+| `app/gui_helper.py` | 修改 | 删除 `get_player_name` 方法和 animal 参数，恢复简洁构造函数 |
+| `gui/display_updater.py` | 修改 | 新增 `_format_player_name` 静态方法，移除 `helper` 构造参数 |
+| `gui/main.py` | 修改 | 恢复 `GUIHelper(controller, session)` 简洁调用，移除 `display_updater` 的 `helper` 参数 |
 
 ## 5. 验证方法
 
@@ -169,10 +139,11 @@ rg "from gui|import gui" src/app/
 
 ```bash
 python -m pytest tests/ -x -q
+# 结果: 1659 passed, 3 skipped, 0 failed ✅
 ```
 
 ## 6. 设计决策说明
 
-**为什么不选择方案 B（硬编码）**：虽然硬编码更简单，但 `GUIHelper` 保留参数化能力更符合开闭原则——未来若 `ANIMALS` 发生变化（如支持主题切换、i18n），无需修改 `app` 层代码。
+**为什么不采用构造函数注入（初始方案）**：虽然注入打破了循环依赖，但 `get_player_name` 是纯 UI 展示方法（仅用于 tkinter Label 文本），不涉及持久化。注入后形成 `gui → app → gui` 的迂回调用——gui 注入展示常量到 app，又从 app 取回来用。这多此一举。
 
-**为什么不选择方案 C（共享模块）**：`ANIMALS` 常量是纯 UI 层关注点，不应提升到项目级共享模块。这会破坏模块边界和职责分离。
+**最终方案的优势**：将 `get_player_name` 移到它唯一的调用者 `display_updater.py` 中，`GUIHelper` 真正成为"与界面无关的业务逻辑"代理，职责更清晰。

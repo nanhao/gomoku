@@ -11,21 +11,15 @@ from ai.constants import AI_DATA_DIR
 class GUIHelper:
     """GUI 辅助类 - 处理与界面无关的业务逻辑"""
 
-    def __init__(self, controller, session,
-                 black_animal: str = "🐻",
-                 white_animal: str = "🐰"):
+    def __init__(self, controller, session):
         """初始化 GUIHelper
 
         Args:
             controller: GomokuController 实例
             session: GameSession 实例
-            black_animal: 黑方玩家展示用动物表情，默认 🐻
-            white_animal: 白方玩家展示用动物表情，默认 🐰
         """
         self.controller = controller
         self.session = session
-        self._black_animal = black_animal
-        self._white_animal = white_animal
 
     def start_game_with_ai_first(self) -> dict:
         """AI 先走时启动游戏
@@ -151,22 +145,6 @@ class GUIHelper:
             "last_move": last_move,
             "history": history
         }
-
-    def get_player_name(self, player: int, winner: int = 0) -> str:
-        """获取玩家名称（含动物主题）
-
-        Args:
-            player: 玩家 (1=黑, 2=白)
-            winner: 获胜方 (0=未结束)
-
-        Returns:
-            玩家名称文本
-        """
-        if player == 1:
-            return f"小熊 {self._black_animal}"
-        else:
-            return f"小兔 {self._white_animal}"
-
 
 def get_ai_data_dir() -> str:
     """获取 ai_data 目录路径
