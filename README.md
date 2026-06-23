@@ -289,31 +289,37 @@ python -m ai.sample_visualizer --sample data.json --count 3 --no-heatmap --seed 
 
 ### 迭代进化训练
 
-自动化「生成样本 → 训练 → 对战评估 → 模型晋升」闭环，使模型持续迭代进化：
+自动化「生成样本 → 训练 → 对战评估 → 条件晋升」闭环，使模型持续迭代进化：
 
 ```bash
-python src/ai/iterative_train.py --ai1 <父代模型spec> --ai2 <子代模型spec> --sample_dir <样本目录>
+python src/ai/iterative_train.py --ai1 <父代模型spec> --ai2 <子代模型spec> --sample_dir <样本目录> [--sample-games <样本局数>] [--epochs <训练轮数>]
 ```
 
-| 参数 | 说明 | 示例 |
-|------|------|------|
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
 | `--ai1` | 父代模型 spec（模型名.代数） | 必填，如 `cnn_v4.99` |
 | `--ai2` | 子代模型 spec（模型名.代数） | 必填，如 `cnn_v4.100` |
 | `--sample_dir` | 样本输出目录基路径 | 必填，如 `ai/merge_samples2` |
+| `--sample-games` | 每轮目标样本局数 | 500 |
+| `--epochs` | 每轮训练 epoch 数 | 300 |
 
 每轮自动执行：
 1. 复制 ai1 权重 → ai2（模型初始化）
-2. 调用 `create_samples.py` 自对弈生成 500 局样本（输出到 `{sample_dir}/v{gen_of_ai2}/path.json`）
-3. 调用 `train_main.py` 训练 ai2（300 epoch, batch 4096）
-4. 调用 `battle.py` 父子对战 100 局（temperature=2, temp_moves=2）
-5. 无条件晋升（mv ai2 → ai1），进入下一轮
+2. 调用 `create_samples.py` 自对弈生成样本（默认 500 局，可通过 `--sample-games` 覆盖），输出到 `{sample_dir}/v{gen_of_ai2}/path.json`
+3. 调用 `train_main.py` 训练 ai2（默认 300 epoch、batch 4096，epoch 数可通过 `--epochs` 覆盖）
+4. 调用 `battle.py` 父子对战 100 局（temperature=2, temp_moves=2, temp_side=both）
+5. **条件晋升**：ai2 胜率 > 55% 时晋升（mv ai2 → ai1），进入下一轮；否则丢弃训练结果重新开始
 
 > 前置条件：`ai/models/{model_name}/gen{gen_of_ai1}/{model_name}.pth` 必须存在；不支持多实例并发（`.iterative_lock` 锁保护）。
 > 意图 13：模型标识和样本目录通过 CLI 参数指定，不再硬编码。
+> 意图 22：条件晋升（胜率 > 55%），`--sample-games` 和 `--epochs` 支持 CLI 覆盖。
 
 ```bash
-# 示例：从 cnn_v4.99 开始迭代进化
+# 示例：从 cnn_v4.99 开始迭代进化（使用默认参数）
 python src/ai/iterative_train.py --ai1 cnn_v4.99 --ai2 cnn_v4.100 --sample_dir src/ai/merge_samples2
+
+# 示例：自定义样本局数和训练轮数
+python src/ai/iterative_train.py --ai1 cnn_v4.99 --ai2 cnn_v4.100 --sample_dir src/ai/merge_samples2 --sample-games 300 --epochs 200
 ```
 
 ### LR Range Test

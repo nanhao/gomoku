@@ -65,7 +65,12 @@ class IterativeTrainer:
             )
 
         if project_root is None:
+            # project_root 为 src/ 目录，用于模型路径、子进程 cwd
             project_root = str(Path(__file__).resolve().parent.parent)
+            # 样本输出目录的基路径使用实际项目根目录（而非 src/）
+            sample_base_dir = str(Path(__file__).resolve().parent.parent.parent)
+        else:
+            sample_base_dir = project_root
         self.project_root = project_root
 
         # 动态计算路径: ai/models/{model_name}/gen{gen}/{model_name}.pth
@@ -81,7 +86,7 @@ class IterativeTrainer:
         )
         self._lock_path = os.path.join(models_base, ".iterative_lock")
         self._sample_output_dir = os.path.join(
-            self.project_root, sample_dir, f"v{self._gen_of_ai2}"
+            sample_base_dir, sample_dir, f"v{self._gen_of_ai2}"
         )
 
         # 前置校验
