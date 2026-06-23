@@ -12,8 +12,8 @@
 <!-- ai -->
 <g id="node1" class="node">
 <title>ai</title>
-<ellipse fill="none" stroke="black" cx="226.39" cy="-18" rx="27" ry="18"/>
-<text xml:space="preserve" text-anchor="middle" x="226.39" y="-12.95" font-family="Times New Roman,serif" font-size="14.00">ai</text>
+<ellipse fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" cx="226.39" cy="-18" rx="27" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="226.39" y="-12.95" font-family="Times New Roman,serif" font-size="14.00" fill="#7f7f7f">ai</text>
 </g>
 <!-- battle -->
 <g id="node2" class="node">
@@ -42,14 +42,14 @@
 <!-- game -->
 <g id="node4" class="node">
 <title>game</title>
-<ellipse fill="none" stroke="black" cx="31.39" cy="-18" rx="31.39" ry="18"/>
-<text xml:space="preserve" text-anchor="middle" x="31.39" y="-12.95" font-family="Times New Roman,serif" font-size="14.00">game</text>
+<ellipse fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" cx="31.39" cy="-18" rx="31.39" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="31.39" y="-12.95" font-family="Times New Roman,serif" font-size="14.00" fill="#7f7f7f">game</text>
 </g>
 <!-- gui -->
 <g id="node5" class="node">
 <title>gui</title>
-<ellipse fill="none" stroke="black" cx="308.39" cy="-18" rx="27" ry="18"/>
-<text xml:space="preserve" text-anchor="middle" x="308.39" y="-12.95" font-family="Times New Roman,serif" font-size="14.00">gui</text>
+<ellipse fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" cx="308.39" cy="-18" rx="27" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="308.39" y="-12.95" font-family="Times New Roman,serif" font-size="14.00" fill="#7f7f7f">gui</text>
 </g>
 <!-- gui_helper -->
 <g id="node6" class="node">

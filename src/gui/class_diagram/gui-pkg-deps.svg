@@ -12,8 +12,8 @@
 <!-- ai -->
 <g id="node1" class="node">
 <title>ai</title>
-<ellipse fill="none" stroke="black" cx="42.65" cy="-18" rx="27" ry="18"/>
-<text xml:space="preserve" text-anchor="middle" x="42.65" y="-12.95" font-family="Times New Roman,serif" font-size="14.00">ai</text>
+<ellipse fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" cx="42.65" cy="-18" rx="27" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="42.65" y="-12.95" font-family="Times New Roman,serif" font-size="14.00" fill="#7f7f7f">ai</text>
 </g>
 <!-- ai_battle -->
 <g id="node2" class="node">
@@ -42,8 +42,8 @@
 <!-- app -->
 <g id="node3" class="node">
 <title>app</title>
-<ellipse fill="none" stroke="black" cx="297.65" cy="-18" rx="27" ry="18"/>
-<text xml:space="preserve" text-anchor="middle" x="297.65" y="-12.95" font-family="Times New Roman,serif" font-size="14.00">app</text>
+<ellipse fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" cx="297.65" cy="-18" rx="27" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="297.65" y="-12.95" font-family="Times New Roman,serif" font-size="14.00" fill="#7f7f7f">app</text>
 </g>
 <!-- components&#45;&gt;ai -->
 <g id="edge3" class="edge">
@@ -60,8 +60,8 @@
 <!-- visualization -->
 <g id="node8" class="node">
 <title>visualization</title>
-<ellipse fill="none" stroke="black" cx="145.65" cy="-18" rx="58" ry="18"/>
-<text xml:space="preserve" text-anchor="middle" x="145.65" y="-12.95" font-family="Times New Roman,serif" font-size="14.00">visualization</text>
+<ellipse fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" cx="145.65" cy="-18" rx="58" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="145.65" y="-12.95" font-family="Times New Roman,serif" font-size="14.00" fill="#7f7f7f">visualization</text>
 </g>
 <!-- components&#45;&gt;visualization -->
 <g id="edge5" class="edge">
@@ -84,8 +84,8 @@
 <!-- game -->
 <g id="node6" class="node">
 <title>game</title>
-<ellipse fill="none" stroke="black" cx="265.65" cy="-90" rx="31.39" ry="18"/>
-<text xml:space="preserve" text-anchor="middle" x="265.65" y="-84.95" font-family="Times New Roman,serif" font-size="14.00">game</text>
+<ellipse fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" cx="265.65" cy="-90" rx="31.39" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="265.65" y="-84.95" font-family="Times New Roman,serif" font-size="14.00" fill="#7f7f7f">game</text>
 </g>
 <!-- display_updater&#45;&gt;game -->
 <g id="edge7" class="edge">

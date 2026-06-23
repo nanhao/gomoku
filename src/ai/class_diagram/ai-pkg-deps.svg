@@ -258,8 +258,8 @@
 <!-- game -->
 <g id="node9" class="node">
 <title>game</title>
-<ellipse fill="none" stroke="black" cx="844.41" cy="-162" rx="31.39" ry="18"/>
-<text xml:space="preserve" text-anchor="middle" x="844.41" y="-156.95" font-family="Times New Roman,serif" font-size="14.00">game</text>
+<ellipse fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" cx="844.41" cy="-162" rx="31.39" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="844.41" y="-156.95" font-family="Times New Roman,serif" font-size="14.00" fill="#7f7f7f">game</text>
 </g>
 <!-- game_manager&#45;&gt;data_recorder -->
 <g id="edge25" class="edge">
@@ -414,8 +414,8 @@
 <!-- visualization -->
 <g id="node30" class="node">
 <title>visualization</title>
-<ellipse fill="none" stroke="black" cx="1873.41" cy="-234" rx="58" ry="18"/>
-<text xml:space="preserve" text-anchor="middle" x="1873.41" y="-228.95" font-family="Times New Roman,serif" font-size="14.00">visualization</text>
+<ellipse fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" cx="1873.41" cy="-234" rx="58" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="1873.41" y="-228.95" font-family="Times New Roman,serif" font-size="14.00" fill="#7f7f7f">visualization</text>
 </g>
 <!-- sample_visualizer&#45;&gt;visualization -->
 <g id="edge41" class="edge">

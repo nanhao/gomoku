@@ -12,8 +12,8 @@
 <!-- game -->
 <g id="node1" class="node">
 <title>game</title>
-<ellipse fill="none" stroke="black" cx="31.39" cy="-18" rx="31.39" ry="18"/>
-<text xml:space="preserve" text-anchor="middle" x="31.39" y="-12.95" font-family="Times New Roman,serif" font-size="14.00">game</text>
+<ellipse fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" cx="31.39" cy="-18" rx="31.39" ry="18"/>
+<text xml:space="preserve" text-anchor="middle" x="31.39" y="-12.95" font-family="Times New Roman,serif" font-size="14.00" fill="#7f7f7f">game</text>
 </g>
 <!-- main -->
 <g id="node2" class="node">
