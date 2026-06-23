@@ -232,6 +232,7 @@ class TestCLISmoke(unittest.TestCase):
         """CLI 生成 5 个 huo3 样本写到临时文件，结构合格"""
         proj_root = os.path.abspath(os.path.join(
             os.path.dirname(__file__), "..", ".."))
+        src_dir = os.path.join(proj_root, 'src')
         with tempfile.TemporaryDirectory() as tmp:
             out = os.path.join(tmp, "out.json")
             result = subprocess.run(
@@ -240,7 +241,7 @@ class TestCLISmoke(unittest.TestCase):
                  "--num-samples", "5",
                  "--output", out,
                  "--print-failures", "0"],
-                cwd=proj_root,
+                cwd=src_dir,
                 capture_output=True,
                 text=True,
                 timeout=180,

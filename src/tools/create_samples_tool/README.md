@@ -6,8 +6,7 @@
 ## 启动
 
 ```bash
-cd d:/projects/gomoku
-python -m tools.create_samples_tool.app
+python -m src.tools.create_samples_tool.app
 ```
 
 启动后浏览器访问 **http://127.0.0.1:5000**
@@ -58,7 +57,7 @@ python -m tools.create_samples_tool.app
 | **温度分布** | `step.sampling_probs` | 温度采样后的概率分布（argmax 步显示为"argmax"占位） |
 | **样本分布** | `sample.output` | 样本标签（仅获胜方变异步有样本，其他步显示为"无样本"占位） |
 
-色板：白→黄→橙→红（与 `visualization/heatmap_color.py` 的 `DEFAULT_COLOR_STOPS` 一致）。
+色板：白→黄→橙→红（与 `src/visualization/heatmap_color.py` 的 `DEFAULT_COLOR_STOPS` 一致）。
 落子位以粗绿框标记（不画棋子），其余棋子正常渲染。
 
 ## API 端点
@@ -85,7 +84,7 @@ python -m tools.create_samples_tool.app
 {
   "model": "cnn_v3.1",
   "games": 1,
-  "output": "ai/train_data/test.json",
+  "output": "src/ai/train_data/test.json",
   "no_augment": false,
   "temperature": 1.0,
   "temp_moves": 12,
@@ -98,11 +97,11 @@ python -m tools.create_samples_tool.app
 ```json
 {
   "status": "completed",
-  "command": "python ai/create_samples.py --model cnn_v3.1 ...",
+  "command": "python src/ai/create_samples.py --model cnn_v3.1 ...",
   "output": "模型: cnn_v3.1\n对局数 (games): 1\n...",
   "returncode": 0,
-  "round_dir": "ai/ai_data/cnn_v3.1_battle_3",
-  "output_path": "ai/train_data/test.json",
+  "round_dir": "src/ai/ai_data/cnn_v3.1_battle_3",
+  "output_path": "src/ai/train_data/test.json",
   "games": [
     {"game_id": 1, "winner": 1, "winner_display": "黑胜", "temp_side": "both", "temp_side_display": "双方采样", "total_steps": 89, "is_draw": false}
   ]
@@ -113,7 +112,7 @@ python -m tools.create_samples_tool.app
 ```json
 {
   "status": "error",
-  "command": "python ai/create_samples.py ...",
+  "command": "python src/ai/create_samples.py ...",
   "output": "create_samples.py: error: ...",
   "returncode": 2,
   "round_dir": null,
@@ -161,7 +160,7 @@ python -m tools.create_samples_tool.app
 ## 架构
 
 ```
-tools/create_samples_tool/
+src/tools/create_samples_tool/
 ├── app.py           # Flask 应用（3 个 API 端点 + 主页路由）
 ├── executor.py      # 子进程同步执行 + CLI 命令构造 + round_dir 发现
 ├── data_parser.py   # record.json 解析 + step_id 样本匹配 + 采样方推断
@@ -174,9 +173,9 @@ tools/create_samples_tool/
 
 ### 零耦合原则
 
-- **不 import 任何 `ai/` 包模块**（避免触发 torch 等重依赖）
+- 不 import 任何 `src/ai/` 包模块（避免触发 torch 等重依赖）
 - 模型列表通过子进程 `python -c "..."` 调用 registry 获取
-- 样本生成通过子进程调用 `ai/create_samples.py`
+- 样本生成通过子进程调用 `src/ai/create_samples.py`
 - 数据读取仅使用标准库 `json` + `os` 操作文件系统
 
 ### 样本匹配机制

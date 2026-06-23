@@ -18,8 +18,9 @@ from unittest.mock import patch
 import torch
 
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
+src_dir = os.path.join(project_root, 'src')
+if src_dir not in sys.path:
+    sys.path.insert(0, src_dir)
 
 from ai.base_model import BaseModel, NeuralNetworkModel
 from ai.models.fc_v1.model import FCv1Model
@@ -115,17 +116,17 @@ class TestSavePathWithGen(unittest.TestCase):
     """§5.7 model.save() 路径测试用例"""
 
     def test_fcv1_save_path_without_gen(self):
-        """FCv1Model() 保存路径应为 ai/models/fc_v1/fc_v1.pth（非多代不变）"""
+        """FCv1Model() 保存路径应为 src/ai/models/fc_v1/fc_v1.pth（非多代不变）"""
         model = FCv1Model(fresh=True)
-        expected = os.path.join(os.path.dirname(__file__), "..", "..", "ai", "models", "fc_v1", "fc_v1.pth")
+        expected = os.path.join(os.path.dirname(__file__), "..", "..", "src", "ai", "models", "fc_v1", "fc_v1.pth")
         expected = os.path.normpath(os.path.abspath(expected))
         self.assertEqual(os.path.normpath(model.DEFAULT_MODEL_PATH), expected)
 
     def test_cnnv3_save_path_with_gen(self):
-        """CNNV3Model(gen=2) 保存路径应为 ai/models/cnn_v3/gen2/cnn_v3.pth"""
+        """CNNV3Model(gen=2) 保存路径应为 src/ai/models/cnn_v3/gen2/cnn_v3.pth"""
         model = CNNV3Model(fresh=True, gen=2)
         expected = os.path.join(
-            os.path.dirname(__file__), "..", "..", "ai", "models", "cnn_v3", "gen2", "cnn_v3.pth"
+            os.path.dirname(__file__), "..", "..", "src", "ai", "models", "cnn_v3", "gen2", "cnn_v3.pth"
         )
         expected = os.path.normpath(os.path.abspath(expected))
         self.assertEqual(os.path.normpath(model.DEFAULT_MODEL_PATH), expected)

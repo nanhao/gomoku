@@ -1,8 +1,8 @@
 # Project-specific
-ai_data/
-train_data/
-ai/merge_samples/
-game/save/
+src/ai/ai_data/
+src/ai/train_data/
+src/ai/merge_samples/
+src/game/save/
 
 # Python
 __pycache__/
@@ -44,8 +44,6 @@ tests/app/primary/_test_saves/
 
 .qoder/repowiki/
 
-ai/models/cnn_v3
-ai/models/cnn_v4
-ai/models/cnn_v5
-ai/merge_samples2/
-ai/merge_samples3/
+*.pth
+src/ai/merge_samples2/
+src/ai/merge_samples3/

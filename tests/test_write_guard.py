@@ -13,12 +13,12 @@ _PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
 # 受保护目录列表（与 conftest.py 中 PROTECTED_DIRS 保持一致）
 PROTECTED_DIR_RELATIVE = [
-    'ai/ai_data',
-    'ai/ai_data/loss_logs',
-    'ai/models',
-    'ai/train_data',
-    'ai/merge_samples',
-    'game/save',
+    'src/ai/ai_data',
+    'src/ai/ai_data/loss_logs',
+    'src/ai/models',
+    'src/ai/train_data',
+    'src/ai/merge_samples',
+    'src/game/save',
     'design',
     'requirements',
 ]
@@ -61,13 +61,13 @@ class TestWriteGuardBlocked:
 
     def test_exclusive_create_mode_blocked(self):
         """x 模式排他创建受保护目录应抛出 AssertionError"""
-        test_file = os.path.join(_PROJECT_ROOT, 'ai', 'ai_data', 'guard_test.tmp')
+        test_file = os.path.join(_PROJECT_ROOT, 'src', 'ai', 'ai_data', 'guard_test.tmp')
         with pytest.raises(AssertionError, match=r'\[WRITE GUARD\]'):
             open(test_file, 'x')
 
     def test_binary_write_mode_blocked(self):
         """wb 二进制写入受保护目录应抛出 AssertionError"""
-        test_file = os.path.join(_PROJECT_ROOT, 'game', 'save', 'guard_test.tmp')
+        test_file = os.path.join(_PROJECT_ROOT, 'src', 'game', 'save', 'guard_test.tmp')
         with pytest.raises(AssertionError, match=r'\[WRITE GUARD\]'):
             open(test_file, 'wb')
 
@@ -87,7 +87,7 @@ class TestWriteGuardBlocked:
 
     def test_error_message_contains_directory(self):
         """错误信息应包含被拦截的文件路径"""
-        test_file = os.path.join(_PROJECT_ROOT, 'ai', 'models', 'guard_test.tmp')
+        test_file = os.path.join(_PROJECT_ROOT, 'src', 'ai', 'models', 'guard_test.tmp')
         with pytest.raises(AssertionError) as exc_info:
             open(test_file, 'w')
         # 验证错误信息包含文件路径和受保护目录列表
@@ -101,7 +101,7 @@ class TestWriteGuardAllowed:
 
     def test_read_from_protected_dir_allowed(self):
         """从受保护目录读取文件应正常工作"""
-        init_file = os.path.join(_PROJECT_ROOT, 'ai', 'models', '__init__.py')
+        init_file = os.path.join(_PROJECT_ROOT, 'src', 'ai', 'models', '__init__.py')
         with open(init_file, 'r', encoding='utf-8') as f:
             content = f.read()
         assert isinstance(content, str)
@@ -127,7 +127,7 @@ class TestWriteGuardAllowed:
     def test_read_mode_not_blocked(self):
         """r 模式读取受保护目录文件应正常工作"""
         # 使用确定存在的文件
-        init_file = os.path.join(_PROJECT_ROOT, 'ai', 'models', '__init__.py')
+        init_file = os.path.join(_PROJECT_ROOT, 'src', 'ai', 'models', '__init__.py')
         # 如果文件存在则测试，否则跳过
         if os.path.exists(init_file):
             with open(init_file, 'r', encoding='utf-8') as f:
@@ -152,14 +152,14 @@ class TestWriteGuardEdgeCases:
         try:
             os.chdir(_PROJECT_ROOT)
             with pytest.raises(AssertionError, match=r'\[WRITE GUARD\]'):
-                open('game/save/guard_test.tmp', 'w')
+                open('src/game/save/guard_test.tmp', 'w')
         finally:
             os.chdir(original_cwd)
 
     def test_subdirectory_of_protected_dir_blocked(self):
         """受保护目录的子目录写入也应被拦截"""
-        # ai/models/cnn_v1/ 是 ai/models 的子目录
-        test_file = os.path.join(_PROJECT_ROOT, 'ai', 'models', 'cnn_v1',
+        # src/ai/models/cnn_v1/ 是 src/ai/models 的子目录
+        test_file = os.path.join(_PROJECT_ROOT, 'src', 'ai', 'models', 'cnn_v1',
                                  'guard_test.tmp')
         with pytest.raises(AssertionError, match=r'\[WRITE GUARD\]'):
             open(test_file, 'w')

@@ -6,19 +6,20 @@
 
 ```
 gomoku/
-├── cli/              # 命令行界面
-├── gui/              # 图形界面
-├── game/             # 游戏核心逻辑
-├── app/              # 应用层（会话管理、GUI辅助）
-├── ai/               # AI 模块
-│   ├── ai_data/      # AI 对战记录数据
-│   ├── train_data/   # 训练样本数据
-│   └── merge_samples/# 合并后的训练样本
-├── visualization/    # 热力图等可视化算法（无 UI 依赖）
-├── tools/            # 验收与辅助工具
-├── tests/            # 测试脚本
-├── design/           # 设计文档
-└── temp/             # 临时分析脚本等
+├── src/                  # 源代码
+│   ├── cli/              # 命令行界面
+│   ├── gui/              # 图形界面
+│   ├── game/             # 游戏核心逻辑
+│   ├── app/              # 应用层（会话管理、GUI辅助）
+│   ├── ai/               # AI 模块
+│   │   ├── ai_data/      # AI 对战记录数据
+│   │   ├── train_data/   # 训练样本数据
+│   │   └── merge_samples/# 合并后的训练样本
+│   ├── visualization/    # 热力图等可视化算法（无 UI 依赖）
+│   └── tools/            # 验收与辅助工具
+├── tests/                # 测试脚本
+├── design/               # 设计文档
+└── temp/                 # 临时分析脚本等
 ```
 
 ## 快速开始
@@ -43,8 +44,8 @@ pip install torch matplotlib numpy
 
 | 命令 | 说明 |
 |------|------|
-| `python gui/main.py` | 启动图形界面（推荐） |
-| `python cli/main.py` | 启动命令行界面 |
+| `python src/gui/main.py` | 启动图形界面（推荐） |
+| `python src/cli/main.py` | 启动命令行界面 |
 
 GUI 支持三种游戏模式：
 - **人人对战（PvP）**：两名玩家轮流落子
@@ -56,7 +57,7 @@ GUI 还支持：存档加载、AI 对战回放（含热力图对比）、游戏�
 ### AI 对战
 
 ```bash
-python ai/battle.py --ai1 <AI指定> --ai2 <AI指定> [--games <局数>] [温度采样选项]
+python src/ai/battle.py --ai1 <AI指定> --ai2 <AI指定> [--games <局数>] [温度采样选项]
 ```
 
 | 参数 | 说明 | 默认值 |
@@ -72,24 +73,24 @@ python ai/battle.py --ai1 <AI指定> --ai2 <AI指定> [--games <局数>] [温度
 
 **可用 AI：** `random` / `fc_v1` / `cnn_v1` / `cnn_v2` / `cnn_v3.1` / `cnn_v3.2` / `cnn_v4.1` / `cnn_v5.1` / `cnn_v6.1` ...
 
-> **多代模型说明**：`cnn_v3` 支持多代模型，使用 `模型名.代数` 格式指定（如 `cnn_v3.1`、`cnn_v3.2`），不同代数的模型权重存储在 `ai/models/cnn_v3/gen{i}/` 目录下。非多代模型（如 `fc_v1`、`cnn_v1`）直接使用模型名称。
+> **多代模型说明**：`cnn_v3` 支持多代模型，使用 `模型名.代数` 格式指定（如 `cnn_v3.1`、`cnn_v3.2`），不同代数的模型权重存储在 `src/ai/models/cnn_v3/gen{i}/` 目录下。非多代模型（如 `fc_v1`、`cnn_v1`）直接使用模型名称。
 
 ```bash
 # 示例
-python ai/battle.py --ai1 fc_v1 --ai2 random --games 50
-python ai/battle.py --ai1 cnn_v3.1 --ai2 cnn_v3.2 --games 50
+python src/ai/battle.py --ai1 fc_v1 --ai2 random --games 50
+python src/ai/battle.py --ai1 cnn_v3.1 --ai2 cnn_v3.2 --games 50
 
 # 禁用温度采样，全程 argmax
-python ai/battle.py --ai1 cnn_v3.1 --ai2 cnn_v3.2 --games 50 --no-temp-sampling
+python src/ai/battle.py --ai1 cnn_v3.1 --ai2 cnn_v3.2 --games 50 --no-temp-sampling
 
 # 自定义温度值（更随机的对战）
-python ai/battle.py --ai1 fc_v1 --ai2 cnn_v2 --games 20 --temperature 2.0
+python src/ai/battle.py --ai1 fc_v1 --ai2 cnn_v2 --games 20 --temperature 2.0
 
 # 固定随机种子复现对战
-python ai/battle.py --ai1 cnn_v3.1 --ai2 cnn_v3.2 --games 10 --temp-seed 42
+python src/ai/battle.py --ai1 cnn_v3.1 --ai2 cnn_v3.2 --games 10 --temp-seed 42
 
 # 组合使用
-python ai/battle.py --ai1 cnn_v3.1 --ai2 cnn_v3.2 --games 100 --temperature 0.8 --temp-moves 8 --temp-side random --temp-seed 2026
+python src/ai/battle.py --ai1 cnn_v3.1 --ai2 cnn_v3.2 --games 100 --temperature 0.8 --temp-moves 8 --temp-side random --temp-seed 2026
 ```
 
 ### 模型训练
@@ -97,7 +98,7 @@ python ai/battle.py --ai1 cnn_v3.1 --ai2 cnn_v3.2 --games 100 --temperature 0.8 
 #### 生成训练样本（对弈 + sample_creator）
 
 ```bash
-python ai/create_samples.py --model <模型名称> --output <输出文件路径> [选项]
+python src/ai/create_samples.py --model <模型名称> --output <输出文件路径> [选项]
 ```
 
 | 参数 | 说明 | 默认值 |
@@ -125,14 +126,14 @@ python ai/create_samples.py --model <模型名称> --output <输出文件路径>
 ```bash
 # 示例
 # 默认模式（winner_path）：取获胜方每一步，启用 D4 增强 + 变异步过滤
-python ai/create_samples.py --model cnn_v3.1 --output ai\merge_samples\v4\path.json
-python ai/create_samples.py --model cnn_v3.1 --games 200 --output ai/train_data/samples.json
+python src/ai/create_samples.py --model cnn_v3.1 --output src/ai/merge_samples/v4/path.json
+python src/ai/create_samples.py --model cnn_v3.1 --games 200 --output src/ai/train_data/samples.json
 
 # 禁用增强
-python ai/create_samples.py --model cnn_v3.1 --no-augment --games 200 --output ai/train_data/samples.json
+python src/ai/create_samples.py --model cnn_v3.1 --no-augment --games 200 --output src/ai/train_data/samples.json
 
 # sample_games 模式：以样本局数量为目标驱动
-python ai/create_samples.py --model cnn_v3.1 --sample_games 50 --output ai/train_data/samples.json
+python src/ai/create_samples.py --model cnn_v3.1 --sample_games 50 --output src/ai/train_data/samples.json
 ```
 
 > **提示**：运行结束后可用 `--train-from-dir` 加载生成的 `.json` 文件继续训练。
@@ -143,16 +144,16 @@ python ai/create_samples.py --model cnn_v3.1 --sample_games 50 --output ai/train
 
 ```bash
 # 启动验收工具
-python -m tools.create_samples_tool.app
+python -m src.tools.create_samples_tool.app
 # 浏览器访问 http://127.0.0.1:5000
 ```
 
-> 详细使用手册见 [tools/create_samples_tool/README.md](tools/create_samples_tool/README.md)。
+> 详细使用手册见 [src/tools/create_samples_tool/README.md](src/tools/create_samples_tool/README.md)。
 
 #### 从已有数据训练
 
 ```bash
-python ai/train_main.py --model <模型指定> --train-from-dir <数据目录或文件> [选项]
+python src/ai/train_main.py --model <模型指定> --train-from-dir <数据目录或文件> [选项]
 ```
 
 | 参数 | 说明 | 默认值 |
@@ -184,14 +185,14 @@ python ai/train_main.py --model <模型指定> --train-from-dir <数据目录或
 
 ```bash
 # 示例：从目录训练
-python ai/train_main.py --model cnn_v1 --train-from-dir ai/train_data/cnn_v1_self_play_1 --epochs 1000
+python src/ai/train_main.py --model cnn_v1 --train-from-dir src/ai/train_data/cnn_v1_self_play_1 --epochs 1000
 
-python ai/train_main.py --model cnn_v2 --train-from-dir ai/merge_samples --epochs 1000 --batch-size 256 --shuffle
+python src/ai/train_main.py --model cnn_v2 --train-from-dir src/ai/merge_samples --epochs 1000 --batch-size 256 --shuffle
 # 示例：从合并文件训练
-python ai/train_main.py --model cnn_v1 --train-from-dir ai/merge_samples/merge_cnn_v1.json --epochs 1000
+python src/ai/train_main.py --model cnn_v1 --train-from-dir src/ai/merge_samples/merge_cnn_v1.json --epochs 1000
 
 # 示例：mini-batch 训练
-python ai/train_main.py --model cnn_v3.2 --fresh --train-from-dir ai/merge_samples/v2 --epochs 1000 --batch-size 4096 --shuffle --val-ratio 0.2
+python src/ai/train_main.py --model cnn_v3.2 --fresh --train-from-dir src/ai/merge_samples/v2 --epochs 1000 --batch-size 4096 --shuffle --val-ratio 0.2
 ```
 
 > **注意**：使用 `--batch-size` 启用 mini-batch 训练时，系统会自动生成**密集 loss log**，
@@ -220,13 +221,13 @@ python -m ai.sample_generator --shape <棋型> --num-samples <数量> --output <
 
 ```bash
 # 示例：生成 10000 个冲四样本
-python -m ai.sample_generator --shape chong4 --num-samples 10000 --output ai/merge_samples/chong4.json
+python -m ai.sample_generator --shape chong4 --num-samples 10000 --output src/ai/merge_samples/chong4.json
 
 # 示例：生成活三样本（干扰子更多）
-python -m ai.sample_generator --shape huo3 --num-samples 5000 --max-extra 8 --output ai/merge_samples/huo3.json
+python -m ai.sample_generator --shape huo3 --num-samples 5000 --max-extra 8 --output src/ai/merge_samples/huo3.json
 
 # 示例：生成防守冲四样本
-python -m ai.sample_generator --shape defend_chong4 --num-samples 5000 --output ai/merge_samples/defend_chong4.json
+python -m ai.sample_generator --shape defend_chong4 --num-samples 5000 --output src/ai/merge_samples/defend_chong4.json
 ```
 
 > **验证报告**：运行结束会打印 Hit@N / Hit@N+1 / Hit@N+2 命中率、`attack_prob_sum`（进攻位概率和）、`prob_gap`（进攻位与其他位的区分度）等指标，方便判断 label 质量是否达标。
@@ -236,7 +237,7 @@ python -m ai.sample_generator --shape defend_chong4 --num-samples 5000 --output 
 将分散的 `sample.json` 合并为单个大文件，减少训练时的 I/O 开销：
 
 ```bash
-python ai/merge_samples.py <目录1> [目录2] ... -o <输出文件路径>
+python src/ai/merge_samples.py <目录1> [目录2] ... -o <输出文件路径>
 ```
 
 | 参数 | 说明 |
@@ -246,10 +247,10 @@ python ai/merge_samples.py <目录1> [目录2] ... -o <输出文件路径>
 
 ```bash
 # 示例：合并单个目录
-python ai/merge_samples.py ai/train_data/cnn_v2_self_play_1 -o ai/merge_samples/merge_cnn_v2.json
+python src/ai/merge_samples.py src/ai/train_data/cnn_v2_self_play_1 -o src/ai/merge_samples/merge_cnn_v2.json
 
 # 示例：合并多个目录
-python ai/merge_samples.py ai/train_data/cnn_v2_self_play_1 ai/train_data/cnn_v2_self_play_2 -o ai/merge_samples/merge_cnn_v2_all.json
+python src/ai/merge_samples.py src/ai/train_data/cnn_v2_self_play_1 src/ai/train_data/cnn_v2_self_play_2 -o src/ai/merge_samples/merge_cnn_v2_all.json
 ```
 
 ### 样本可视化
@@ -275,7 +276,7 @@ python -m ai.sample_visualizer --sample <样本文件> [选项]
 
 ```bash
 # 示例：随机抽取 6 个样本可视化（默认叠加热力图）
-python -m ai.sample_visualizer --sample ai/merge_samples/chong4.json
+python -m ai.sample_visualizer --sample src/ai/merge_samples/chong4.json
 
 # 示例：指定索引 + 自定义输出
 python -m ai.sample_visualizer --sample data.json --indices 0,5,10 --output temp/my_viz.png
@@ -284,14 +285,14 @@ python -m ai.sample_visualizer --sample data.json --indices 0,5,10 --output temp
 python -m ai.sample_visualizer --sample data.json --count 3 --no-heatmap --seed 42
 ```
 
-> 热力图核心算法位于独立可复用的 `visualization/heatmap_color.py`（无 UI 依赖，默认白→黄→橙→红 4 色色板 + log 归一化），同时被 `ai/sample_visualizer.py`（matplotlib）和 `gui/components/heatmap.py`（tkinter 回放界面）共用。
+> 热力图核心算法位于独立可复用的 `src/visualization/heatmap_color.py`（无 UI 依赖，默认白→黄→橙→红 4 色色板 + log 归一化），同时被 `ai/sample_visualizer.py`（matplotlib）和 `gui/components/heatmap.py`（tkinter 回放界面）共用。
 
 ### 迭代进化训练
 
 自动化「生成样本 → 训练 → 对战评估 → 模型晋升」闭环，使模型持续迭代进化：
 
 ```bash
-python ai/iterative_train.py --ai1 <父代模型spec> --ai2 <子代模型spec> --sample_dir <样本目录>
+python src/ai/iterative_train.py --ai1 <父代模型spec> --ai2 <子代模型spec> --sample_dir <样本目录>
 ```
 
 | 参数 | 说明 | 示例 |
@@ -312,7 +313,7 @@ python ai/iterative_train.py --ai1 <父代模型spec> --ai2 <子代模型spec> -
 
 ```bash
 # 示例：从 cnn_v4.99 开始迭代进化
-python ai/iterative_train.py --ai1 cnn_v4.99 --ai2 cnn_v4.100 --sample_dir ai/merge_samples2
+python src/ai/iterative_train.py --ai1 cnn_v4.99 --ai2 cnn_v4.100 --sample_dir src/ai/merge_samples2
 ```
 
 ### LR Range Test
@@ -320,7 +321,7 @@ python ai/iterative_train.py --ai1 cnn_v4.99 --ai2 cnn_v4.100 --sample_dir ai/me
 学习率范围测试工具，用于确定最优学习率区间。每个 round 使用一个固定 lr，训练 `epochs` 个 step 后记录平均 loss，lr 从 `min_lr` 线性递增至 `max_lr`。每个 round 开始前重置模型到初始状态，确保 loss 只反映 lr 的影响。
 
 ```bash
-python ai/lr_range_test.py --model <模型指定> --data <数据路径> [选项]
+python src/ai/lr_range_test.py --model <模型指定> --data <数据路径> [选项]
 ```
 
 | 参数 | 说明 | 默认值 |
@@ -335,10 +336,10 @@ python ai/lr_range_test.py --model <模型指定> --data <数据路径> [选项]
 
 ```bash
 # 示例：对 CNN v2 执行 LR Range Test
-python ai/lr_range_test.py --model cnn_v2 --data ai/merge_samples/merge_cnn_v1_100.json
+python src/ai/lr_range_test.py --model cnn_v2 --data src/ai/merge_samples/merge_cnn_v1_100.json
 
 # 示例：自定义 lr 范围和输出路径
-python ai/lr_range_test.py --model cnn_v2 --data ai/merge_samples/merge_cnn_v1_100.json --min-lr 1e-6 --max-lr 1e-2 --output temp/my_lr_test.png
+python src/ai/lr_range_test.py --model cnn_v2 --data src/ai/merge_samples/merge_cnn_v1_100.json --min-lr 1e-6 --max-lr 1e-2 --output temp/my_lr_test.png
 ```
 
 ### 运行测试
@@ -353,7 +354,7 @@ python -m pytest tests/ -v -s
 python tests/run_tests.py
 ```
 
-> 覆盖全部 1629 个测试（自动发现，无需手工维护测试列表）
+> 覆盖全部 1655 个测试（自动发现，无需手工维护测试列表）
 >
 > 附加参数示例：
 > - `python -m pytest tests/ -q` —— 静默模式
@@ -393,7 +394,7 @@ python tests/run_tests.py
 - **输出**：225 维概率分布（Softmax）
 - **网络结构**：输入层(226) → 隐藏层1-5(各1000, ReLU) → 输出层(225) → Softmax
 - **训练方式**：自我对弈 + 棋型评估奖励 + KL 散度监督学习
-- **模型文件**：`ai/models/fc_v1/fc_v1.pth`
+- **模型文件**：`src/ai/models/fc_v1/fc_v1.pth`
 
 ### CNN v1
 
@@ -403,14 +404,14 @@ python tests/run_tests.py
 - **输出**：225 维概率分布（Softmax）
 - **网络结构**：卷积层(3→32→64→128) → 全连接层(28800→150→225) → Softmax
 - **训练方式**：自我对弈 + 棋型评估奖励 + KL 散度监督学习
-- **模型文件**：`ai/models/cnn_v1/cnn.pth`
+- **模型文件**：`src/ai/models/cnn_v1/cnn.pth`
 
 ### CNN v2 模型（轻量化）
 
 - **网络结构**：卷积层(3→64→64→64) + BN → 全连接层(14400→64→225) → Softmax
 - **参数量**：约 101 万（CNN v1 的 23%，计算量 18M MACs）
 - **训练方式**：自我对弈 + 棋型评估奖励 + KL 散度监督学习
-- **模型文件**：`ai/models/cnn_v2/cnn_v2.pth`
+- **模型文件**：`src/ai/models/cnn_v2/cnn_v2.pth`
 
 ### CNN v3 模型（纯卷积极简）
 
@@ -418,7 +419,7 @@ python tests/run_tests.py
 - **参数量**：约 1.9 万（CNN v2 的 1.9%）
 - **特点**：纯卷积，无 FC、无 BN、无 Dropout，1×1 Conv 替代 FC 层
 - **训练方式**：自我对弈 + 棋型评估奖励 + KL 散度监督学习
-- **模型文件**：`ai/models/cnn_v3/gen{i}/cnn_v3.pth`（多代模型，按代数存储）
+- **模型文件**：`src/ai/models/cnn_v3/gen{i}/cnn_v3.pth`（多代模型，按代数存储）
 - **多代支持**：使用 `cnn_v3.代数` 格式指定（如 `cnn_v3.1`），权重按代数隔离存储在 `gen{i}/` 子目录下
 
 ### CNN v4 模型（纯卷积极简 + 1 隐藏层）
@@ -427,7 +428,7 @@ python tests/run_tests.py
 - **参数量**：约 2.8 万
 - **特点**：在 cnn_v3 基础上增加一层 32→32 卷积，纯卷积，无 FC、无 BN、无 Dropout
 - **训练方式**：自我对弈 + 棋型评估奖励 + KL 散度监督学习
-- **模型文件**：`ai/models/cnn_v4/gen{i}/cnn_v4.pth`（多代模型）
+- **模型文件**：`src/ai/models/cnn_v4/gen{i}/cnn_v4.pth`（多代模型）
 
 ### CNN v5 模型（纯卷积极简 + 2 隐藏层）
 
@@ -435,7 +436,7 @@ python tests/run_tests.py
 - **参数量**：约 3.8 万
 - **特点**：在 cnn_v4 基础上再增加一层 32→32 卷积，纯卷积，无 FC、无 BN、无 Dropout
 - **训练方式**：自我对弈 + 棋型评估奖励 + KL 散度监督学习
-- **模型文件**：`ai/models/cnn_v5/gen{i}/cnn_v5.pth`（多代模型）
+- **模型文件**：`src/ai/models/cnn_v5/gen{i}/cnn_v5.pth`（多代模型）
 
 ### CNN v6 模型（残差卷积 + BatchNorm）
 
@@ -443,7 +444,7 @@ python tests/run_tests.py
 - **参数量**：约 3.8 万
 - **特点**：在 cnn_v5 基础上引入 BatchNorm 和残差连接，Conv2+Conv3、Conv4+Conv5 各组成一个残差块
 - **训练方式**：自我对弈 + 棋型评估奖励 + KL 散度监督学习
-- **模型文件**：`ai/models/cnn_v6/gen{i}/cnn_v6.pth`（多代模型）
+- **模型文件**：`src/ai/models/cnn_v6/gen{i}/cnn_v6.pth`（多代模型）
 
 ---
 
@@ -451,12 +452,12 @@ python tests/run_tests.py
 
 | 目录 | 说明 |
 |------|------|
-| `game/save/` | 游戏存档 |
-| `ai/ai_data/` | AI 对战记录（record.json） |
-| `ai/ai_data/loss_logs/` | 训练 loss 日志和曲线图 |
-| `ai/train_data/` | 训练样本（sample.json） |
-| `ai/merge_samples/` | 合并后的训练样本大文件 |
-| `tools/create_samples_tool/` | create_samples 验收工具 |
+| `src/game/save/` | 游戏存档 |
+| `src/ai/ai_data/` | AI 对战记录（record.json） |
+| `src/ai/ai_data/loss_logs/` | 训练 loss 日志和曲线图 |
+| `src/ai/train_data/` | 训练样本（sample.json） |
+| `src/ai/merge_samples/` | 合并后的训练样本大文件 |
+| `src/tools/create_samples_tool/` | create_samples 验收工具 |
 
 ---
 

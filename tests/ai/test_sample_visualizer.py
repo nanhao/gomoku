@@ -270,8 +270,9 @@ class TestCliSmoke:
         proj_root = os.path.abspath(
             os.path.join(os.path.dirname(__file__), "..", "..")
         )
+        src_dir = os.path.join(proj_root, 'src')
         env = os.environ.copy()
-        env["PYTHONPATH"] = proj_root + os.pathsep + env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = src_dir + os.pathsep + env.get("PYTHONPATH", "")
         result = subprocess.run(
             [sys.executable, "-m", "ai.sample_visualizer",
              "--sample", str(sample_file),
@@ -280,7 +281,7 @@ class TestCliSmoke:
              "--output", str(out_png)],
             capture_output=True,
             text=True,
-            cwd=proj_root,
+            cwd=src_dir,
             env=env,
             timeout=60,
         )

@@ -29,10 +29,11 @@ def pytest_sessionfinish(session, exitstatus):
 _current_dir = os.path.abspath(os.path.dirname(__file__))
 _parent_dir = os.path.dirname(_current_dir)
 
-# 将项目根目录添加到 sys.path 最前面
-if _parent_dir in sys.path:
-    sys.path.remove(_parent_dir)
-sys.path.insert(0, _parent_dir)
+# 将 src/ 目录添加到 sys.path 最前面，使 import ai/game/app 等包可用
+_src_dir = os.path.join(_parent_dir, 'src')
+if _src_dir in sys.path:
+    sys.path.remove(_src_dir)
+sys.path.insert(0, _src_dir)
 
 # 移除空字符串（当前目录）避免冲突
 if '' in sys.path:
@@ -47,12 +48,12 @@ if '.' in sys.path:
 _PROJECT_ROOT = _parent_dir
 
 PROTECTED_DIRS = [
-    os.path.join(_PROJECT_ROOT, 'ai', 'ai_data'),
-    os.path.join(_PROJECT_ROOT, 'ai', 'ai_data', 'loss_logs'),
-    os.path.join(_PROJECT_ROOT, 'ai', 'models'),
-    os.path.join(_PROJECT_ROOT, 'ai', 'train_data'),
-    os.path.join(_PROJECT_ROOT, 'ai', 'merge_samples'),
-    os.path.join(_PROJECT_ROOT, 'game', 'save'),
+    os.path.join(_PROJECT_ROOT, 'src', 'ai', 'ai_data'),
+    os.path.join(_PROJECT_ROOT, 'src', 'ai', 'ai_data', 'loss_logs'),
+    os.path.join(_PROJECT_ROOT, 'src', 'ai', 'models'),
+    os.path.join(_PROJECT_ROOT, 'src', 'ai', 'train_data'),
+    os.path.join(_PROJECT_ROOT, 'src', 'ai', 'merge_samples'),
+    os.path.join(_PROJECT_ROOT, 'src', 'game', 'save'),
     os.path.join(_PROJECT_ROOT, 'design'),
     os.path.join(_PROJECT_ROOT, 'requirements'),
 ]
