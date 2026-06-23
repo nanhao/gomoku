@@ -108,12 +108,10 @@ class TestConstructor:
         注意：此测试依赖 gen4 权重真实存在，不适合 mock。
         仅验证推导逻辑不崩溃（不做 assert 路径等于具体值）。
         """
-        # 如果真实 gen4 存在，构造不应抛异常
+        # 自动推导的 project_root 为 src/（iterative_train.py 的上两级目录）
+        # 模型实际路径为 src/ai/models/cnn_v4/gen99/cnn_v4.pth
         gen4_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(
-                os.path.dirname(os.path.abspath(__file__))
-            ))),
-            _MDIR, f"gen{_GEN4}", "cnn_v4.pth"
+            "src", _MDIR, f"gen{_GEN4}", "cnn_v4.pth"
         )
         if os.path.isfile(gen4_path):
             trainer = IterativeTrainer(
@@ -123,7 +121,7 @@ class TestConstructor:
             assert trainer.project_root is not None
         else:
             # gen4 不存在则跳过此测试
-            pytest.skip("gen99 权重文件不存在，跳过自动推导测试")
+            pytest.skip("gen4 权重文件不存在，跳过自动推导测试")
 
     def test_lock_file_exists_raises(self, temp_project):
         """UT-1.4：锁文件存在时抛 RuntimeError。"""
