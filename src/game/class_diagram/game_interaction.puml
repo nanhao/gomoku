@@ -1,0 +1,141 @@
+@startuml game_interaction
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam backgroundColor #FFFFFF
+skinparam sequenceMessageAlign center
+skinparam BoxPadding 10
+
+title 五子棋游戏核心交互流程
+
+actor "外部调用者\n(GUI/API)" as Client
+
+box "game 包内部模块" #LightBlue
+    participant "controller" as Ctrl
+    participant "game" as Game
+    participant "save" as Save
+end box
+
+== 1. 创建新游戏 ==
+
+Client -> Ctrl: new_game(save_name?)
+activate Ctrl
+
+Ctrl -> Save: list_saves()
+activate Save
+Save --> Ctrl: existing_saves[]
+deactivate Save
+
+alt 存档名已存在
+    Ctrl --> Client: {"error": "存档已存在"}
+else 存档名可用
+    Ctrl -> Game: new GomokuGame()
+    activate Game
+    Game --> Ctrl: game instance
+    deactivate Game
+
+    Ctrl -> Game: get_state()
+    activate Game
+    Game --> Ctrl: state dict
+    deactivate Game
+
+    Ctrl -> Save: save_game(state, save_name)
+    activate Save
+    Save -> Save: 深拷贝 + 生成文件名\n写入 JSON 文件
+    deactivate Save
+
+    Ctrl --> Client: {"status": "success", "state": ...}
+end
+deactivate Ctrl
+
+== 2. 落子操作 ==
+
+Client -> Ctrl: make_move(x, y)
+activate Ctrl
+
+opt 游戏未创建
+    Ctrl --> Client: {"error": "请先创建或加载游戏"}
+end
+
+alt 游戏已结束
+    Ctrl --> Client: {"error": "游戏已结束，...获胜"}
+else 游戏进行中
+    Ctrl -> Game: make_move(x, y)
+    activate Game
+
+    Game -> Game: 验证坐标合法性\n检查位置是否为空
+    Game -> Game: board[x][y] = current_player\n记录到 history
+    Game -> Game: _check_winner(x, y)\n(水平/垂直/对角线 五连检测)
+    Game -> Game: _is_draw()\n(棋盘满且无胜者)
+
+    alt 有获胜方
+        Game --> Ctrl: winner = 1 or 2
+        deactivate Game
+        Ctrl --> Client: {"status": "success", "game_over": true, "result": "黑方/白方获胜"}
+    else 平局
+        Game --> Ctrl: winner = 3
+        deactivate Game
+        Ctrl --> Client: {"status": "success", "game_over": true, "result": "平局"}
+    else 游戏继续
+        Game --> Ctrl: winner = 0
+        deactivate Game
+        Ctrl -> Game: get_state()
+        activate Game
+        Game --> Ctrl: state dict
+        deactivate Game
+        Ctrl --> Client: {"status": "success", "winner": 0, "current_player": ...}
+    end
+end
+deactivate Ctrl
+
+== 3. 加载存档 ==
+
+Client -> Ctrl: load_game(save_name)
+activate Ctrl
+
+Ctrl -> Save: load_game(save_name)
+activate Save
+Save -> Save: 匹配文件名模式\n选择最新存档
+Save --> Ctrl: state dict
+deactivate Save
+
+Ctrl -> Game: new GomokuGame(state)
+activate Game
+Game --> Ctrl: game instance (恢复状态)
+deactivate Game
+
+Ctrl --> Client: {"status": "success", "state": ...}
+deactivate Ctrl
+
+== 4. 列出存档 ==
+
+Client -> Ctrl: list_saves()
+activate Ctrl
+
+Ctrl -> Save: list_saves()
+activate Save
+Save -> Save: 扫描 save 目录\n解析文件名提取存档名
+Save --> Ctrl: saves[] (排序)
+deactivate Save
+
+Ctrl --> Client: ["我的游戏1", "我的游戏2", ...]
+deactivate Ctrl
+
+== 5. 查询游戏状态 ==
+
+Client -> Ctrl: get_state(short?)
+activate Ctrl
+
+Ctrl -> Game: get_state()
+activate Game
+Game --> Ctrl: state dict
+deactivate Game
+
+alt short = true
+    Ctrl --> Client: {board, current_player, winner}
+else short = false / 默认
+    Ctrl --> Client: {board, current_player, winner, history, name, start_time}
+end
+deactivate Ctrl
+
+@enduml

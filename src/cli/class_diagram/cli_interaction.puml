@@ -1,0 +1,128 @@
+@startuml cli_interaction
+' ============================================================
+' CLI 模块交互图
+' 节点名称与 pydeps 依赖图 (cli-pkg-deps.svg) 保持一致:
+'   - main  : cli/main.py                          (REPL 入口 + 命令处理)
+'   - game  : game/ (GomokuController → GomokuGame + GomokuSave)
+' ============================================================
+
+' 中文字体配置
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam classFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+skinparam backgroundColor #FFFFFF
+skinparam sequenceMessageAlign center
+skinparam boxPadding 20
+skinparam ParticipantPadding 30
+skinparam responseMessageBelowArrow true
+
+title CLI 核心交互流程 —— 五子棋 REPL 命令处理
+
+actor "用户" as User
+
+participant "main\n(cli/main.py)" as main
+participant "game\n(GomokuController)" as game
+
+== 启动阶段 ==
+
+User -> main : 运行程序
+activate main
+
+main -> game : new GomokuController(save_dir)\n内部初始化 GomokuSave
+activate game
+game --> main : controller 实例
+deactivate game
+
+main -> User : 显示欢迎信息 "五子棋游戏 v1.0"\n显示提示符 "> "
+
+== REPL 循环 ==
+
+loop 每个命令
+    User -> main : 输入命令字符串
+
+    main -> main : parse_command(controller, input_str)\n→ (cmd, args)
+
+    alt cmd == "new"
+        == 命令: new [名称] —— 新建游戏 ==
+        main -> game : controller.new_game(save_name)
+        activate game
+        game -> game : 检查存档名冲突\n创建 GomokuGame() 实例\nsave.save_game() 保存初始状态
+        game --> main : {status: "success", state: {...}}
+        deactivate game
+        main -> User : print_board() 显示空棋盘
+
+    else cmd == "put"
+        == 命令: put <x> <y> —— 落子 ==
+        main -> game : controller.make_move(x, y)
+        activate game
+        game -> game : 校验游戏状态 (非空 & 未结束)\nself.game.make_move(x, y)\n检查胜负 / 平局
+        game --> main : {status: "success", current_player, winner, board, ...}
+        deactivate game
+        main -> User : 显示落子结果\nprint_board() 显示更新后的棋盘
+
+    else cmd == "list"
+        == 命令: list —— 列出存档 ==
+        main -> game : controller.list_saves()
+        activate game
+        game -> game : self.save.list_saves()\n扫描 save/ 目录解析存档名
+        game --> main : ["我的游戏1", "我的游戏2", ...]
+        deactivate game
+        main -> User : 打印存档列表
+
+    else cmd == "print"
+        == 命令: print —— 显示当前棋盘 ==
+        main -> game : controller.get_state()
+        activate game
+        game -> game : self.game.get_state()\n返回深拷贝的 board / current_player / winner
+        game --> main : {board, current_player, winner, history}
+        deactivate game
+        main -> User : print_board() 显示棋盘\n显示当前玩家和游戏状态
+
+    else cmd == "show"
+        == 命令: show <名称> —— 显示完整存档 JSON ==
+        main -> game : controller.get_state_json(short=False)
+        alt controller.game is None 或存档名不匹配
+            main -> game : controller.load_game(save_name)
+            activate game
+            game -> game : self.save.load_game(save_name)\n创建 GomokuGame(state)
+            game --> main : {status: "success", state: {...}}
+            deactivate game
+        end
+        main -> game : controller.get_state_json(short=False)
+        activate game
+        game --> main : JSON 字符串 (完整状态)
+        deactivate game
+        main -> User : 打印完整存档 JSON
+
+    else cmd == "short"
+        == 命令: short <名称> —— 显示简要存档 JSON ==
+        alt controller.game is None 或存档名不匹配
+            main -> game : controller.load_game(save_name)
+            activate game
+            game -> game : self.save.load_game(save_name)\n创建 GomokuGame(state)
+            game --> main : {status: "success", state: {...}}
+            deactivate game
+        end
+        main -> game : controller.get_state_json(short=True)
+        activate game
+        game --> main : JSON 字符串 (仅 board / current_player / winner)
+        deactivate game
+        main -> User : 打印简要存档 JSON
+
+    else cmd == "help"
+        == 命令: help —— 显示帮助 ==
+        main -> User : 打印命令列表和用法说明\n(不调用 controller)
+
+    else cmd in ("quit", "exit")
+        == 命令: quit / exit —— 退出 ==
+        main -> main : parse_command() 返回 "quit"
+        main -> User : 打印 "再见！"
+        deactivate main
+
+    else 未知命令
+        main -> User : 打印 "未知命令: {cmd}"
+    end
+end
+
+@enduml

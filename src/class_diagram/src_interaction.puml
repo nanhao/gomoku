@@ -1,0 +1,228 @@
+@startuml src_interaction
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam sequenceMessageAlign center
+
+' 中文字体配置
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam classFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title src 顶层包交互图 — 五子棋端到端核心流程
+
+' ============================================================
+' 参与者定义（名称与 src-pkg-deps.svg 节点名完全一致）
+' ============================================================
+
+participant gui          order 10
+participant cli          order 20
+participant app          order 30
+participant ai           order 40
+participant game         order 50
+participant visualization order 60
+participant tools        order 70
+
+' --- 图例 ---
+legend right
+  |<#90EE90>  流 程 |
+  | **PvE**  玩家 vs AI（最完整，涉及 5 个包） |
+  | **AIvsAI**  AI 内战训练/采样 |
+  | **PvP-CLI**  命令行双人对战 |
+  | **Tools**  Web 采样工具（子进程隔离） |
+  | **Visual**  热力图可视化辅助 |
+endlegend
+
+' ============================================================
+' 流程 1：PvE — 玩家 vs AI（核心流程，覆盖 gui→app→game+ai→visualization）
+' ============================================================
+
+group PvE 核心流程：玩家 vs AI
+    gui -> app : ① GameModeSelector 选择模式\n→ GameSession(mode="pve", ai_player, ai_model)
+    activate app
+
+    app -> ai : ② create_engine(ai_model)\n→ AIEngine(model)
+    activate ai
+    ai --> app : AIEngine 实例
+    deactivate ai
+
+    app -> game : ③ GomokuController()\n→ 持有 GomokuGame + GomokuSave
+    activate game
+    game --> app : controller 实例
+    deactivate game
+
+    app -> ai : ④ AIGameManager(controller, engine, ai_player)
+    activate ai
+    ai --> app : ai_manager 实例
+    deactivate ai
+
+    app --> gui : GameSession 就绪
+    deactivate app
+
+    ' --- 新建游戏 ---
+    gui -> app : ⑤ session.start_game(save_name)
+    activate app
+
+    app -> game : ⑥ controller.new_game(save_name)
+    activate game
+    game -> game : GomokuGame() 初始化棋盘\nGomokuSave 持久化
+    game --> app : state
+    deactivate game
+
+    alt AI 执黑（先手）
+        app -> ai : ⑦ ai_manager.ai_move()
+        activate ai
+        ai -> ai : engine.get_move(board, player)\n→ 226维向量 → 模型推理 → argmax/sampling
+        ai -> game : ⑧ controller.make_move(x, y)
+        activate game
+        game --> ai : 落子结果
+        deactivate game
+        ai --> app : (x, y)
+        deactivate ai
+    end
+
+    app --> gui : { status, ai_moved, game_over }
+    deactivate app
+
+    ' --- 玩家点击棋盘 ---
+    gui -> app : ⑨ GUIHelper.handle_player_move(row, col)
+    activate app
+
+    app -> game : ⑩ session.make_player_move(row, col)\n→ controller.make_move(x, y)
+    activate game
+    game --> app : { status, game_over, need_ai_move }
+    deactivate game
+
+    alt 需要 AI 落子
+        app -> ai : ⑪ session.do_ai_move()\n→ ai_manager.ai_move()
+        activate ai
+        ai -> ai : engine.get_move(board, player)
+        ai -> game : ⑫ controller.make_move(x, y)
+        activate game
+        game --> ai : 落子结果
+        deactivate game
+        ai --> app : 落子完成
+        deactivate ai
+    end
+
+    app --> gui : { status, game_over, winner }
+    deactivate app
+
+    ' --- 可视化辅助 ---
+    gui -> visualization : ⑬ rewards_to_rgba / value_to_rgb\n热力图颜色映射（概率可视化）
+    activate visualization
+    visualization --> gui : RGBA 颜色值
+    deactivate visualization
+end
+
+' ============================================================
+' 流程 2：AI vs AI — AI 内战训练/采样
+' ============================================================
+
+group AI vs AI 内战流程（生成训练样本）
+    gui -> ai : ① run_ai_vs_ai_mode(num_games, ai1, ai2)
+    activate ai
+
+    ai -> ai : ② create_engine(ai1) → engine_black\ncreate_engine(ai2) → engine_white
+
+    loop 每局对弈
+        ai -> game : ③ GomokuController()
+        activate game
+        game --> ai : controller
+        deactivate game
+
+        ai -> game : ④ controller.new_game()
+        activate game
+        game --> ai : state
+        deactivate game
+
+        ai -> ai : ⑤ DataRecorder.new_game()
+
+        loop 交替落子直到终局
+            ai -> ai : ⑥ engine.get_move(board, player)\n→ 模型推理 → argmax/sampling
+            ai -> ai : ⑦ DataRecorder.record_move(...)
+            ai -> game : ⑧ controller.make_move(x, y)
+            activate game
+            game --> ai : 落子结果
+            deactivate game
+        end
+
+        ai -> game : ⑨ controller.get_winner()
+        activate game
+        game --> ai : winner
+        deactivate game
+
+        ai -> ai : ⑩ DataRecorder.save_game_result(...)\n→ 写入 record.json + sample.json
+    end
+
+    ' --- AI 输出可用于可视化 ---
+    ai -> visualization : ⑪ normalize_rewards / rewards_to_rgba\n概率数据 → 热力图颜色
+    activate visualization
+    visualization --> ai : 颜色数组
+    deactivate visualization
+
+    ai --> gui : ⑫ 对战结果统计
+    deactivate ai
+end
+
+' ============================================================
+' 流程 3：PvP CLI — 命令行双人对战
+' ============================================================
+
+group PvP CLI 流程：命令行双人对战
+    cli -> game : ① GomokuController()
+    activate game
+    game --> cli : controller
+    deactivate game
+
+    cli -> game : ② controller.new_game()
+    activate game
+    game --> cli : state
+    deactivate game
+
+    loop REPL 交互
+        cli -> game : ③ controller.make_move(x, y)
+        activate game
+        game --> cli : { status, winner, board }
+        deactivate game
+    end
+
+    cli -> cli : ④ print_board() 终端输出
+end
+
+' ============================================================
+' 流程 4：Tools — Web 采样工具（子进程隔离）
+' ============================================================
+
+group Tools 流程：Web 采样工具
+    tools -> tools : ① Flask create_app()\nGET  /api/create-samples/models\nPOST /api/create-samples/execute
+
+    tools -> ai : ② **子进程调用**\npython -c "from ai.registry import ..."\n→ 获取可用模型列表
+    activate ai
+    ai --> tools : JSON 模型列表
+    deactivate ai
+
+    tools -> ai : ③ **子进程调用**\n执行 create_samples.py\n→ AIGameManager.play_single_game(...)
+    activate ai
+    ai -> game : ④ GomokuController + make_move 循环
+    activate game
+    game --> ai : 对局数据
+    deactivate game
+    ai --> tools : 对局结果 + 样本文件
+    deactivate ai
+end
+
+' ============================================================
+' 架构依赖小结
+' ============================================================
+
+note across
+  **依赖方向**（与 src-pkg-deps.svg 一致）：
+  · app → ai, game, gui（薄代理层，协调 AI + 游戏规则 + 界面）
+  · gui → ai, app, game, visualization（UI 入口，委托 app 层）
+  · ai  → game, visualization（AI 依赖游戏规则，输出可视化数据）
+  · cli → game（命令行直接操作游戏核心）
+  · tools → ai（子进程隔离，通过 ai.registry + create_samples 间接依赖 game）
+  · visualization（纯算法，无 UI 依赖，被 ai 和 gui 双向引用）
+end note
+
+@enduml

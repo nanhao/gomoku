@@ -1,0 +1,425 @@
+@startuml gui_interaction
+!theme plain
+
+' 中文字体配置（必须放在文件开头）
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam classFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+skinparam backgroundColor #FEFEFE
+skinparam sequenceMessageAlign center
+skinparam boxPadding 10
+skinparam ParticipantPadding 20
+skinparam NoteBackgroundColor #F5F5DC
+skinparam NoteBorderColor #8B4513
+
+title 五子棋 GUI 核心交互流程（节点名称与 pydeps 严格一致）
+
+' ============================================================
+' Participants — 名称与 pydeps 依赖图节点完全一致
+' 依赖关系：
+'   main -> {ai_battle, app, components, display_updater, game}
+'   ai_battle -> {ai, components}
+'   components -> {ai, app, visualization}
+'   display_updater -> {components, game}
+' ============================================================
+actor "用户" as User <<actor>>
+
+box "GUI 层" #LightYellow
+    participant "main\n——\nGomokuGUI\nmain()入口" as main
+    participant "ai_battle\n——\nrun_ai_vs_ai_mode" as ai_battle
+    participant "components\n——\nGameModeSelector\nGameBoard\nReplayBrowser\nReplayWindow\nAIBattleProgressWindow\nLoadGameDialog" as components
+    participant "display_updater\n——\nGameDisplayUpdater" as display_updater
+end box
+
+box "应用层 / 游戏层" #LightBlue
+    participant "app\n——\nGameSession\nGUIHelper\ncreate_pve_config" as app
+    participant "game\n——\nGomokuController\nget_winner_text" as game
+end box
+
+box "AI / 可视化" #LightGreen
+    participant "ai\n——\nAI 引擎\nmove_sampler" as ai
+    participant "visualization\n——\n热力图色彩映射\nrewards_to_rgba\nvalue_to_rgb" as visualization
+end box
+
+' ============================================================
+' 一、游戏启动：模式选择
+' ============================================================
+== 一、游戏启动：模式选择 ==
+
+User -> main : 启动应用 main()
+activate main
+
+main -> components : GameModeSelector(root)
+activate components
+note right of components
+  显示三种模式：
+  👥 人人对战 / 🤖 人机对战
+  ⚔️ AI内战 / 📺 查看回放
+end note
+
+User -> components : 选择模式
+components --> User : result = {mode, ai, ai_player, ...}
+components -> components : root.destroy()
+deactivate components
+
+' ============================================================
+' 二、对战模式初始化（PvP / PvE）
+' ============================================================
+== 二、对战模式初始化（PvP / PvE）==
+
+main -> game : GomokuController()
+activate game
+game --> main : controller
+deactivate game
+
+main -> app : GameSession(mode, controller, ai_name, ai_player)
+activate app
+note right : 如有 ModelLoadError\n则弹窗报错并退出
+app --> main : session
+deactivate app
+
+main -> app : GUIHelper(controller, session)
+activate app
+app --> main : helper
+deactivate app
+
+main -> components : GameBoard(parent, on_click_callback=_on_board_click)
+activate components
+components -> components : draw_board() 绘制空棋盘
+components --> main : board
+deactivate components
+
+main -> display_updater : GameDisplayUpdater(board, labels, helper, ...)
+activate display_updater
+display_updater --> main : _display_updater
+deactivate display_updater
+
+alt 人机对战 & AI执黑先手
+    main -> app : helper.start_game_with_ai_first()
+    activate app
+    app -> game : session.start_game() → controller
+    activate game
+    game --> app : ok
+    deactivate game
+    app -> ai : AI 计算首步落子
+    activate ai
+    ai --> app : 落子位置
+    deactivate ai
+    app -> game : controller 更新棋盘状态
+    activate game
+    game --> app : ok
+    deactivate game
+    app --> main : {status, ai_moved, game_over, ...}
+    deactivate app
+    main -> main : _update_display()
+end
+
+deactivate main
+
+' ============================================================
+' 三、玩家落子流程
+' ============================================================
+== 三、玩家落子流程 ==
+
+User -> components : 点击棋盘格子
+activate components
+components -> components : _on_click(event)\n计算 (row, col)
+components -> main : on_click_callback(row, col)
+activate main
+
+' 验证与落子
+main -> app : helper.handle_player_move(row, col)
+activate app
+app -> game : controller 验证并执行落子
+activate game
+game --> app : {status, game_over, need_ai_move}
+deactivate game
+app --> main : result
+deactivate app
+
+' 更新显示
+main -> app : helper.get_display_state()
+activate app
+app -> game : controller.get_state()
+activate game
+game --> app : {board, current_player, winner, history, save_name}
+deactivate game
+app --> main : display_state
+deactivate app
+
+main -> display_updater : update(display_state)
+activate display_updater
+
+display_updater -> components : board.draw_board()
+activate components
+components --> display_updater :
+deactivate components
+
+display_updater -> components : board.draw_pieces(board_state, last_move)
+activate components
+components --> display_updater :
+deactivate components
+
+display_updater -> app : helper.get_player_name(current_player)
+activate app
+app --> display_updater : "🐻 小熊" / "🐰 小兔"
+deactivate app
+
+display_updater -> display_updater : 更新 save_name_label\n更新 status_label\n更新 game_status_label
+display_updater -> display_updater : update_history(history)\n滚动到最新记录
+display_updater --> main :
+deactivate display_updater
+
+alt 游戏结束
+    main -> display_updater : show_game_over(winner)
+    activate display_updater
+    display_updater -> game : get_winner_text(winner)
+    activate game
+    game --> display_updater : "🏆 小熊获胜！" / "平局！"
+    deactivate game
+    display_updater -> display_updater : messagebox.showinfo("游戏结束", text)
+    deactivate display_updater
+else 需要 AI 落子（PvE模式）
+    main -> main : root.after(500, _ai_move)
+end
+
+deactivate main
+deactivate components
+
+' ============================================================
+' 四、AI 落子流程
+' ============================================================
+== 四、AI 落子流程（PvE）==
+
+main -> main : _ai_move()
+activate main
+
+main -> app : helper.handle_ai_move()
+activate app
+app -> ai : AI 计算落子位置
+activate ai
+note right : 模型推理（CNN/MCTS等）
+ai --> app : 落子位置 (row, col)
+deactivate ai
+app -> game : controller 验证并落子
+activate game
+game --> app : {status, game_over}
+deactivate game
+app --> main : {status, game_over, winner?}
+deactivate app
+
+main -> app : helper.get_display_state()
+activate app
+app -> game : controller.get_state()
+activate game
+game --> app : display_state
+deactivate game
+app --> main : display_state
+deactivate app
+
+main -> display_updater : update(display_state)
+activate display_updater
+display_updater -> components : board.draw_board() / draw_pieces()
+activate components
+components --> display_updater :
+deactivate components
+display_updater --> main :
+deactivate display_updater
+
+alt 游戏结束
+    main -> display_updater : show_game_over(winner)
+    activate display_updater
+    display_updater -> game : get_winner_text(winner)
+    game --> display_updater : 结果文本
+    display_updater -> display_updater : messagebox 弹窗
+    deactivate display_updater
+end
+
+deactivate main
+
+' ============================================================
+' 五、AI 内战流程
+' ============================================================
+== 五、AI 内战流程 ==
+
+main -> ai_battle : run_ai_vs_ai_mode(num_games, ai1_name, ai2_name)
+activate ai_battle
+
+ai_battle -> ai : TempConfig(temperature=1.0, temp_moves=12)
+activate ai
+ai --> ai_battle : temp_config
+deactivate ai
+
+ai_battle -> components : AIBattleProgressWindow(num_games, ...)
+activate components
+components --> ai_battle : progress
+deactivate components
+
+ai_battle -> components : progress.start_battle(on_complete)
+activate components
+
+loop num_games 局对战
+    components -> ai : AI1 计算落子
+    activate ai
+    ai --> components : (row, col)
+    deactivate ai
+    components -> game : 更新棋盘状态
+    activate game
+    game --> components : ok
+    deactivate game
+    components -> ai : AI2 计算落子
+    activate ai
+    ai --> components : (row, col)
+    deactivate ai
+    components -> game : 更新棋盘状态
+    activate game
+    game --> components : ok
+    deactivate game
+end
+
+components -> components : 所有对局完成\n保存录像 record.json
+components --> ai_battle : on_complete(recorder, should_replay)
+deactivate components
+
+alt 查看回放
+    ai_battle -> components : ReplayWindow.show(record_file, sample_file)
+    activate components
+    components -> visualization : rewards_to_rgba()\n热力图色彩映射
+    activate visualization
+    visualization --> components :
+    deactivate visualization
+    components -> components : 展示回放界面
+    deactivate components
+end
+
+deactivate ai_battle
+
+' ============================================================
+' 六、回放模式
+' ============================================================
+== 六、回放模式 ==
+
+main -> app : get_ai_data_dir()
+activate app
+app --> main : ai_data 目录路径
+deactivate app
+
+alt 目录不存在
+    main -> main : messagebox.showinfo("暂无回放数据")
+else 目录存在
+    main -> components : ReplayBrowser.browse(ai_data_dir)
+    activate components
+    User -> components : 选择回放轮次和具体对局
+    components --> main : {record_file, sample_file}
+    deactivate components
+
+    main -> components : ReplayWindow.show(record_file, sample_file)
+    activate components
+    components -> visualization : rewards_to_rgba()\nvalue_to_rgb()
+    activate visualization
+    visualization --> components : 热力图 RGBA 数据
+    deactivate visualization
+    components -> components : 渲染回放界面\n（棋盘、热力图、控制条）
+    deactivate components
+end
+
+deactivate main
+
+' ============================================================
+' 七、保存 / 加载游戏
+' ============================================================
+== 七、保存 / 加载游戏 ==
+
+' --- 保存 ---
+User -> main : 点击"💾 保存游戏"
+activate main
+main -> game : controller 自动保存
+activate game
+game --> main : ok
+deactivate game
+main -> main : messagebox.showinfo("已保存")
+deactivate main
+
+' --- 加载 ---
+User -> main : 点击"🌲 加载游戏"
+activate main
+main -> game : controller.list_saves()
+activate game
+game --> main : 存档列表
+deactivate game
+
+main -> components : LoadGameDialog.show(root, saves)
+activate components
+User -> components : 选择存档
+components --> main : save_name
+deactivate components
+
+main -> game : controller.load_game(save_name)
+activate game
+game --> main : result
+deactivate game
+
+main -> app : helper.get_display_state()
+activate app
+app -> game : controller.get_state()
+activate game
+game --> app : display_state
+deactivate game
+app --> main : display_state
+deactivate app
+
+main -> display_updater : update(display_state)
+activate display_updater
+display_updater -> components : board.draw_board() / draw_pieces()
+activate components
+components --> display_updater :
+deactivate components
+display_updater --> main :
+deactivate display_updater
+
+main -> main : messagebox.showinfo("加载成功")
+deactivate main
+
+' ============================================================
+' 八、新建游戏
+' ============================================================
+== 八、新建游戏 ==
+
+User -> main : 点击"🌱 新建游戏"
+activate main
+
+main -> main : simpledialog.askstring("请输入存档名称")
+User -> main : 输入存档名（可选）
+
+main -> app : session.start_game(save_name)
+activate app
+app -> game : controller 初始化新棋盘
+activate game
+game --> app : ok
+deactivate game
+app --> main : {status}
+deactivate app
+
+main -> app : helper.get_display_state()
+activate app
+app -> game : controller.get_state()
+activate game
+game --> app : display_state
+deactivate game
+app --> main : display_state
+deactivate app
+
+main -> display_updater : update(display_state)
+activate display_updater
+display_updater -> components : board.draw_board()
+activate components
+components --> display_updater :
+deactivate components
+display_updater --> main :
+deactivate display_updater
+
+main -> main : messagebox.showinfo("游戏已创建")
+deactivate main
+
+@enduml

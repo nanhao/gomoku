@@ -1,0 +1,211 @@
+@startuml ai_interaction
+' =============================================================================
+' AI 模块核心交互图 — 迭代进化训练主流程
+'
+' 聚焦 iterative_train 编排的 AI 训练闭环：生成样本 → 训练 → 对战 → 循环
+' 参与者名称与 pydeps SVG 节点名完全一致
+' =============================================================================
+
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title AI 迭代进化训练核心交互流程
+
+' ---------------------------------------------------------------------------
+' 参与者定义（按流程阶段分组）
+' ---------------------------------------------------------------------------
+actor "CLI / 用户" as User
+
+' 编排层
+participant iterative_train as "iterative_train\n(迭代编排器)"
+
+' 子进程调度模块
+participant create_samples as "create_samples\n(样本生成)"
+participant train_main as "train_main\n(训练入口)"
+participant battle as "battle\n(对战评估)"
+
+' 基础设施层
+participant registry as "registry\n(模型注册表)"
+participant engine as "engine\n(AI引擎)"
+participant base_model as "base_model\n(模型基类)"
+
+' 对弈与记录层
+participant game_manager as "game_manager\n(AI对弈管理)"
+participant data_recorder as "data_recorder\n(数据记录器)"
+participant move_sampler as "move_sampler\n(落子采样)"
+
+' 样本处理层
+participant game_filter as "game_filter\n(对局过滤)"
+participant sample_creator as "sample_creator\n(样本生成器)"
+
+' 训练相关层
+participant runners as "runners\n(训练运行器)"
+participant base_trainer as "base_trainer\n(训练器基类)"
+participant sample_loader as "sample_loader\n(样本加载器)"
+participant loss_logger as "loss_logger\n(损失记录器)"
+
+' 常量配置
+participant constants as "constants\n(全局常量)"
+
+' =============================================================================
+' 主流程：迭代训练循环
+' =============================================================================
+
+User -> iterative_train : 启动迭代训练\n(--ai1 cnn_v4.99 --ai2 cnn_v4.100)
+
+== Phase 0: 初始化 & 模型准备 ==
+
+iterative_train -> iterative_train : 解析模型 spec\n校验 .pth 文件\n创建排他锁
+iterative_train -> iterative_train : _init_model()\n复制 ai1 权重 -> ai2
+
+group 每轮迭代循环 (while True)
+    iterative_train -> iterative_train : 打印轮次头
+
+    == Phase 1: 样本生成 (create_samples 子进程) ==
+
+    iterative_train -> create_samples : 启动子进程\npython ai/create_samples.py\n--model {ai1}
+
+    create_samples -> registry : get_model(ai1)
+    registry --> create_samples : BaseModel 实例
+
+    create_samples -> engine : AIEngine(model)
+    engine -> base_model : 持有模型引用
+    engine --> create_samples : engine 实例
+
+    create_samples -> game_manager : AIGameManager(controller, engine)
+    game_manager -> data_recorder : DataRecorder(ai_name)
+    data_recorder -> constants : 读取 AI_DATA_DIR
+
+    loop 执行 N 局自我对弈
+        create_samples -> game_manager : start_ai_vs_ai()
+        game_manager -> engine : get_move(board, player)
+        engine -> base_model : predict(board_vector)
+
+        alt 启用温度采样
+            engine -> move_sampler : temperature_sample()
+            move_sampler --> engine : 采样后的 (x, y)
+        else argmax 策略
+            engine -> engine : _pick_argmax()
+        end
+
+        engine --> game_manager : (x, y) 落子位置
+        game_manager -> data_recorder : record_move()
+        game_manager --> create_samples : 对局结果 (winner)
+
+        create_samples -> game_filter : should_keep_game(result)
+        game_filter --> create_samples : True/False
+    end
+
+    create_samples -> sample_creator : create(record_files,\nmove_filter=is_variant_move)
+    sample_creator --> create_samples : samples + stats
+
+    create_samples --> iterative_train : 返回样本文件路径\n(exit code 0)
+
+    == Phase 2: 模型训练 (train_main 子进程) ==
+
+    iterative_train -> train_main : 启动子进程\npython ai/train_main.py\n--model {model_name}.{gen}\n--train-from-dir {sample_dir}
+
+    train_main -> registry : get_trainer(model_spec)
+    registry --> train_main : BaseTrainer 实例
+
+    train_main -> runners : run_train_from_dir(args, trainer)
+
+    runners -> sample_loader : discover_sample_dirs()\n加载样本数据
+    sample_loader -> constants : 读取 TRAIN_DATA_DIR
+
+    runners -> base_trainer : train_on_samples(samples)
+    base_trainer -> base_model : 获取 network\n移到 GPU
+
+    loop 每个 epoch
+        base_trainer -> base_model : forward(board_vector)
+        base_model --> base_trainer : 概率分布输出
+
+        base_trainer -> base_trainer : 计算 KLDivLoss
+
+        base_trainer -> loss_logger : log_loss(epoch, loss)
+        loss_logger -> constants : LOSS_LOG_INTERVAL
+
+        base_trainer -> base_trainer : optimizer.step()\n反向传播更新权重
+    end
+
+    base_trainer --> runners : 训练完成
+    runners -> base_trainer : save_model()
+    base_trainer -> base_model : save()
+    runners --> train_main : OK
+
+    train_main --> iterative_train : 返回\n(exit code 0)
+
+    == Phase 3: 对战评估 (battle 子进程) ==
+
+    iterative_train -> battle : 启动子进程\npython ai/battle.py\n--ai1 {parent} --ai2 {child}
+
+    battle -> registry : get_model(ai1), get_model(ai2)
+    registry --> battle : model1, model2
+
+    battle -> engine : AIEngine(model1), AIEngine(model2)
+    engine -> base_model : 加载模型
+
+    battle -> game_manager : AIGameManager(controller, engines)
+    game_manager -> data_recorder : DataRecorder()
+
+    loop 执行 N 局对战
+        game_manager -> engine : get_move() x 双方
+        engine -> move_sampler : temperature_sample()\n(如有温度策略)
+        move_sampler --> engine : 采样落子
+        engine --> game_manager : 落子位置
+        game_manager -> data_recorder : record_move()
+    end
+
+    game_manager --> battle : 对战结果列表
+
+    battle -> constants : 读取配置
+    battle --> iterative_train : stdout:\nai1胜 X | ai2胜 Y | 胜率 Z%\n(exit code 0)
+
+    == Phase 4: 晋升 & 循环 ==
+
+    iterative_train -> iterative_train : _parse_battle_output()\n解析胜率统计
+
+    iterative_train -> iterative_train : _promote()\nai2 无条件晋升覆盖 ai1
+
+    iterative_train -> iterative_train : _round_num++\n进入下一轮
+end
+
+' =============================================================================
+' 补充：自我对弈 + 评价器流程（self_play_generator）
+' =============================================================================
+
+newpage 自我对弈 + 评价生成流程 (self_play_generator)
+
+participant self_play_generator as "self_play_generator\n(自对弈生成器)"
+participant evaluator as "evaluator\n(评价器)"
+participant reward_calculator as "reward_calculator\n(奖励计算器)"
+participant shape_detector as "shape_detector\n(棋型检测)"
+participant probability_utils as "probability_utils\n(概率工具)"
+
+self_play_generator -> engine : AIEngine(model)
+self_play_generator -> game_manager : AIGameManager(controller, engine)
+self_play_generator -> data_recorder : DataRecorder(ai_name)
+data_recorder -> constants : AI_DATA_DIR
+
+loop 执行 N 局自我对弈
+    self_play_generator -> game_manager : start_ai_vs_ai()
+    game_manager -> engine : get_move()
+    engine -> move_sampler : temperature_sample()
+    game_manager -> data_recorder : record_move()
+end
+
+self_play_generator -> evaluator : evaluate_record(record_file)
+
+evaluator -> reward_calculator : RewardCalculator(config)\n计算每个位置的 reward
+reward_calculator -> shape_detector : detect_shapes(board)
+shape_detector --> reward_calculator : 棋型特征
+
+reward_calculator --> evaluator : 225 维 reward 向量
+
+evaluator -> probability_utils : masked_softmax(reward, mask)
+probability_utils --> evaluator : 225 维概率分布
+
+evaluator --> self_play_generator : 写入 sample.json
+
+@enduml

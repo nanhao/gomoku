@@ -1,0 +1,99 @@
+@startuml app_interaction
+' ============================================================
+' app 包模块交互图
+' 节点名称与 pydeps 依赖图 (app-pkg-deps.svg) 保持一致
+' ============================================================
+
+title app 包模块交互图 - 两大核心流程
+
+' ----- 参与者 -----
+participant gui
+participant gui_helper
+participant battle
+participant session
+participant game
+participant ai
+participant exceptions
+
+' ============================================================
+' 流程 1：PvE 对局（玩家 vs AI）
+' ============================================================
+== PvE 对局流程（玩家 vs AI） ==
+
+group 启动游戏（AI 执黑时自动走第一步）
+    gui -> gui_helper : start_game_with_ai_first()
+    gui_helper -> session : start_game()
+    session -> game : new_game()
+    game --> session : OK
+    alt AI 执黑
+        session -> ai : ai_move()
+        ai --> session : (x, y)
+    end
+    session --> gui_helper : {status, ai_moved}
+    gui_helper --> gui : {status, ai_moved}
+end
+
+group 玩家落子
+    gui -> gui_helper : handle_player_move(row, col)
+    gui_helper -> session : make_player_move(x, y)
+    session -> game : make_move(x, y)
+    game --> session : OK / error
+    session --> gui_helper : {status, game_over, need_ai_move}
+    gui_helper --> gui : {status, game_over, need_ai_move}
+end
+
+group AI 应答落子（need_ai_move=True 时触发）
+    gui -> gui_helper : handle_ai_move()
+    gui_helper -> session : do_ai_move()
+    session -> ai : ai_move()
+    ai --> session : (x, y)
+    session -> game : make_move(x, y)
+    game --> session : OK
+    session --> gui_helper : {status, game_over}
+    gui_helper --> gui : {status, game_over}
+end
+
+note right of session
+  session 在创建 AI 引擎失败时
+  将 ValueError 转换为 ModelLoadError
+  上抛给 GUI 层
+end note
+
+' ============================================================
+' 流程 2：AI 内战（AI vs AI 批量对战 + 训练样本生成）
+' ============================================================
+== AI 内战流程（批量对战 + 训练样本生成） ==
+
+group AI 内战完整流程
+    gui -> battle : BattleSession.run(on_progress)
+    battle -> ai : create_engine(ai1_name)
+    ai --> battle : engine1
+    battle -> ai : create_engine(ai2_name)
+    ai --> battle : engine2
+    alt 模型加载失败
+        battle -> exceptions : raise ModelLoadError
+        exceptions --> gui : 弹窗提示用户
+    end
+    loop num_games 局
+        battle -> ai : AIGameManager.start_ai_vs_ai()
+        ai --> battle : 对战结果
+        battle --> gui : on_progress(current, total)
+    end
+    battle -> ai : Evaluator.evaluate_round()
+    ai --> battle : 训练样本生成完成
+    battle --> gui : 全部对战结果列表
+end
+
+' ============================================================
+' 依赖关系说明
+' ============================================================
+
+note across
+  <b>模块依赖关系（与 pydeps 图一致）</b>
+  • battle → ai, exceptions
+  • gui_helper → ai, gui
+  • session → ai, exceptions, game
+  • ai / game / exceptions / gui 为底层模块，无 app 内部依赖
+end note
+
+@enduml
