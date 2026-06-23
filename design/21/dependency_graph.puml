@@ -1,0 +1,58 @@
+@startuml
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,sans-serif
+skinparam packageStyle rectangle
+
+package "gui" as gui #LightCoral {
+  [main.py] as gui_main
+  [display_updater.py] as gui_display
+  [ai_battle.py] as gui_ai_battle
+  package "components" {
+    [constants.py] as gui_constants
+    [ai_battle.py] as gui_comp_ab
+  }
+}
+
+package "app" as app #LightBlue {
+  [__init__.py] as app_init
+  [session.py] as app_session
+  [battle.py] as app_battle
+  [gui_helper.py] as app_helper
+  [exceptions.py] as app_exceptions
+}
+
+package "ai" as ai #LightGreen
+package "game" as game #LightYellow
+
+gui_main --> app_init : imports GameSession,\nGUIHelper, ModelLoadError
+gui_comp_ab --> app_battle : imports BattleSession
+gui_display ---> gui_constants : imports ANIMALS
+gui_main ---> gui_constants : imports ANIMALS
+
+app_helper --> gui_constants : imports ANIMALS\n[循环依赖!] #Red
+app_session --> app_exceptions
+app_battle --> app_exceptions
+app_session --> game
+app_session --> ai
+app_battle --> ai
+
+note top of gui_constants
+  ANIMALS = {"black": "🐻", "white": "🐰"}
+  纯 UI 展示常量
+end note
+
+note bottom of app_helper
+  GUIHelper.get_player_name()
+  使用 ANIMALS 做展示格式化
+  这是 app→gui 的唯一导入
+end note
+
+note right of app_battle
+  无 gui 导入
+end note
+
+note right of app_session
+  无 gui 导入
+end note
+
+@enduml

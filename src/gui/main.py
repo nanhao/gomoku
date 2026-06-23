@@ -65,8 +65,12 @@ class GomokuGUI:
             ai_player=ai_player,
         )
 
-        # 创建 GUI 辅助对象
-        self.helper = GUIHelper(self.controller, self.session)
+        # 创建 GUI 辅助对象，传入动物表情展示常量
+        self.helper = GUIHelper(
+            self.controller, self.session,
+            black_animal=ANIMALS["black"],
+            white_animal=ANIMALS["white"],
+        )
 
         # 创建界面
         self._create_menu()

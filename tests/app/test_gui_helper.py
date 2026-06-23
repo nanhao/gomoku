@@ -37,7 +37,8 @@ class TestGUIHelper(unittest.TestCase):
         if os.path.exists(self.test_save_dir):
             shutil.rmtree(self.test_save_dir, ignore_errors=True)
 
-    def _create_helper(self, game_mode="pvp", ai_player=None, ai_model="random"):
+    def _create_helper(self, game_mode="pvp", ai_player=None, ai_model="random",
+                       black_animal=None, white_animal=None):
         """创建 GUIHelper 实例"""
         session = GameSession(
             mode=game_mode,
@@ -45,7 +46,13 @@ class TestGUIHelper(unittest.TestCase):
             ai_name=ai_model,
             ai_player=ai_player,
         )
-        return GUIHelper(self.controller, session)
+        # 构建 kwargs，仅传入非 None 的参数，确保默认值行为可测
+        kwargs = {}
+        if black_animal is not None:
+            kwargs["black_animal"] = black_animal
+        if white_animal is not None:
+            kwargs["white_animal"] = white_animal
+        return GUIHelper(self.controller, session, **kwargs)
 
     def test_start_game_with_ai_first_creates_game_and_moves(self):
         """AI 先走时启动游戏应创建游戏并执行 AI 落子"""
@@ -150,6 +157,34 @@ class TestGUIHelper(unittest.TestCase):
         helper = self._create_helper(game_mode="pvp")
         name = helper.get_player_name(2, winner=2)
         self.assertIn("小兔", name)
+
+    def test_constructor_with_custom_animals(self):
+        """GUIHelper 构造函数接受自定义 animal 参数"""
+        helper = self._create_helper(
+            game_mode="pvp",
+            black_animal="🐯",
+            white_animal="🐱",
+        )
+        self.assertEqual(helper._black_animal, "🐯")
+        self.assertEqual(helper._white_animal, "🐱")
+
+    def test_get_player_name_with_custom_animals(self):
+        """get_player_name 使用自定义 animal 值"""
+        helper = self._create_helper(
+            game_mode="pvp",
+            black_animal="🐯",
+            white_animal="🐱",
+        )
+        black_name = helper.get_player_name(1)
+        white_name = helper.get_player_name(2)
+        self.assertIn("🐯", black_name)
+        self.assertIn("🐱", white_name)
+
+    def test_constructor_default_animals(self):
+        """GUIHelper 默认 animal 值与原来 ANIMALS 常量一致"""
+        helper = self._create_helper(game_mode="pvp")
+        self.assertEqual(helper._black_animal, "🐻")
+        self.assertEqual(helper._white_animal, "🐰")
 
     def test_start_game_with_ai_first_game_over(self):
         """AI 先走且游戏立即结束（AI 直接获胜）"""
