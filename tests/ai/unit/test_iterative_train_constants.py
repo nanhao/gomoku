@@ -1,7 +1,8 @@
-"""IterativeTrainer 参数化单元测试（意图 13）— 常量与硬编码检查
+"""IterativeTrainer 参数化单元测试（意图 13/22）— 常量与硬编码检查
 
 验证重构后模块级常量正确保留/删除，以及日志输出中无硬编码模型 spec。
 对应设计文档 test_design.md UT-5、UT-6。
+意图 22：SAMPLE_GAMES 和 TRAIN_EPOCHS 已删除（下放为构造参数），新增 PROMOTION_THRESHOLD。
 """
 
 import inspect
@@ -16,13 +17,15 @@ class TestRetainedConstants:
     """
 
     def test_retained_constants_exist(self):
-        """验证保留的常量（§2.3）未被删除且值正确。"""
+        """验证保留的常量（§2.3）未被删除且值正确。
+
+        意图 22：SAMPLE_GAMES/TRAIN_EPOCHS 已删除，新增 PROMOTION_THRESHOLD。
+        """
         import ai.iterative_train as it_mod
 
         retained = {
-            'SAMPLE_GAMES': 500,
+            'PROMOTION_THRESHOLD': 55,
             'BATTLE_GAMES': 100,
-            'TRAIN_EPOCHS': 300,
             'TRAIN_BATCH_SIZE': 4096,
             'TEMP_MOVES': 2,
             'TEMPERATURE': 2,
@@ -38,3 +41,12 @@ class TestRetainedConstants:
 
         # PYTHON_EXECUTABLE 存在即可（值与 sys.executable 相关）
         assert hasattr(it_mod, 'PYTHON_EXECUTABLE')
+
+    def test_deleted_constants_removed(self):
+        """意图 22：SAMPLE_GAMES 和 TRAIN_EPOCHS 已删除。"""
+        import ai.iterative_train as it_mod
+
+        for deleted in ['SAMPLE_GAMES', 'TRAIN_EPOCHS']:
+            assert not hasattr(it_mod, deleted), (
+                f"已删除常量 {deleted} 不应存在"
+            )

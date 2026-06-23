@@ -2,7 +2,7 @@
 
 测试完整迭代流程，使用 mock subprocess.run 和临时目录隔离文件系统副作用。
 
-意图 12 更新：循环始终继续，无条件晋升（mv gen5→gen4），统一通过 KeyboardInterrupt 终止。
+意图 22 更新：条件晋升（仅 win_rate > 55% 时晋升），所有轮次正常记录。
 """
 
 import os
@@ -114,15 +114,15 @@ class TestFullIterationFlow:
         # ③ 循环始终继续，不因胜率停止
         # ④ run() 返回 dict 含已完成轮次
         assert len(result["rounds"]) >= 1
-        assert result["rounds"][0]["promoted"] is True  # 意图 12：无条件晋升
+        assert result["rounds"][0]["promoted"] is False  # 意图 22：55% 不晋升（需 > 55%）
 
     @patch('subprocess.run')
     def test_two_rounds_then_interrupt(self, mock_run, temp_project):
-        """IT-1.2（意图 12 更新）：2轮完整执行后中断。
+        """IT-1.2（意图 22 更新）：2轮完整执行后中断。
 
         验证：
         ① 2 轮均完成
-        ② 所有轮次 promoted=True（无条件晋升）
+        ② promoted 由胜率决定（48%→未晋升，44%→未晋升）
         ③ total_iterations = 2
         """
         sample_dir = os.path.join(temp_project, _SDIR)
@@ -146,9 +146,9 @@ class TestFullIterationFlow:
         # ① 2 轮均完成
         assert len(result["rounds"]) == 2
 
-        # ② 所有轮次 promoted=True
-        assert result["rounds"][0]["promoted"] is True
-        assert result["rounds"][1]["promoted"] is True
+        # ② promoted 由胜率决定（48%→未晋升，44%→未晋升）
+        assert result["rounds"][0]["promoted"] is False
+        assert result["rounds"][1]["promoted"] is False
 
         # ③ total_iterations = 2
         assert result["total_iterations"] == 2
@@ -313,8 +313,8 @@ class TestErrorHandling:
 
         # 正常返回
         assert len(result["rounds"]) == 1
-        assert result["rounds"][0]["promoted"] is True  # 意图 12：无条件晋升
-        assert result["total_iterations"] == 1  # 意图 12：所有轮次都计入
+        assert result["rounds"][0]["promoted"] is False  # 意图 22：55% 不晋升
+        assert result["total_iterations"] == 1
 
     def test_lock_file_prevents_construction(self, temp_project):
         """IT-2.6：锁文件存在时构造失败。"""
@@ -443,7 +443,7 @@ class TestFileSystemIsolation:
                 assert "gen5_win_rate" in r
                 assert "promoted" in r
 
-            # 意图 12：所有轮次 promoted=True
-            for r in result["rounds"]:
-                assert r["promoted"] is True
+            # 意图 22：promoted 由胜率决定（55%→未晋升，48%→未晋升）
+            assert result["rounds"][0]["promoted"] is False
+            assert result["rounds"][1]["promoted"] is False
             assert result["total_iterations"] == len(result["rounds"])

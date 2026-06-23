@@ -151,3 +151,17 @@ v6：
 
 # intention_id=21
 app 包和 gui 包存在循环依赖。分析原因并给出解决方案。输出方案在 design/21
+
+# intention_id=22
+optimze ai/iterative_train.py to the new logic:
+1, i=1
+2, cp {pth_of_ai1} {pth_of_ai2}
+3，python ai/create_samples.py --model {ai1} --sample_games {sample_games} --output {sample_dir}\v{gen_of_ai2}\path.json --temp-moves 100
+4, python ai/train_main.py --model {ai2} --train-from-dir {sample_dir}\v{gen_of_ai2} --epochs {epochs} --batch-size 4096 --shuffle
+5, python ai/battle.py --ai1 {ai1} --ai2 {ai2} --games 100 --temp-moves=2 --temperature 2 --temp-side both，print info
+6, i++; if the winning rate of ai2 is more than 55%, then: mv {pth_of_ai2} {pth_of_ai1}; then go back to 2; else continue to 2
+
+{sample_games} default to 500, and can be overrided by passing arguments.
+{epochs} default to 300, and can be overrided by passing arguments.
+
+you should print info correctly.

@@ -25,21 +25,21 @@ class TestLogOutput:
         assert "第 1 轨迭代开始" in captured.out
 
     def test_round_result_promoted(self, trainer, capsys):
-        """UT-6.2：每轮结束时打印结果摘要（意图 12：始终显示'晋升'）。"""
+        """UT-6.2：每轮结束时打印结果摘要（意图 22：晋升时显示 '> 55% → 晋升'）。"""
         trainer._round_num = 1
-        trainer._print_round_result(win_rate=55.0)
+        trainer._print_round_result(win_rate=55.1, promoted=True)
         captured = capsys.readouterr()
-        assert "第 1 轨结果: cnn_v4.100 胜率 = 55.0% → 晋升" in captured.out
+        assert "第 1 轮结果: cnn_v4.100 胜率 = 55.1% > 55% → 晋升" in captured.out
 
     def test_round_result_stopped(self, trainer, capsys):
-        """UT-6.3：每轮结束时打印结果摘要（意图 12：始终显示'晋升'）。"""
+        """UT-6.3：每轮结束时打印结果摘要（意图 22：未晋升时显示 '≤ 55% → 未晋升，重新开始'）。"""
         trainer._round_num = 1
-        trainer._print_round_result(win_rate=48.0)
+        trainer._print_round_result(win_rate=48.0, promoted=False)
         captured = capsys.readouterr()
-        assert "第 1 轨结果: cnn_v4.100 胜率 = 48.0% → 晋升" in captured.out
+        assert "第 1 轮结果: cnn_v4.100 胜率 = 48.0% ≤ 55% → 未晋升，重新开始" in captured.out
 
     def test_detail_line_promoted(self, trainer, capsys):
-        """UT-6.4：最终统计逐轮明细行格式（意图 12：不再显示晋升/停止标识）。"""
+        """UT-6.4：最终统计逐轮明细行格式（意图 22：显示 [晋升]/[未晋升] 标签）。"""
         trainer._rounds = [{
             "round_num": 1,
             "gen4_wins": 38,
@@ -57,7 +57,7 @@ class TestLogOutput:
         assert expected in captured.out
 
     def test_detail_line_stopped(self, trainer, capsys):
-        """UT-6.5：最终统计逐轮明细行格式（意图 12：不再显示停止标识）。"""
+        """UT-6.5：最终统计逐轮明细行格式（意图 22：显示 [未晋升] 标签）。"""
         trainer._rounds = [{
             "round_num": 3,
             "gen4_wins": 44,
@@ -102,7 +102,7 @@ class TestFinalReport:
         assert "总迭代次数: 3" in captured.out
 
     def test_report_round_details_all(self, trainer, capsys):
-        """UT-7.2：报告含逐轮明细表（意图 12：3行均无晋升/停止标识）。"""
+        """UT-7.2：报告含逐轮明细表（意图 22：3行均显示 [未晋升] 标签，无旧格式 '→ 晋升/→ 停止'）。"""
         self._add_rounds(trainer, [
             {"round_num": 1, "gen4_wins": 38, "gen5_wins": 55, "draws": 7,
              "gen5_win_rate": 55.0, "promoted": False},
@@ -118,9 +118,12 @@ class TestFinalReport:
         assert "第1轮:" in captured.out
         assert "第2轮:" in captured.out
         assert "第3轮:" in captured.out
-        # 验证不应含有晋升/停止标识
+        # 验证不含旧格式晋升/停止标识
         assert "→ 晋升" not in captured.out
         assert "→ 停止" not in captured.out
+        # 验证含新格式 [未晋升] 标签（所有轮次均未晋升）
+        assert captured.out.count("[未晋升]") == 3
+        assert "[晋升]" not in captured.out
         # 验证含胜场和平局
         assert "cnn_v4.99 胜" in captured.out
         assert "cnn_v4.100 胜" in captured.out

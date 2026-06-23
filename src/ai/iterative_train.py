@@ -1,18 +1,19 @@
 """迭代进化训练脚本 — 串联 create_samples / train_main / battle 为自动化迭代闭环。
 
 用法: python ai/iterative_train.py --ai1 cnn_v4.99 --ai2 cnn_v4.100 --sample_dir ai/merge_samples2
+      python ai/iterative_train.py --ai1 cnn_v4.99 --ai2 cnn_v4.100 --sample_dir ai/merge_samples2 --sample-games 300 --epochs 200
 前置: ai1 对应的 .pth 文件必须存在；不可多实例并发（.iterative_lock 保护）。
 意图 13：模型标识和样本目录通过 CLI 参数指定，不再硬编码。
+意图 22：条件晋升（胜率 > 55%），sample_games 和 epochs 可 CLI 覆盖。
 """
 
 import sys, os, re, json, shutil, subprocess, argparse
 from pathlib import Path
 from typing import Optional
 
-# --- 模块级常量（意图 13：保留）---
-SAMPLE_GAMES = 500
+# --- 模块级常量 ---
+PROMOTION_THRESHOLD = 55  # 意图 22：晋升阈值，ai2 胜率必须严格大于此值才晋升
 BATTLE_GAMES = 100
-TRAIN_EPOCHS = 300
 TRAIN_BATCH_SIZE = 4096
 TEMP_MOVES = 2
 TEMPERATURE = 2
@@ -22,12 +23,14 @@ PYTHON_EXECUTABLE = sys.executable
 class IterativeTrainer:
     """迭代进化训练编排器。
 
-    管理模型的迭代进化流程：复制权重→生成样本→训练→对战→无条件晋升→循环。
+    管理模型的迭代进化流程：复制权重→生成样本→训练→对战→条件晋升→循环。
     意图 13：ai1/ai2 为模型 spec（如 "cnn_v4.99"），sample_dir 为样本输出目录基路径。
+    意图 22：仅当 ai2 胜率 > 55% 时执行晋升，否则丢弃训练结果重新开始。
     """
 
     def __init__(self, ai1: str, ai2: str, sample_dir: str,
-                 project_root: Optional[str] = None):
+                 project_root: Optional[str] = None,
+                 sample_games: int = 500, epochs: int = 300):
         """解析模型 spec、计算路径并校验前置条件。
 
         Args:
@@ -35,6 +38,8 @@ class IterativeTrainer:
             ai2: 子代模型 spec，如 "cnn_v4.100"。
             sample_dir: 样本输出目录基路径，如 "ai/merge_samples2"。
             project_root: 项目根目录。None 时自动推导。
+            sample_games: 每轮目标样本局数，默认 500。
+            epochs: 每轮训练 epoch 数，默认 300。
 
         Raises:
             ValueError: ai1 与 ai2 模型名不一致。
@@ -43,6 +48,8 @@ class IterativeTrainer:
         """
         self._ai1 = ai1
         self._ai2 = ai2
+        self._sample_games = sample_games  # 意图 22：可配置样本局数
+        self._epochs = epochs  # 意图 22：可配置训练 epoch 数
 
         # 解析 spec：rsplit(".", 1) 仅分割最右侧点号
         self._model_name, gen_str1 = ai1.rsplit(".", 1)
@@ -96,7 +103,10 @@ class IterativeTrainer:
     # ============================================================
 
     def run(self) -> dict:
-        """执行迭代循环：初始化→生成样本→校验→训练→对战→晋升→循环。
+        """执行迭代循环：初始化→生成样本→校验→训练→对战→条件晋升→循环。
+
+        意图 22：仅当 ai2 胜率 > 55%（PROMOTION_THRESHOLD）时执行晋升，
+        否则丢弃训练结果，下一轮从头再来。
 
         Returns: 统计字典。KeyboardInterrupt 时正常返回已完成轮次统计。
         """
@@ -139,20 +149,24 @@ class IterativeTrainer:
                     f"i={self._round_num}"
                 )
 
-                # 步骤 h: 记录本轮统计
+                # 步骤 h: 条件晋升（意图 22：仅 win_rate > 55% 时晋升）
+                promoted = win_rate > PROMOTION_THRESHOLD
+                if promoted:
+                    self._promote()
+
+                # 步骤 i: 记录本轮统计
                 round_record = {
                     "round_num": self._round_num,
                     "gen4_wins": gen4_wins,
                     "gen5_wins": gen5_wins,
                     "draws": draws,
                     "gen5_win_rate": win_rate,
-                    "promoted": True,
+                    "promoted": promoted,
                 }
-
-                # 步骤 i: 无条件晋升并继续循环（意图 12：不做胜率判定，始终 mv ai2→ai1）
-                self._promote()
                 self._rounds.append(round_record)
-                self._print_round_result(win_rate)
+
+                # 步骤 j: 打印轮次结果
+                self._print_round_result(win_rate, promoted)
                 self._round_num += 1
 
         except KeyboardInterrupt:
@@ -197,9 +211,9 @@ class IterativeTrainer:
         os.makedirs(self._sample_output_dir, exist_ok=True)
 
     def _promote(self):
-        """无条件晋升：mv ai2 → ai1（copy2 + remove）。
+        """条件晋升：mv ai2 → ai1（copy2 + remove）。
 
-        意图 12：不做胜率判定，每轮结束后始终以 ai2 覆盖 ai1。
+        意图 22：仅在 ai2 胜率 > 55% 时由 run() 调用，未达标则跳过晋升。
         这样下一轮 cp ai1→ai2 时起点为进化后的模型。
 
         copy2 失败时 ai1/ai2 均保留；copy2 成功后 remove 失败时 ai1 已更新、ai2 残留。
@@ -247,7 +261,7 @@ class IterativeTrainer:
             PYTHON_EXECUTABLE,
             "ai/create_samples.py",
             "--model", self._ai1,
-            "--sample_games", str(SAMPLE_GAMES),
+            "--sample_games", str(self._sample_games),
             "--output", sample_path,
             "--temp-moves", "100"
         ]
@@ -294,7 +308,7 @@ class IterativeTrainer:
             "ai/train_main.py",
             "--model", self._ai2,
             "--train-from-dir", self._sample_output_dir,
-            "--epochs", str(TRAIN_EPOCHS),
+            "--epochs", str(self._epochs),
             "--batch-size", str(TRAIN_BATCH_SIZE),
             "--shuffle",
         ]
@@ -377,31 +391,48 @@ class IterativeTrainer:
         """打印轮次头：========== 第 {n} 轨迭代开始 =========="""
         print(f"========== 第 {self._round_num} 轨迭代开始 ==========")
 
-    def _print_round_result(self, win_rate: float):
-        """打印轮次结果摘要：第 {n} 轨结果: {ai2} 胜率 = {r}% → 晋升"""
-        print(
-            f"第 {self._round_num} 轨结果: "
-            f"{self._ai2} 胜率 = {win_rate:.1f}% → 晋升"
-        )
+    def _print_round_result(self, win_rate: float, promoted: bool):
+        """打印轮次结果摘要（意图 22：根据 promoted 输出晋升或未晋升）。
+
+        Args:
+            win_rate: ai2 胜率（百分比）。
+            promoted: 是否触发晋升。
+        """
+        if promoted:
+            print(
+                f"第 {self._round_num} 轮结果: "
+                f"{self._ai2} 胜率 = {win_rate:.1f}% > {PROMOTION_THRESHOLD}% → 晋升"
+            )
+        else:
+            print(
+                f"第 {self._round_num} 轮结果: "
+                f"{self._ai2} 胜率 = {win_rate:.1f}% ≤ {PROMOTION_THRESHOLD}% → 未晋升，重新开始"
+            )
 
     def _print_final_report(self):
-        """打印最终统计报告。_rounds 为空时提前返回。"""
+        """打印最终统计报告。_rounds 为空时提前返回。
+
+        意图 22：逐轮明细中包含 [晋升] / [未晋升] 标签，统计晋升次数。
+        """
         if not self._rounds:
             return
 
         total_iterations = len(self._rounds)
+        promoted_count = sum(1 for r in self._rounds if r["promoted"])
 
         print("\n========== 最终统计 ==========")
         print(f"总迭代次数: {total_iterations}")
 
         print("逐轮明细:")
         for r in self._rounds:
+            tag = "[晋升]" if r["promoted"] else "[未晋升]"
             print(
                 f"  第{r['round_num']}轮: "
                 f"{self._ai1} 胜 {r['gen4_wins']} | "
                 f"{self._ai2} 胜 {r['gen5_wins']} | "
                 f"平局 {r['draws']} | "
-                f"{self._ai2} 胜率 {r['gen5_win_rate']:.1f}%"
+                f"{self._ai2} 胜率 {r['gen5_win_rate']:.1f}% "
+                f"{tag}"
             )
 
         # 停止原因（通过 _build_stop_reason() 共用逻辑）
@@ -410,7 +441,7 @@ class IterativeTrainer:
 
         print(
             f"当前模型: gen{self._gen_of_ai1}/{self._model_name}.pth"
-            f"（经 {total_iterations} 轮进化）"
+            f"（经 {total_iterations} 轮进化，其中晋升 {promoted_count} 次）"
         )
 
     # ============================================================
@@ -433,15 +464,18 @@ class IterativeTrainer:
             "rounds": list(self._rounds),
             "stop_reason": self._build_stop_reason(),
             "final_model_path": os.path.abspath(self._ai1_path),
+            "promoted_count": sum(1 for r in self._rounds if r["promoted"]),
         }
 
 
 def main():
-    """CLI 入口：解析 --ai1/--ai2/--sample_dir 参数并运行迭代训练。"""
+    """CLI 入口：解析 --ai1/--ai2/--sample_dir/--sample-games/--epochs 参数并运行迭代训练。"""
     parser = argparse.ArgumentParser(description="迭代进化训练")
     parser.add_argument('--ai1', type=str, required=True, help='父代模型 spec，如 cnn_v4.99')
     parser.add_argument('--ai2', type=str, required=True, help='子代模型 spec，如 cnn_v4.100')
     parser.add_argument('--sample_dir', type=str, required=True, help='样本输出目录基路径，如 ai/merge_samples2')
+    parser.add_argument('--sample-games', type=int, default=500, help='每轮目标样本局数，默认 500')
+    parser.add_argument('--epochs', type=int, default=300, help='每轮训练 epoch 数，默认 300')
     args = parser.parse_args()
 
     # 校验: ai1/ai2 格式（含 . 且 gen 为正整数）
@@ -468,6 +502,8 @@ def main():
             ai1=args.ai1,
             ai2=args.ai2,
             sample_dir=args.sample_dir,
+            sample_games=args.sample_games,
+            epochs=args.epochs,
         )
         trainer.run()
     except FileNotFoundError as e:
