@@ -62,6 +62,7 @@ class TestBattleSessionSharedRun:
     def teardown_class(cls):
         cls._patcher.stop()
         shutil.rmtree(cls.test_save_dir, ignore_errors=True)
+        shutil.rmtree(_TEST_ROOT, ignore_errors=True)
 
     def test_run_returns_results_with_correct_length(self):
         """run() 应返回长度等于 num_games 的结果列表"""
@@ -115,6 +116,7 @@ class TestBattleSessionRun:
     def teardown_method(self):
         self._patcher.stop()
         shutil.rmtree(self.test_save_dir, ignore_errors=True)
+        shutil.rmtree(_TEST_ROOT, ignore_errors=True)
 
     def test_run_calls_on_progress(self):
         """run() 每完成一局应调用 on_progress 一次"""
@@ -162,6 +164,7 @@ class TestBattleSessionTempConfig:
     def teardown_method(self):
         self._patcher.stop()
         shutil.rmtree(self.test_save_dir, ignore_errors=True)
+        shutil.rmtree(_TEST_ROOT, ignore_errors=True)
 
     def test_temp_config_parameter(self):
         """temp_config 参数：传则存储，不传则为 None。"""
