@@ -47,3 +47,6 @@ tests/app/primary/_test_saves/
 *.pth
 src/ai/merge_samples2/
 src/ai/merge_samples3/
+
+src/test.json
+test.json
