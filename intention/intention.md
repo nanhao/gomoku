@@ -165,3 +165,6 @@ optimze ai/iterative_train.py to the new logic:
 {epochs} default to 300, and can be overrided by passing arguments.
 
 you should print info correctly.
+
+# intention_id=23
+目前模型只有在训练的时候会使用 gpu，自我对弈的时候不会。我希望在 reate_samples.py 自我对弈的时候也能使用 gpu。

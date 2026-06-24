@@ -274,6 +274,29 @@ class NeuralNetworkModel(BaseModel):
         self.network.load_state_dict(torch.load(model_path, weights_only=True))
         self.network.eval()
 
+    def move_to_device(self, device: torch.device = None) -> torch.device:
+        """将神经网络移动到指定设备（或自动选择最优设备）。
+
+        当 device 为 None 时，自动检测：CUDA 可用时使用 GPU，否则使用 CPU。
+        此方法供 create_samples.py / battle.py 等对弈脚本调用，
+        使自我对弈也能利用 GPU 加速推理。
+
+        训练场景由 BaseTrainer 自行管理设备，无需调用此方法。
+
+        Args:
+            device: 目标设备，None 时自动检测
+
+        Returns:
+            网络最终所在的 torch.device
+        """
+        if device is None:
+            if torch.cuda.is_available():
+                device = torch.device("cuda")
+            else:
+                device = torch.device("cpu")
+        self.network.to(device)
+        return device
+
 
 def board_vector_to_cnn_tensor(board_vector: List[int], device: torch.device) -> torch.Tensor:
     """将 226 维向量转换为 CNN 输入张量 (1, 3, 15, 15)

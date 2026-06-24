@@ -220,6 +220,10 @@ def main():
     print(f"加载模型: {args.model}")
     model = get_model(args.model)
 
+    # 将模型网络移到 GPU（若可用），加速自我对弈推理
+    if model.network is not None:
+        model.move_to_device()
+
     # 创建 AIEngine
     engine = AIEngine(model)
 

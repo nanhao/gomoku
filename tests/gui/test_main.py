@@ -295,7 +295,6 @@ class TestUpdateDisplay:
             status_label=self.gui.status_label,
             game_status_label=self.gui.game_status_label,
             history_listbox=self.gui.history_listbox,
-            helper=self.gui.helper,
             color_text="#000000",
             color_bear="#654321",
         )

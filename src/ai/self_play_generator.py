@@ -67,7 +67,11 @@ def run_self_play_and_evaluate(
     recorder = None
 
     try:
-        # 1. 创建 AI 引擎
+        # 1. 将模型网络移到 GPU（若可用），加速自我对弈推理
+        if model.network is not None:
+            model.move_to_device()
+
+        # 2. 创建 AI 引擎
         engine = AIEngine(model)
 
         # 2. 创建数据记录器，ai_name 为 {model_name}_{name_prefix}

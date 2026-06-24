@@ -138,6 +138,12 @@ def run_battle(ai1_name: str, ai2_name: str, num_games: int,
     # 加载模型（直接调用 registry.get_model，根据 AI 名称获取对应模型实例）
     model1 = get_model(ai1_name)
     model2 = get_model(ai2_name)
+
+    # 将模型网络移到 GPU（若可用），加速对弈推理
+    if model1.network is not None:
+        model1.move_to_device()
+    if model2.network is not None:
+        model2.move_to_device()
     
     # 创建引擎
     engine1 = AIEngine(model1)
