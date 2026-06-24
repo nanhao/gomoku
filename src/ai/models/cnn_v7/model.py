@@ -25,7 +25,7 @@ from typing import List
 import torch
 import torch.nn as nn
 
-from ai.base_model import NeuralNetworkModel, board_vector_to_cnn_tensor
+from ai.base_model import NeuralNetworkModel, board_vector_to_cnn_tensor_relative
 
 
 class CNNV7Network(nn.Module):
@@ -145,7 +145,12 @@ class CNNV7Model(NeuralNetworkModel):
         return CNNV7Network()
 
     def _prepare_input(self, board_vector: List[int], device: torch.device) -> torch.Tensor:
-        """将 226 维向量转换为 CNN 输入张量 (1, 3, 15, 15)
+        """将 226 维向量转换为相对视角 CNN 输入张量 (1, 3, 15, 15)
+
+        使用相对视角编码（AlphaGo Zero 风格）：
+        - 通道0：我方棋子
+        - 通道1：对方棋子
+        - 通道2：我方颜色指示器
 
         Args:
             board_vector: 226 维向量
@@ -154,7 +159,7 @@ class CNNV7Model(NeuralNetworkModel):
         Returns:
             形状为 (1, 3, 15, 15) 的张量
         """
-        return board_vector_to_cnn_tensor(board_vector, device)
+        return board_vector_to_cnn_tensor_relative(board_vector, device)
 
     def predict(self, board_vector: List[int]):
         """预测落子概率和局面价值

@@ -1,0 +1,44 @@
+@startuml
+skinparam defaultFontName Microsoft YaHei
+title MCTS 训练流水线
+
+start
+:加载目标模型 cnn_v7;
+:加载训练样本;
+:分割训练/验证集 (val_split);
+
+repeat
+  :打乱样本 (randperm);
+  
+  repeat
+    :取出 batch {state, π, z};
+    :_train_step 入口;
+    note right
+      T4 assert: p_log.max() <= 0
+      T6 assert: v in [-1, 1]
+      T11: value_fc.grad != 0
+    end note
+    :模型前向: (p_log, v) = model(state);
+    :计算损失;
+    note right
+      l = (z - v)² - πᵀ·p_log
+      p_log 是 LogSoftmax 输出
+      不再取 log()
+    end note
+    :AdamW 反向传播 + 权重更新;
+    note right: lr=0.001, weight_decay=1e-4
+  repeat while (还有 batch?) is (是)
+  -> 否;
+  
+  if (val 集存在?) then (是)
+    :验证集评估 (无 grad);
+    note right: model.eval() → 前向 T2-T9 → model.train()
+  endif
+  
+  :输出日志: value_loss, policy_loss, total_loss;
+repeat while (epoch 未完成?) is (是)
+-> 否;
+
+:保存模型权重 (state_dict);
+stop
+@enduml

@@ -1,0 +1,27 @@
+@startuml
+skinparam defaultFontName Microsoft YaHei
+title MCTS 自我对弈主循环
+
+start
+:加载模型 cnn_v7;
+:初始化空棋盘;
+:game_samples = [];
+
+while (游戏未结束?) is (是)
+  :编码局面 (当前视角);
+  :生成 log_key = "game{i}_move{j}";
+  :MCTS 搜索 (N 次模拟);
+  note right: decide(board, player, log_key)\nSearcher 内部自动加噪声
+  :记录样本: {state, π (τ=1.0), -};
+  :温度采样选落子;
+  :执行落子;
+  :MCTSMoveDecider.make_move\n(调用 advance_root, 子树复用);
+  :DataRecorder.record_move(\n  mcts_probs, mcts_log, root_policy);
+  note right: 写入 record.json\nextension: mcts_probs + mcts_log + output
+endwhile (否)
+
+:确定对局结果 z (赢+1/输-1/平0);
+:所有样本填入 z (当前视角);
+:保存样本到 sample.json;
+stop
+@enduml

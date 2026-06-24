@@ -1,0 +1,65 @@
+@startuml
+skinparam defaultFontName Microsoft YaHei
+title MCTS 搜索流程（Batch 推理 + Virtual Loss）
+
+start
+:根节点状态 s₀;
+:加狄利克雷噪声\nP' = (1-ε)P + ε·Dir(α);
+
+repeat
+  :从根节点开始;
+  note right: == 选择阶段（应用 Virtual Loss）==
+  
+  while (当前节点非叶节点且非终局?) is (是)
+    :PUCT 选择子节点;
+    note right: 施加 Virtual Loss\nW -= vl, N += vl
+  endwhile (否)
+  
+  :收集叶节点到 batch 列表;
+  note right: 记录 state_hash + board + player
+  
+  if (batch 未满且还有 simulation?) then (是)
+    :继续下一轮;
+  else (否)
+  
+    :== Batch 推理阶段 ==;
+    
+    repeat :对 batch 中每个叶节点:
+      if (终局?) then (是)
+        :v = 规则判定;
+        note right: 有人胜 → ±1\n平局 → 0
+      else (否)
+        :(p, v) = model.predict(states);
+        note right: 批量获取先验概率与价值
+        :为所有合法落子创建子边;
+        note right: N=0, W=0, Q=0, P=p
+      endif
+    repeat while (还有叶节点?) is (是)
+    -> 否;
+
+    :== 回传阶段（撤销 VL + Backup）==;
+    
+    repeat :对 batch 中每个叶节点:
+      :撤销 Virtual Loss;
+      note right: W += vl, N -= vl\n恢复原始统计量
+      :Backup 沿路径向上;
+      note right
+        N += 1
+        W += v
+        Q = W / N
+        v = -v (切换玩家取反)
+      end note
+    repeat while (还有叶节点?) is (是)
+    -> 否;
+
+    :清空 batch 列表;
+  endif
+  
+repeat while (总 simulation 次数 < N?) is (是)
+-> 否;
+
+:输出 visit_counts, root_value;
+:写入搜索日志 JSON;
+note right: {MCTS_LOG_DIR}/{log_key}.json
+stop
+@enduml

@@ -1,0 +1,140 @@
+"""MCTS 训练脚本
+
+使用 MCTS 生成的 sample.json 训练双头模型。
+
+用法：
+    python -m ai.scripts.mcts_train --model model.pth --train-from-dir data/ --epochs 10
+
+设计文档 §4.5 规范实现。
+"""
+
+import argparse
+import os
+import sys
+from typing import List
+
+# 确保项目根在 sys.path 中
+_proj_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+if _proj_root not in sys.path:
+    sys.path.insert(0, _proj_root)
+
+import torch
+
+from ai.models.cnn_v7.model import CNNV7Model
+from ai.models.cnn_v7.trainer import CNNV7Trainer
+
+
+# ---------- 参数解析 ----------
+
+def parse_args():
+    """解析 CLI 参数"""
+    p = argparse.ArgumentParser(
+        description="MCTS 训练脚本 — 训练双头模型",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p.add_argument("--model", required=True,
+                   help="初始权重文件路径（以此为起点训练）")
+    p.add_argument("--train-from-dir", required=True, nargs='+',
+                   help="训练数据目录（sample.json 所在目录），可指定多个")
+    p.add_argument("--epochs", type=int, required=True,
+                   help="训练轮数")
+    p.add_argument("--output", default=None,
+                   help="训练后权重保存路径（默认覆盖 --model）")
+    p.add_argument("--batch-size", type=int, default=2048,
+                   help="训练 batch size（默认 2048）")
+    p.add_argument("--lr", type=float, default=0.001,
+                   help="初始学习率（默认 0.001）")
+    p.add_argument("--l2-reg", type=float, default=1e-4,
+                   help="AdamW weight_decay（默认 1e-4）")
+    p.add_argument("--val-split", type=float, default=0.1,
+                   help="验证集比例（默认 0.1）")
+    p.add_argument("--no-shuffle", action="store_true",
+                   help="关闭训练数据 shuffle")
+    p.add_argument("--device", default="cuda",
+                   help="训练设备（默认 cuda）")
+    return p.parse_args()
+
+
+# ---------- 主流程 ----------
+
+def run_train(args):
+    """执行训练流水线"""
+    # 确定设备
+    use_cuda = args.device == "cuda" and torch.cuda.is_available()
+    device = torch.device("cuda" if use_cuda else "cpu")
+    print(f"[设备] {device}")
+
+    # 验证输入目录
+    train_dirs: List[str] = []
+    for d in args.train_from_dir:
+        sample_path = os.path.join(d, "sample.json")
+        if not os.path.exists(sample_path):
+            print(f"[警告] 目录 {d} 中没有 sample.json，跳过")
+            continue
+        n_samples = _count_samples(sample_path)
+        print(f"[数据] {d} — {n_samples} 条样本")
+        train_dirs.append(d)
+
+    if not train_dirs:
+        print("[错误] 没有找到有效的训练数据目录")
+        sys.exit(1)
+
+    # 加载模型
+    print(f"[加载模型] {args.model}")
+    model = CNNV7Model(model_path=args.model, fresh=False)
+    model.move_to_device(device)
+
+    # 创建训练器
+    print(f"[训练器] lr={args.lr}, weight_decay={args.l2_reg}, batch_size={args.batch_size}")
+    trainer = CNNV7Trainer(
+        model=model,
+        lr=args.lr,
+        weight_decay=args.l2_reg,
+    )
+
+    # 执行训练
+    shuffle = not args.no_shuffle
+    print(f"[训练] epochs={args.epochs}, val_split={args.val_split}, shuffle={shuffle}")
+    print("=" * 60)
+
+    history = trainer.train_epochs(
+        sample_dirs=train_dirs,
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        val_split=args.val_split,
+        shuffle=shuffle,
+        verbose=True,
+    )
+
+    # 保存模型
+    output_path = args.output if args.output else args.model
+    print("=" * 60)
+    print(f"[保存模型] {output_path}")
+    trainer.save_model(output_path)
+
+    # 输出最终损失
+    if history:
+        final = history[-1]
+        print(f"[最终损失] value_loss={final['value_loss']:.4f}, "
+              f"policy_loss={final['policy_loss']:.4f}, "
+              f"total_loss={final['total_loss']:.4f}")
+
+    return output_path
+
+
+def _count_samples(sample_path: str) -> int:
+    """统计 sample.json 中的样本数（不加载全部内容）"""
+    import json
+    try:
+        with open(sample_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return len(data) if isinstance(data, list) else 0
+    except Exception:
+        return 0
+
+
+# ---------- 入口 ----------
+
+if __name__ == "__main__":
+    args = parse_args()
+    run_train(args)

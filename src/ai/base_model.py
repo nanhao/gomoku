@@ -304,7 +304,7 @@ def board_vector_to_cnn_tensor(board_vector: List[int], device: torch.device) ->
     这是 CNNV1Model 和 CNNV2Model 共用的输入转换逻辑，
     提取为独立函数以避免代码重复。
     
-    转换规则：
+    转换规则（绝对视角编码）：
     - 通道1（黑棋）：棋盘上值为 1 的位置设为 1.0，其余为 0.0
     - 通道2（白棋）：棋盘上值为 2 的位置设为 1.0，其余为 0.0
     - 通道3（当前方）：当前落子方为黑(1)时全 1.0，为白(2)时全 0.0
@@ -342,4 +342,51 @@ def board_vector_to_cnn_tensor(board_vector: List[int], device: torch.device) ->
     input_tensor = torch.stack([black_tensor, white_tensor, player_tensor], dim=0)
     input_tensor = input_tensor.unsqueeze(0)
     
+    return input_tensor
+
+
+def board_vector_to_cnn_tensor_relative(board_vector: List[int], device: torch.device) -> torch.Tensor:
+    """将 226 维向量转换为相对视角 CNN 输入张量 (1, 3, 15, 15)
+
+    相对视角编码（AlphaGo Zero 风格，供 cnn_v7 MCTS 体系使用）：
+    - 通道0（我方棋子）：当前落子方的棋子位置设为 1.0，其余为 0.0
+    - 通道1（对方棋子）：对方棋子位置设为 1.0，其余为 0.0
+    - 通道2（我方颜色）：当前落子方为黑(1)时全 1.0，为白(2)时全 0.0
+
+    与绝对视角编码的区别：通道0/1根据当前落子方动态切换语义，
+    从"黑白"变为"我方/对方"，消除绝对颜色信息，提升泛化能力。
+
+    Args:
+        board_vector: 226 维向量，前 225 位是棋盘（按行展开，0=空, 1=黑, 2=白），
+                     最后 1 位是当前落子方（1=黑, 2=白）
+        device: 目标设备（CPU 或 GPU）
+
+    Returns:
+        形状为 (1, 3, 15, 15) 的张量，可直接输入 CNN 网络
+    """
+    board = board_vector[:225]
+    current_player = board_vector[225] if len(board_vector) > 225 else 1
+
+    # 通道0: 我方棋子（当前玩家=current_player 的位置）
+    my_channel = [1.0 if x == current_player else 0.0 for x in board]
+    # 通道1: 对方棋子
+    opponent = 2 if current_player == 1 else 1
+    opp_channel = [1.0 if x == opponent else 0.0 for x in board]
+    # 通道2: 我方颜色指示器
+    player_channel = [1.0 if current_player == 1 else 0.0] * 225
+
+    # 重塑为 15x15
+    my_matrix = [my_channel[i*15:(i+1)*15] for i in range(15)]
+    opp_matrix = [opp_channel[i*15:(i+1)*15] for i in range(15)]
+    player_matrix = [player_channel[i*15:(i+1)*15] for i in range(15)]
+
+    # 转换为张量并堆叠
+    my_tensor = torch.tensor(my_matrix, dtype=torch.float32, device=device)
+    opp_tensor = torch.tensor(opp_matrix, dtype=torch.float32, device=device)
+    player_tensor = torch.tensor(player_matrix, dtype=torch.float32, device=device)
+
+    # 堆叠为 (3, 15, 15) 并添加 batch 维度 -> (1, 3, 15, 15)
+    input_tensor = torch.stack([my_tensor, opp_tensor, player_tensor], dim=0)
+    input_tensor = input_tensor.unsqueeze(0)
+
     return input_tensor

@@ -1,0 +1,366 @@
+"""双头模型训练基类模块
+
+实现 AlphaGo Zero 风格的训练流程：
+- 损失函数：l = (z - v)² - πᵀ·p_log
+- 优化器：AdamW（weight_decay=1e-4）
+- 按设计文档 §9 训练规约实现：_train_step → train_epochs → model.save
+"""
+
+import json
+import os
+from abc import ABC, abstractmethod
+from typing import Dict, List, Optional
+
+import torch
+import torch.optim as optim
+import torch.nn.functional as F
+
+
+def get_device() -> torch.device:
+    """获取可用设备（优先 GPU）"""
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    return torch.device("cpu")
+
+
+class DualHeadTrainer(ABC):
+    """双头模型训练基类（MCTS 新体系专用）
+
+    实现 AlphaGo Zero 训练流程：
+    - 损失 = MSE(value) + CrossEntropy(policy)
+    - AdamW 优化器（weight_decay=1e-4）
+
+    子类（CNNV7Trainer）需实现：
+    - _create_model(fresh) → BaseModel
+    - _convert_inputs(states) → Tensor (batch, 3, 15, 15)
+    - model_name → str
+
+    不继承 BaseTrainer，与旧体系完全隔离。
+    """
+
+    # 默认超参数
+    DEFAULT_LR: float = 0.001
+    DEFAULT_WEIGHT_DECAY: float = 1e-4
+
+    def __init__(
+        self,
+        model=None,
+        fresh: bool = False,
+        device: Optional[torch.device] = None,
+        lr: float = None,
+        weight_decay: float = None,
+        gen: Optional[int] = None,
+    ):
+        """初始化训练器
+
+        Args:
+            model: 模型实例，None 时根据 fresh 创建
+            fresh: 是否创建新模型
+            device: 训练设备，None 时自动检测
+            lr: 学习率，None 时使用 DEFAULT_LR
+            weight_decay: AdamW 权重衰减，None 时使用 DEFAULT_WEIGHT_DECAY
+            gen: 代数
+        """
+        self.gen = gen
+        self.device = device if device is not None else get_device()
+
+        # 创建或保存模型
+        if model is not None:
+            self.model = model
+        else:
+            self.model = self._create_model(fresh)
+
+        # 移动到 GPU
+        if self.model.network is not None:
+            self.model.network.to(self.device)
+
+        # 初始化 AdamW 优化器
+        actual_lr = lr if lr is not None else self.DEFAULT_LR
+        actual_wd = weight_decay if weight_decay is not None else self.DEFAULT_WEIGHT_DECAY
+        self.optimizer = optim.AdamW(
+            self.model.network.parameters(),
+            lr=actual_lr,
+            weight_decay=actual_wd,
+        )
+
+    # ---------- 抽象方法 ----------
+
+    @abstractmethod
+    def _create_model(self, fresh: bool):
+        """创建模型实例"""
+        pass
+
+    @property
+    @abstractmethod
+    def model_name(self) -> str:
+        """模型名称"""
+        pass
+
+    @abstractmethod
+    def _convert_inputs(self, inputs: List[List[int]]) -> torch.Tensor:
+        """将 226 维 state 列表转换为模型输入张量
+
+        Args:
+            inputs: state 列表，每个元素 226 维
+
+        Returns:
+            输入张量，形状取决于模型类型
+        """
+        pass
+
+    # ---------- 训练入口 ----------
+
+    def _train_step(
+        self,
+        inputs: torch.Tensor,
+        pi_targets: torch.Tensor,
+        z_targets: torch.Tensor,
+    ) -> Dict[str, float]:
+        """单 batch 训练步（设计文档 §9.2 T1-T12）
+
+        这是训练的核心入口方法，所有训练张量操作均通过此方法完成。
+
+        Args:
+            inputs: 输入张量 (B, 3, 15, 15)
+            pi_targets: π 目标分布 (B, 225)
+            z_targets: z 目标价值 (B, 1)，值域 {-1, 0, 1}
+
+        Returns:
+            {"value_loss": float, "policy_loss": float, "total_loss": float,
+             "grad_norms": dict}
+        """
+        # T1: 清零梯度
+        self.optimizer.zero_grad()
+
+        # T2: 前向传播
+        p_log, v = self.model.network(inputs)
+
+        # T3: 校验 p_log 形状
+        B = inputs.size(0)
+        assert p_log.shape == (B, 225), f"p_log shape: {p_log.shape}, expected ({B}, 225)"
+
+        # T4: 校验 p_log 值域（LogSoftmax 输出 ≤ 0）
+        assert p_log.max().item() <= 0, (
+            f"p_log 最大值 {p_log.max().item()} > 0！"
+            f"LogSoftmax 输出应 ≤ 0，是否被二次取了 log？"
+        )
+
+        # T5: 校验 v 形状
+        assert v.shape == (B, 1), f"v shape: {v.shape}, expected ({B}, 1)"
+
+        # T6: 校验 v 值域（Tanh 输出 ∈ [-1, 1]）
+        assert -1.0 <= v.min().item() <= v.max().item() <= 1.0, (
+            f"v 值域错误: [{v.min().item():.4f}, {v.max().item():.4f}]，"
+            f"Tanh 输出应在 [-1, 1] 内"
+        )
+
+        # T7: 价值损失（MSE）
+        value_loss = F.mse_loss(v, z_targets)
+
+        # T8: 策略损失（CrossEntropy via LogSoftmax）
+        # p_log 已是 LogSoftmax 输出，绝不二次取 log
+        policy_loss = -(pi_targets * p_log).sum(dim=1).mean()
+
+        # T9: 总损失（等权相加）
+        total_loss = value_loss + policy_loss
+
+        # T10: 反向传播
+        total_loss.backward()
+
+        # T11: 收集梯度范数
+        grad_norms = {}
+        for name, param in self.model.network.named_parameters():
+            if param.grad is not None:
+                grad_norms[name] = param.grad.norm().item()
+
+        # T12: 参数更新
+        self.optimizer.step()
+
+        return {
+            "value_loss": value_loss.item(),
+            "policy_loss": policy_loss.item(),
+            "total_loss": total_loss.item(),
+            "grad_norms": grad_norms,
+        }
+
+    # ---------- Epoch 循环 ----------
+
+    def train_epochs(
+        self,
+        sample_dirs: List[str],
+        epochs: int,
+        batch_size: int = 2048,
+        val_split: float = 0.0,
+        shuffle: bool = True,
+        verbose: bool = True,
+    ) -> List[Dict[str, float]]:
+        """执行完整训练（设计文档 §9.3 E1-E6）
+
+        数据加载 → 分割验证集 → epoch 循环 → 每个 epoch shuffle + batch 训练。
+        所有训练操作通过 _train_step 入口完成。
+
+        Args:
+            sample_dirs: sample.json 所在目录列表
+            epochs: 训练轮数
+            batch_size: 每批样本数，默认 2048
+            val_split: 验证集比例，默认 0（无验证集）
+            shuffle: 是否打乱数据，默认 True
+            verbose: 是否输出训练日志
+
+        Returns:
+            epoch history 列表，每项含 value_loss, policy_loss, total_loss
+        """
+        # L1-L5: 加载数据
+        all_states, all_pi, all_z = self._load_samples(sample_dirs)
+
+        # L3: 转换为训练张量
+        inputs = self._convert_inputs(all_states).to(self.device)
+        pi_targets = torch.tensor(all_pi, dtype=torch.float32, device=self.device)
+        z_targets = torch.tensor(all_z, dtype=torch.float32, device=self.device).view(-1, 1)
+
+        # L6: shuffle（首次）
+        N = inputs.size(0)
+
+        # L7: 分割验证集
+        has_val = val_split > 0
+        if has_val:
+            n_val = int(N * val_split)
+            n_train = N - n_val
+            perm = torch.randperm(N)
+            train_indices = perm[:n_train]
+            val_indices = perm[n_train:]
+            train_inputs, val_inputs = inputs[train_indices], inputs[val_indices]
+            train_pi, val_pi = pi_targets[train_indices], pi_targets[val_indices]
+            train_z, val_z = z_targets[train_indices], z_targets[val_indices]
+        else:
+            train_inputs, train_pi, train_z = inputs, pi_targets, z_targets
+            val_inputs, val_pi, val_z = None, None, None
+
+        # E1-E6: Epoch 循环
+        self.model.network.train()
+        history = []
+
+        for epoch in range(epochs):
+            # E2: 每 epoch 重新 shuffle
+            n_train = train_inputs.size(0)
+            if shuffle:
+                indices = torch.randperm(n_train)
+                epoch_inputs = train_inputs[indices]
+                epoch_pi = train_pi[indices]
+                epoch_z = train_z[indices]
+            else:
+                epoch_inputs = train_inputs
+                epoch_pi = train_pi
+                epoch_z = train_z
+
+            # E3: 按 batch_size 分 batch，逐批调用 _train_step
+            epoch_value_loss = 0.0
+            epoch_policy_loss = 0.0
+            epoch_total_loss = 0.0
+            n_batches = 0
+
+            for start in range(0, n_train, batch_size):
+                end = min(start + batch_size, n_train)
+                batch_inputs = epoch_inputs[start:end]
+                batch_pi = epoch_pi[start:end]
+                batch_z = epoch_z[start:end]
+
+                result = self._train_step(batch_inputs, batch_pi, batch_z)
+
+                epoch_value_loss += result["value_loss"]
+                epoch_policy_loss += result["policy_loss"]
+                epoch_total_loss += result["total_loss"]
+                n_batches += 1
+
+            # E4: 聚合 epoch 均值
+            avg_value_loss = epoch_value_loss / n_batches if n_batches > 0 else 0.0
+            avg_policy_loss = epoch_policy_loss / n_batches if n_batches > 0 else 0.0
+            avg_total_loss = epoch_total_loss / n_batches if n_batches > 0 else 0.0
+
+            epoch_result = {
+                "epoch": epoch + 1,
+                "value_loss": avg_value_loss,
+                "policy_loss": avg_policy_loss,
+                "total_loss": avg_total_loss,
+            }
+
+            # E5: 验证集评估（无梯度）
+            if has_val and val_inputs is not None:
+                val_result = self._evaluate_val(val_inputs, val_pi, val_z)
+                epoch_result["val_value_loss"] = val_result["value_loss"]
+                epoch_result["val_policy_loss"] = val_result["policy_loss"]
+                epoch_result["val_total_loss"] = val_result["total_loss"]
+
+            history.append(epoch_result)
+
+            # E6: 输出日志
+            if verbose:
+                log_parts = [
+                    f"Epoch {epoch + 1}/{epochs}",
+                    f"value_loss: {avg_value_loss:.4f}",
+                    f"policy_loss: {avg_policy_loss:.4f}",
+                    f"total_loss: {avg_total_loss:.4f}",
+                ]
+                if "val_total_loss" in epoch_result:
+                    log_parts.append(f"val_total_loss: {epoch_result['val_total_loss']:.4f}")
+                print(" | ".join(log_parts))
+
+        return history
+
+    # ---------- 模型保存 ----------
+
+    def save_model(self, output_path: str) -> str:
+        """保存模型权重（设计文档 §9.4 S1）
+
+        Args:
+            output_path: 保存路径
+
+        Returns:
+            实际保存路径
+        """
+        self.model.save(output_path)
+        return output_path
+
+    # ---------- 内部辅助 ----------
+
+    @staticmethod
+    def _load_samples(sample_dirs: List[str]) -> tuple:
+        """L1-L5: 加载 sample.json 数据
+
+        Args:
+            sample_dirs: sample.json 所在目录列表
+
+        Returns:
+            (states: List[List[int]], pis: List[List[float]], zs: List[int])
+        """
+        all_states = []
+        all_pi = []
+        all_z = []
+
+        for d in sample_dirs:
+            path = os.path.join(d, "sample.json")
+            if not os.path.exists(path):
+                continue
+            with open(path, 'r', encoding='utf-8') as f:
+                samples = json.load(f)
+            for s in samples:
+                all_states.append(s["state"])
+                all_pi.append(s["pi"])
+                all_z.append(s["z"])
+
+        return all_states, all_pi, all_z
+
+    def _evaluate_val(self, val_inputs, val_pi, val_z) -> Dict[str, float]:
+        """E5: 验证集评估（仅前向，不更新参数）"""
+        self.model.network.eval()
+        with torch.no_grad():
+            p_log, v = self.model.network(val_inputs)
+            value_loss = F.mse_loss(v, val_z).item()
+            policy_loss = (-(val_pi * p_log).sum(dim=1).mean()).item()
+            total_loss = value_loss + policy_loss
+        self.model.network.train()
+        return {
+            "value_loss": value_loss,
+            "policy_loss": policy_loss,
+            "total_loss": total_loss,
+        }

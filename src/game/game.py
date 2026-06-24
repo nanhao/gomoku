@@ -1,5 +1,71 @@
 """游戏核心逻辑模块"""
 
+from typing import List
+
+
+def check_winner(board: List[int], last_move: int) -> int:
+    """检查棋盘上最近落子是否形成五连，独立纯函数。
+
+    供 MCTS 搜索器等外部调用，不依赖 GomokuGame 对象。
+
+    Args:
+        board: 225 维展平棋盘（按行展开），0=空, 1=黑, 2=白
+        last_move: 最近落子的展平索引 0-224
+
+    Returns:
+        0=无胜者, 1=黑胜, 2=白胜
+    """
+    x = last_move // 15
+    y = last_move % 15
+    player = board[last_move]
+
+    if player == 0:
+        return 0
+
+    # 四个方向：水平、垂直、主对角线、副对角线
+    directions = [
+        [(0, -1), (0, 1)],      # 水平
+        [(-1, 0), (1, 0)],      # 垂直
+        [(-1, -1), (1, 1)],     # 主对角线
+        [(-1, 1), (1, -1)]      # 副对角线
+    ]
+
+    for direction in directions:
+        count = 1  # 当前落子
+
+        # 正向检测
+        dx, dy = direction[0]
+        nx, ny = x + dx, y + dy
+        while 0 <= nx < 15 and 0 <= ny < 15 and board[nx * 15 + ny] == player:
+            count += 1
+            nx += dx
+            ny += dy
+
+        # 反向检测
+        dx, dy = direction[1]
+        nx, ny = x + dx, y + dy
+        while 0 <= nx < 15 and 0 <= ny < 15 and board[nx * 15 + ny] == player:
+            count += 1
+            nx += dx
+            ny += dy
+
+        if count >= 5:
+            return player
+
+    return 0
+
+
+def is_board_full(board: List[int]) -> bool:
+    """检查棋盘是否已满（无空位），独立纯函数。
+
+    Args:
+        board: 225 维展平棋盘（按行展开），0=空, 1=黑, 2=白
+
+    Returns:
+        True 如果棋盘已满（所有 225 个位置均非空）
+    """
+    return all(cell != 0 for cell in board)
+
 
 class GomokuGame:
     """游戏核心逻辑类"""
@@ -65,53 +131,22 @@ class GomokuGame:
         }
     
     def _check_winner(self, x, y):
-        """检查胜利条件，以(x,y)为中心在4个方向检测"""
-        player = self.board[x][y]
-        
-        # 四个方向：水平、垂直、主对角线、副对角线
-        directions = [
-            [(0, -1), (0, 1)],      # 水平
-            [(-1, 0), (1, 0)],      # 垂直
-            [(-1, -1), (1, 1)],     # 主对角线
-            [(-1, 1), (1, -1)]      # 副对角线
-        ]
-        
-        for direction in directions:
-            count = 1  # 当前落子
-            
-            # 正向检测
-            dx, dy = direction[0]
-            nx, ny = x + dx, y + dy
-            while 0 <= nx < 15 and 0 <= ny < 15 and self.board[nx][ny] == player:
-                count += 1
-                nx += dx
-                ny += dy
-            
-            # 反向检测
-            dx, dy = direction[1]
-            nx, ny = x + dx, y + dy
-            while 0 <= nx < 15 and 0 <= ny < 15 and self.board[nx][ny] == player:
-                count += 1
-                nx += dx
-                ny += dy
-            
-            # 五子或以上连珠则获胜
-            if count >= 5:
-                return True
-        
-        return False
+        """检查胜利条件，以(x,y)为中心在4个方向检测
+
+        委托给模块级纯函数 check_winner，传递展平棋盘。
+        """
+        # 将二维棋盘展平为一维列表
+        flat_board = [cell for row in self.board for cell in row]
+        flat_index = x * 15 + y
+        return check_winner(flat_board, flat_index) != 0
     
     def _is_draw(self):
-        """检查平局条件：棋盘已满且无获胜方"""
-        # 如果已经有获胜方，不是平局
+        """检查平局条件：棋盘已满且无获胜方
+
+        委托给模块级纯函数 is_board_full。
+        """
         if self.winner != 0:
             return False
-        
-        # 检查是否还有空位
-        for row in self.board:
-            for cell in row:
-                if cell == 0:
-                    return False
-        
-        return True
+        flat_board = [cell for row in self.board for cell in row]
+        return is_board_full(flat_board)
 
