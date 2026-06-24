@@ -134,6 +134,8 @@ python src/ai/create_samples.py --model cnn_v3.1 --no-augment --games 200 --outp
 
 # sample_games 模式：以样本局数量为目标驱动
 python src/ai/create_samples.py --model cnn_v3.1 --sample_games 50 --output src/ai/train_data/samples.json
+
+python src/ai/create_samples.py --model cnn_v6.99 --sample_games 500 --output samples/6/v100/path.json --temp-moves 100
 ```
 
 > **提示**：运行结束后可用 `--train-from-dir` 加载生成的 `.json` 文件继续训练。
@@ -320,6 +322,8 @@ python src/ai/iterative_train.py --ai1 cnn_v4.99 --ai2 cnn_v4.100 --sample_dir s
 
 # 示例：自定义样本局数和训练轮数
 python src/ai/iterative_train.py --ai1 cnn_v4.99 --ai2 cnn_v4.100 --sample_dir src/ai/merge_samples2 --sample-games 300 --epochs 200
+
+python src/ai/iterative_train.py --ai1 cnn_v6.99 --ai2 cnn_v6.100 --sample_dir samples/6
 ```
 
 ### LR Range Test
