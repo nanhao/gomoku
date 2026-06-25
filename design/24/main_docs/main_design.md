@@ -115,7 +115,7 @@ BaseTrainer                      # 保留不动（旧体系，KL 散度 + 单策
     "dirichlet_alpha": 0.03,
     "virtual_loss": 3
   },
-  "root_noise": [                // 根节点狄利克雷噪声施加后的 P' 值（225维）
+  "root_noise": [                // 根节点狄利克雷噪声施加后的 P' 值（225维）。⚠️ sum < 1.0 是预期行为：Dirichlet 噪声在 225 维全空间施加后已占位位置被置零，未在合法空间重新归一化。合法位越少 sum 越低（极端值 ~0.78）
     0.005, 0.003, ..., 0.002
   ],
   "simulation_logs": [           // 每轮 simulation 一条记录
@@ -138,8 +138,8 @@ BaseTrainer                      # 保留不动（旧体系，KL 散度 + 单策
         "state_hash": "d4e5f6",
         "is_terminal": false,    // 是否终局
         "value": 0.45,           // 评估值（模型输出或规则判定）
-        "policy": [              // 模型策略头输出的 log-probability（225维）
-          -3.2, -4.1, ..., -2.8
+        "policy": [              // 模型策略头输出的 softmax 概率（225 维，sum ≈ 1.0）
+          0.0045, 0.0043, ..., 0.0038
         ]
       },
       "backup": [                // 回传路径（叶→根，与 selection 逆序）
@@ -167,6 +167,7 @@ BaseTrainer                      # 保留不动（旧体系，KL 散度 + 单策
 > - `Q_after = W_after / N_after` —— 回传后验算
 > - `W_after` 在相邻层间符号翻转（玩家切换取反）
 > - Virtual Loss 在 selection 前后 N 临时增加、backup 时已撤销
+> - `root_noise` sum ≈ (1-ε) + ε×(合法数/225)，必然 < 1.0，非 bug
 
 **内部设计**：
 - 搜索树：`Dict[state_hash, Node]`。`state_hash = hashlib.md5(bytes(board) + bytes([player])).hexdigest()[:8]`。使用确定性哈希确保日志跨运行可比对（Python `hash()` 受 PYTHONHASHSEED 影响不稳定）。
@@ -196,7 +197,7 @@ BaseTrainer                      # 保留不动（旧体系，KL 散度 + 单策
 - `action` 为 0-224 扁平索引。坐标转换：`x = action // 15; y = action % 15`。
 - `visit_counts`：MCTS 原始访问计数，调用方按需计算 π（τ=1.0 用于训练目标）。
 - `root_policy`：根节点模型原始 softmax 输出（施加噪声前），供调用方写入 `record.json` 的 `output` 字段。
-- `log_key`：日志标识，透传给 `search()`。**调用方（self_play.py）负责生成唯一 key**，如 `"game0_move12"`。
+- `log_key`：日志标识，透传给 `search()`。**调用方（self_play.py）负责生成唯一 key**，格式为 `run{run_id}_game{game_idx}_step{uuid8}`（见 §4.4.3 日志文件命名）。
 - `log_path`：日志文件完整路径。`Searcher` 从 `src/config/mcts.py` 读取 `MCTS_LOG_ENABLED` 和 `MCTS_LOG_DIR`；禁用时返回 `None`，启用时返回 `{MCTS_LOG_DIR}/{log_key}.json`。调用方写入 `record.json`。无需透传 `log_dir`。
 - **子树复用**：`advance_root(action)` 沿边结构中的 `child_hash` 定位子节点，将其提升为新根，丢弃兄弟子树释放内存。若 action 对应子节点不存在（N=0），返回 `False`，调用方应 `reset()` 清空搜索树，下轮 `search()` 从新建根开始。
 
@@ -221,7 +222,7 @@ BaseTrainer                      # 保留不动（旧体系，KL 散度 + 单策
 
 #### 4.4.2 输出样本
 
-写入 `{output_dir}/sample.json`：
+写入 `{output_dir}/sample.json`（所有局合并为一个文件）：
 
 ```json
 [
@@ -231,7 +232,7 @@ BaseTrainer                      # 保留不动（旧体系，KL 散度 + 单策
 ]
 ```
 
-- 一个 `sample.json` 包含本局所有步的样本数组（每步一条，含终局步）。
+- 一个 `sample.json` 包含本次运行所有局的样本数组（每步一条，含终局步），多局样本按对局顺序拼接。
 - `state`：226 维 `board_vector`（前 225=棋盘按行展开，末位=当前落子方 1/2）。训练时通过 `board_vector_to_cnn_tensor_relative` 转为相对视角张量。
 - `pi`：225 维 MCTS 归一化访问计数分布（τ=1.0）。
 - `z`：对局结果，从当前落子方视角：赢=+1 / 输=-1 / 平=0。
@@ -243,7 +244,7 @@ BaseTrainer                      # 保留不动（旧体系，KL 散度 + 单策
 ```
 self_play.py                            MCTSMoveDecider          MCTSSearcher
      │                                        │                       │
-     │  log_key = f"game{i}_move{j}"          │                       │
+     │  log_key = f"run{run_id}_game{i}_step{uuid8}"                │
      ├─ decide(board, player, log_key) ──────▶│                       │
      │                                        ├─ search(state, log_key)▶
      │                                        │   → 内部读 config/mcts.py
@@ -256,7 +257,19 @@ self_play.py                            MCTSMoveDecider          MCTSSearcher
      │  mcts_log   = log_path                                         │
 ```
 
-- 每步 self_play.py 生成唯一 `log_key`（如 `"game0_move12"`），透传给 `decide()` → `search()`。
+#### 4.4.3.1 日志文件命名规范
+
+日志文件名格式：`run{run_id}_game{game_idx}_step{step_uuid}.json`
+
+| 部分 | 生成方式 | 示例 | 说明 |
+|------|---------|------|------|
+| `run_id` | `uuid.uuid4().hex[:6]`，脚本启动时生成一次 | `b91d4f` | 区分不同运行批次，避免跨 run 重名 |
+| `game_idx` | 整数递增（0, 1, 2...） | `0` | 同 run 内局编号 |
+| `step_uuid` | `uuid.uuid4().hex[:8]`，每步动态生成 | `020d1c4b` | 确保每步日志全局唯一 |
+
+完整示例：`mcts_log/runb91d4f_game0_step020d1c4b.json`
+
+- 每步 self_play.py 生成唯一 `log_key`（如 `"runb91d4f_game0_step020d1c4b"`），透传给 `decide()` → `search()`。
 - `Searcher` 内部从 `src/config/mcts.py` 读取 `MCTS_LOG_ENABLED`（默认 `False`）和 `MCTS_LOG_DIR`（默认 `"mcts_log"`）。禁用时 `log_path` 返回 `None`。
 
 #### 4.4.4 record.json 扩展与 DataRecorder 集成
@@ -269,7 +282,7 @@ self_play.py                            MCTSMoveDecider          MCTSSearcher
 |------|------|------|
 | `output` | `List[float; 225]` | 沿用现有字段，存储模型策略头原始输出（softmax 概率）。与 `mcts_probs` 语义不同：前者是模型直接 softmax 输出，后者是 MCTS 搜索后验分布 |
 | `mcts_probs` | `List[float; 225]` | MCTS 搜索返回的 π 分布（访问计数归一化） |
-| `mcts_log` | `str` | 对应 MCTS 搜索日志文件路径（如 `mcts_logs/game5_move12.json`） |
+| `mcts_log` | `str` | 对应 MCTS 搜索日志文件路径（如 `mcts_log/runb91d4f_game0_step020d1c4b.json`） |
 
 记录时机：每步 `decide()` 返回后，调用方从 `visit_counts` 计算 π（τ=1.0），写入 `mcts_probs`；`log_path` 写入 `mcts_log`。
 

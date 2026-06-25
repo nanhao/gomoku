@@ -3,7 +3,7 @@
 使用 MCTS 生成的 sample.json 训练双头模型。
 
 用法：
-    python -m ai.scripts.mcts_train --model model.pth --train-from-dir data/ --epochs 10
+    python src/ai/scripts/mcts_train.py --model model.pth --train-from-dir data/ --epochs 10
 
 设计文档 §4.5 规范实现。
 """
@@ -14,7 +14,7 @@ import sys
 from typing import List
 
 # 确保项目根在 sys.path 中
-_proj_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+_proj_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if _proj_root not in sys.path:
     sys.path.insert(0, _proj_root)
 

@@ -112,9 +112,10 @@ class MCTSSearchLogger:
             leaf_log["policy"] = [round(p, 6) for p in leaf_info["policy"]]
         log["leaf"] = leaf_log
 
-        # Backup（逆序），每层取反 value
+        # Backup（逆序），每层取反 value（与 _backup 中的顺序一致：先取反再加）
         v = leaf_info.get("value", 0.0)
         for step in reversed(path_info):
+            v = -v
             node_hash = step["state_hash"]
             action = step["action"]
             if node_hash in tree and action in tree[node_hash]["edges"]:
@@ -130,7 +131,6 @@ class MCTSSearchLogger:
                     "Q_before": round((edge["W"] - v) / max(1, edge["N"] - 1), 4),
                     "Q_after": round(edge["Q"], 4),
                 })
-            v = -v
 
         return log
 

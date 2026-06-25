@@ -23,19 +23,21 @@ MCTS 搜索器对给定棋盘状态执行 `simulations` 次模拟，每次模拟
 ### 执行
 
 ```bash
-python -m ai.scripts.mcts_self_play --model <权重.pth> --games 1 --simulations 50 --output temp_verify_mcts
+python src/ai/scripts/mcts_self_play.py --model src/ai/models/cnn_v7/gen1/cnn_v7.pth --games 1 --simulations 50 --output temp_verify_mcts
 ```
 
 ### 审查
 
 请读取以下文件后开始审查：
 
-- `{output}/mcts_logs/` 下所有 `.json` 日志文件
+- `mcts_log/` 下所有 `.json` 日志文件（项目根目录）
 - `design/24/main_docs/main_design.md` §4.2（日志字段定义）和 §5（关键算法公式）
 
-你需要验证 MCTS 搜索过程是否正确实现了 AlphaGo Zero 算法。这包括但不限于：PUCT 公式验算、backup 正确性、价值取反逻辑、Virtual Loss 的施加与撤销、访问计数一致性。
+你需要根据 log 文件验证 MCTS 搜索过程是否正确实现了 AlphaGo Zero 算法。这包括但不限于：PUCT 公式验算、backup 正确性、价值取反逻辑、Virtual Loss 的施加与撤销、访问计数一致性。
 
 请基于日志数据和算法定义，自行判断哪些是关键验证点，并从日志中寻找任何可能暗示实现错误的异常模式。注意数值分布的合理性、搜索行为的合理性。
+
+请不要对照代码实现，你应该对照算法。
 
 输出你对每条仿真和整体的判断，附上所有发现的不一致之处的具体数据。
 
@@ -45,27 +47,29 @@ python -m ai.scripts.mcts_self_play --model <权重.pth> --games 1 --simulations
 
 ### 背景
 
-`mcts_self_play.py` 使用 MCTS 进行自我对弈，每局生成 `sample.json`（样本数组）和 `record.json`（对局记录）。
+`mcts_self_play.py` 使用 MCTS 进行自我对弈，生成单个 `sample.json`（所有局的样本数组合并）和 `summary.json`（汇总信息）。
 
 ### 前置
 
-与第 1 节相同，需要已训练的 cnn_v7 权重。
+与第 1 节相同，已有 cnn_v7 权重文件（可使用 gen1 随机权重）。
 
 ### 执行
 
 ```bash
-python -m ai.scripts.mcts_self_play --model <权重.pth> --games 2 --simulations 50 --output temp_verify_samples
+python src/ai/scripts/mcts_self_play.py --model src/ai/models/cnn_v7/gen1/cnn_v7.pth --games 2 --simulations 50 --output temp_verify_samples
 ```
 
 ### 审查
 
-请读取 `{output}/` 目录下的所有输出文件，以及以下设计文档：
+请读取 `temp_verify_samples/` 目录下的所有输出文件，以及以下设计文档：
 
 - `design/24/main_docs/main_design.md` §4.4（样本格式定义）
 
 你需要验证自对弈脚本生成的样本在格式、语义和一致性上是否正确。考虑 sample.json 的 JSON 结构、每条样本的字段完整性、各字段的值域约束；以及同一局棋内 z 值随玩家切换的符号变化、π 分布的合理性、已落子位置是否被正确排除。
 
 请自行判断该验证哪些方面，除了显而易见的格式检查外，注意棋局演进中样本之间的逻辑一致性。
+
+请不要对照代码实现，你应该对照理论正确值。
 
 输出逐文件的检查结果和总体结论。
 

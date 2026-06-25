@@ -18,6 +18,10 @@ import numpy as np
 
 from game.game import check_winner, is_board_full
 from ai.mcts.search_logger import MCTSSearchLogger
+from config.mcts import MCTS_LOG_ENABLED, MCTS_LOG_DIR
+
+# 哨兵值：区分"未传参"和"显式传 None"
+_LOG_UNSET = object()
 
 
 class MCTSSearcher:
@@ -40,8 +44,8 @@ class MCTSSearcher:
         dirichlet_epsilon: float = 0.25,
         dirichlet_alpha: float = 0.03,
         virtual_loss: float = 3,
-        mcts_batch_size: int = 64,
-        log_dir: Optional[str] = None,
+        mcts_batch_size: int = 16,
+        log_dir: Optional[str] = _LOG_UNSET,
     ):
         """初始化 MCTS 搜索器
 
@@ -53,7 +57,8 @@ class MCTSSearcher:
             dirichlet_alpha: 狄利克雷分布参数，默认 0.03
             virtual_loss: Virtual Loss 值，默认 3
             mcts_batch_size: 单 batch 最大叶节点数，默认 64
-            log_dir: 搜索日志输出目录，None 时禁用日志
+            log_dir: 搜索日志输出目录。未传参时读取 config/mcts.py 配置；
+                    显式传 None 禁用日志
         """
         self.model = model
         self.num_simulations = num_simulations
@@ -62,14 +67,22 @@ class MCTSSearcher:
         self.dirichlet_alpha = dirichlet_alpha
         self.virtual_loss = virtual_loss
         self.mcts_batch_size = mcts_batch_size
-        self.log_dir = log_dir
+        self.log_dir: Optional[str] = None
+        if log_dir is _LOG_UNSET:
+            # 未传参：读取全局配置
+            self.log_dir = MCTS_LOG_DIR if MCTS_LOG_ENABLED else None
+        else:
+            self.log_dir = log_dir
 
         # 搜索树：state_hash -> Node
         self.tree: Dict[str, dict] = {}
         self._root_hash: Optional[str] = None
 
+        # 根边 N 快照（子树复用时记录初始值，用于 get_result 中计算增量）
+        self._root_edge_N_snapshot: Dict[int, int] = {}
+
         # 日志记录器
-        self._logger = MCTSSearchLogger(log_dir, c_puct, virtual_loss) if log_dir else None
+        self._logger = MCTSSearchLogger(self.log_dir, c_puct, virtual_loss) if self.log_dir else None
 
     # ---------- 公共 API ----------
 
@@ -169,14 +182,32 @@ class MCTSSearcher:
         if child_hash is None or child_hash not in self.tree:
             return False
 
-        # 清除旧树，仅保留子节点
+        # 收集子树中所有节点哈希（递归）
+        subtree_hashes = self._collect_subtree(child_hash)
+
+        # 清除不在子树中的节点
         old_hashes = list(self.tree.keys())
         for h in old_hashes:
-            if h != child_hash:
+            if h not in subtree_hashes:
                 del self.tree[h]
 
         self._root_hash = child_hash
         return True
+
+    def _collect_subtree(self, root_hash: str) -> set:
+        """收集以 root_hash 为根的子树中所有节点哈希（DFS）"""
+        result = set()
+        stack = [root_hash]
+        while stack:
+            h = stack.pop()
+            if h in result or h not in self.tree:
+                continue
+            result.add(h)
+            for edge in self.tree[h].get("edges", {}).values():
+                ch = edge.get("child_hash")
+                if ch is not None and ch not in result:
+                    stack.append(ch)
+        return result
 
     def reset(self):
         """清空搜索树"""
@@ -192,10 +223,16 @@ class MCTSSearcher:
         return hashlib.md5(data).hexdigest()[:8]
 
     def _init_search(self, state: List[int]):
-        """初始化搜索：创建根节点 + 狄利克雷噪声"""
+        """初始化搜索：创建根节点 + 狄利克雷噪声
+        
+        若根节点已存在于树中（子树复用场景），仍重新施加新鲜噪声。
+        """
         board = state[:225]
         player = state[225]
         root_hash = self._state_hash(board, player)
+
+        # 记录根边 N 快照（子树复用时，边可能带有上轮搜索的 N）
+        self._root_edge_N_snapshot = {}
 
         if root_hash not in self.tree:
             self.tree.clear()
@@ -223,14 +260,24 @@ class MCTSSearcher:
                         "N": 0, "W": 0.0, "Q": 0.0,
                         "P": policy[action], "child_hash": None,
                     }
-
-            # 施加狄利克雷噪声
-            self._add_dirichlet_noise(root_hash)
+            # 全新树：所有边初始 N=0，快照均为 0
+            self._root_edge_N_snapshot = {a: 0 for a in range(225) if board[a] == 0}
         else:
             self._root_hash = root_hash
+            # 子树复用：记录当前 N 快照，get_result 中只报告增量
+            root = self.tree[root_hash]
+            for action, edge in root.get("edges", {}).items():
+                self._root_edge_N_snapshot[action] = edge["N"]
+
+        # 始终施加狄利克雷噪声（包括子树复用场景）
+        self._add_dirichlet_noise(root_hash)
 
     def _add_dirichlet_noise(self, node_hash: str):
-        """对根节点的合法动作施加狄利克雷噪声"""
+        """对根节点的合法动作施加狄利克雷噪声
+        
+        以节点存储的 _root_policy（模型原始 softmax 输出）为基底混合噪声。
+        支持子树复用后重新施加噪声（_root_policy 在 _expand_leaf 和 _init_search 中均会存储）。
+        """
         node = self.tree[node_hash]
         edges = node["edges"]
         if not edges:
@@ -238,9 +285,12 @@ class MCTSSearcher:
         actions = list(edges.keys())
         n_actions = len(actions)
         noise = np.random.dirichlet([self.dirichlet_alpha] * n_actions)
+        # 以 _root_policy 为基底（模型原始输出），若非根节点回退到当前 P 值
+        root_policy = node.get("_root_policy")
         for i, action in enumerate(actions):
+            base_P = root_policy[action] if root_policy else edges[action]["P"]
             edges[action]["P"] = (
-                (1 - self.dirichlet_epsilon) * edges[action]["P"]
+                (1 - self.dirichlet_epsilon) * base_P
                 + self.dirichlet_epsilon * noise[i]
             )
 
@@ -302,7 +352,7 @@ class MCTSSearcher:
 
                     leaf_nodes.append({
                         "path": path,
-                        "state_hash": current_hash,
+                        "state_hash": self._state_hash(new_board, new_player),
                         "action": best_action,
                         "board": new_board,
                         "player": new_player,
@@ -443,6 +493,7 @@ class MCTSSearcher:
                 "player": leaf["player"],
                 "N": 0, "W": 0.0, "Q": 0.0,
                 "edges": {},
+                "_root_policy": list(policy),
             }
             child_node = self.tree[child_hash]
             for action in range(225):
@@ -500,13 +551,17 @@ class MCTSSearcher:
     # ---------- 内部：结果组装 ----------
 
     def _get_result(self) -> Tuple[List[int], float, List[float]]:
-        """从搜索树中提取搜索结果"""
+        """从搜索树中提取搜索结果
+
+        使用 N 增量计算 visit_counts，避免子树复用带来的跨步 N 残留。
+        """
         root = self.tree.get(self._root_hash, {})
         edges = root.get("edges", {})
 
         visit_counts = [0] * 225
         for action, edge in edges.items():
-            visit_counts[action] = edge["N"]
+            # 只报告本搜索新增的访问计数
+            visit_counts[action] = edge["N"] - self._root_edge_N_snapshot.get(action, 0)
 
         root_value = root.get("Q", 0.0) if root.get("N", 0) > 0 else 0.0
         root_policy = root.get("_root_policy", [1.0 / 225] * 225)

@@ -1,9 +1,9 @@
 """MCTS 自我对弈脚本
 
-使用 MCTS 搜索生成训练样本，每局输出一个 sample.json。
+使用 MCTS 搜索生成训练样本，所有局合并输出一个 sample.json。
 
 用法：
-    python -m ai.scripts.mcts_self_play --model model.pth --games 100
+    python src/ai/scripts/mcts_self_play.py --model model.pth --games 100
 
 设计文档 §4.4 规范实现。
 """
@@ -13,10 +13,11 @@ import json
 import os
 import sys
 import time
+import uuid
 from typing import List, Tuple
 
 # 确保项目根在 sys.path 中
-_proj_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+_proj_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if _proj_root not in sys.path:
     sys.path.insert(0, _proj_root)
 
@@ -61,7 +62,7 @@ def parse_args():
 
 # ---------- 主流程 ----------
 
-def run_self_play(args) -> List[str]:
+def run_self_play(args):
     """执行所有局自我对弈
 
     Returns:
@@ -96,26 +97,29 @@ def run_self_play(args) -> List[str]:
     }
     print(f"[超参数] {hyperparams}")
 
-    output_dirs = []
+    # 生成本次运行的唯一标识，避免跨 run 的 game_idx 重复
+    run_id = uuid.uuid4().hex[:6]
+
+    all_samples = []
+    total_moves = 0
 
     for game_idx in range(args.games):
         print(f"\n{'='*50}")
         print(f"[局 {game_idx + 1}/{args.games}] 开始")
         t_start = time.time()
 
-        game_dir = os.path.join(output_root, f"game_{game_idx}")
-        samples = play_one_game(model, device, hyperparams, game_idx)
+        samples = play_one_game(model, device, hyperparams, game_idx, run_id)
+        all_samples.extend(samples)
+        total_moves += len(samples)
 
-        # 写入 sample.json
-        os.makedirs(game_dir, exist_ok=True)
-        sample_path = os.path.join(game_dir, "sample.json")
-        with open(sample_path, 'w', encoding='utf-8') as f:
-            json.dump(samples, f, ensure_ascii=False)
-
-        output_dirs.append(game_dir)
         elapsed = time.time() - t_start
         print(f"[局 {game_idx + 1}/{args.games}] 完成 — {len(samples)} 步, "
               f"结果: {_describe_result(samples)}, 耗时: {elapsed:.1f}s")
+
+    # 写入单一样本文件
+    sample_path = os.path.join(output_root, "sample.json")
+    with open(sample_path, 'w', encoding='utf-8') as f:
+        json.dump(all_samples, f, ensure_ascii=False)
 
     # 写入汇总信息
     summary_path = os.path.join(output_root, "summary.json")
@@ -123,15 +127,14 @@ def run_self_play(args) -> List[str]:
         json.dump({
             "model": args.model,
             "games": args.games,
+            "total_samples": len(all_samples),
             "hyperparams": hyperparams,
-            "output_dirs": output_dirs,
         }, f, ensure_ascii=False, indent=2)
 
-    print(f"\n[完成] 共 {args.games} 局，输出目录: {output_root}")
-    return output_dirs
+    print(f"\n[完成] 共 {args.games} 局，{len(all_samples)} 条样本，输出: {output_root}")
 
 
-def play_one_game(model, device, hyperparams: dict, game_idx: int) -> List[dict]:
+def play_one_game(model, device, hyperparams: dict, game_idx: int, run_id: str) -> List[dict]:
     """执行一局自我对弈
 
     Args:
@@ -139,6 +142,7 @@ def play_one_game(model, device, hyperparams: dict, game_idx: int) -> List[dict]
         device: torch device
         hyperparams: 超参数字典
         game_idx: 局编号（用于 log_key）
+        run_id: 本次运行唯一标识（用于 log_key 前缀）
 
     Returns:
         sample 列表，每项 {"state": [...], "pi": [...], "z": int}
@@ -157,7 +161,6 @@ def play_one_game(model, device, hyperparams: dict, game_idx: int) -> List[dict]
         c_puct=c_puct,
         dirichlet_epsilon=dirichlet_epsilon,
         dirichlet_alpha=dirichlet_alpha,
-        log_dir=None,  # 生产环境默认不写逐步日志
     )
     decider = MCTSMoveDecider(
         searcher,
@@ -175,7 +178,7 @@ def play_one_game(model, device, hyperparams: dict, game_idx: int) -> List[dict]
         state = board + [current_player]
 
         # MCTS 搜索 + 决策
-        log_key = f"game{game_idx}_move{move_count}"
+        log_key = f"run{run_id}_game{game_idx}_step{uuid.uuid4().hex[:8]}"
         action, visit_counts, log_path, root_policy = decider.decide(state, log_key=log_key)
 
         # 计算 π 分布（τ=1.0 归一化）
