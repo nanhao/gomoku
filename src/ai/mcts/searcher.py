@@ -469,8 +469,8 @@ class MCTSSearcher:
 
         对路径上的每条边：
         1. 撤销 Virtual Loss
-        2. N += 1, W += v, Q = W / N
-        3. v = -v（玩家切换取反）
+        2. v = -v（翻转为当前节点玩家视角）
+        3. N += 1, W += v, Q = W / N
         """
         v = leaf_info.get("value", 0.0)
 
@@ -480,6 +480,9 @@ class MCTSSearcher:
 
             # 撤销 Virtual Loss
             self._undo_virtual_loss(node_hash, action)
+
+            # 翻转为当前节点玩家视角（叶节点 value 是对方视角）
+            v = -v
 
             # 更新边统计量
             if node_hash in self.tree and action in self.tree[node_hash]["edges"]:
@@ -493,8 +496,6 @@ class MCTSSearcher:
                 node["N"] += 1
                 node["W"] += v
                 node["Q"] = node["W"] / node["N"] if node["N"] > 0 else 0.0
-
-            v = -v  # 玩家切换取反
 
     # ---------- 内部：结果组装 ----------
 
