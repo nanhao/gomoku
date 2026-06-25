@@ -318,6 +318,8 @@ python src/ai/scripts/mcts_self_play.py --model src/ai/models/cnn_v7/cnn_v7.pth 
 
 # 示例：自定义模拟次数和输出目录
 python src/ai/scripts/mcts_self_play.py --model cnn_v7.pth --games 50 --simulations 400 --output my_samples
+
+python src/ai/scripts/mcts_self_play.py --model cnn_v7.pth --games 2000 --simulations 100 --output samples/mcts/1 --temp-steps 100
 ```
 
 #### MCTS 训练

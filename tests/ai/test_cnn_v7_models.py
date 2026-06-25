@@ -95,25 +95,25 @@ class CNNModelSharedMixin:
 
     def test_model_name(self):
         """模型 name 属性"""
-        model = self.MODEL_CLS()
+        model = self.MODEL_CLS(fresh=True)
         self.assertEqual(model.name, self.MODEL_NAME)
 
     def test_model_predict_shape(self):
         """predict 返回长度 225"""
-        model = self.MODEL_CLS()
+        model = self.MODEL_CLS(fresh=True)
         result = model.predict([0] * 225 + [1])
         self.assertEqual(len(result), 225)
 
     def test_model_predict_format(self):
         """predict 返回元素均为 float"""
-        model = self.MODEL_CLS()
+        model = self.MODEL_CLS(fresh=True)
         result = model.predict([0] * 225 + [1])
         for prob in result:
             self.assertIsInstance(prob, float)
 
     def test_model_predict_probability_range(self):
         """[primary] predict 返回概率均在 (0, 1) 内"""
-        model = self.MODEL_CLS()
+        model = self.MODEL_CLS(fresh=True)
         result = model.predict([0] * 225 + [1])
         for prob in result:
             self.assertGreater(prob, 0.0, "概率应大于 0")
@@ -121,13 +121,13 @@ class CNNModelSharedMixin:
 
     def test_model_predict_probability_sum(self):
         """[primary] predict 返回概率总和为 1"""
-        model = self.MODEL_CLS()
+        model = self.MODEL_CLS(fresh=True)
         result = model.predict([0] * 225 + [1])
         self.assertAlmostEqual(sum(result), 1.0, places=5, msg="概率总和应为 1")
 
     def test_model_predict_different_inputs(self):
         """黑方/白方输入均能正常输出"""
-        model = self.MODEL_CLS()
+        model = self.MODEL_CLS(fresh=True)
         result_black = model.predict([0] * 225 + [1])
         result_white = model.predict([0] * 225 + [2])
         self.assertEqual(len(result_black), 225)
@@ -135,7 +135,7 @@ class CNNModelSharedMixin:
 
     def test_model_predict_with_pieces(self):
         """带有棋子的棋盘输入"""
-        model = self.MODEL_CLS()
+        model = self.MODEL_CLS(fresh=True)
         board = [0] * 225
         board[7 * 15 + 7] = 1
         board[7 * 15 + 8] = 2
@@ -145,13 +145,13 @@ class CNNModelSharedMixin:
 
     def test_model_predict_consistency(self):
         """相同输入产生相同输出"""
-        model = self.MODEL_CLS()
+        model = self.MODEL_CLS(fresh=True)
         board_vector = [0] * 225 + [1]
         self.assertEqual(model.predict(board_vector), model.predict(board_vector))
 
     def test_model_save_and_load(self):
         """save 到指定路径 → 加载后 name 一致"""
-        model1 = self.MODEL_CLS()
+        model1 = self.MODEL_CLS(fresh=True)
         model1.save(self.model_path)
         self.assertTrue(os.path.exists(self.model_path))
         model2 = self.MODEL_CLS(self.model_path)
@@ -159,28 +159,30 @@ class CNNModelSharedMixin:
 
     def test_model_save_default_path(self):
         """save() 无参 → 保存到 DEFAULT_MODEL_PATH"""
-        model = self.MODEL_CLS()
+        model = self.MODEL_CLS(fresh=True)
         default_path = model.save()
         self.assertTrue(os.path.exists(default_path))
         self.assertIn(self.DEFAULT_FILENAME, default_path)
 
     def test_model_load_nonexistent_file(self):
-        """加载不存在的文件 → 创建新模型而不报错"""
-        model = self.MODEL_CLS(os.path.join(self.temp_dir, "nonexistent.pth"))
-        self.assertEqual(model.name, self.MODEL_NAME)
+        """显式指定不存在的文件路径 → 抛出 FileNotFoundError"""
+        with self.assertRaises(FileNotFoundError):
+            self.MODEL_CLS(os.path.join(self.temp_dir, "nonexistent.pth"))
 
     def test_default_load_when_model_exists(self):
-        """默认路径存在时自动加载（相同输入给相同输出）"""
+        """不传参数时创建随机初始化模型，DEFAULT_MODEL_PATH 不再自动加载"""
         model1 = self.MODEL_CLS(fresh=True)
         board_vector = [0] * 225 + [1]
         result1 = model1.predict(board_vector)
         model1.save()
+        # 不传参应创建随机模型，不会自动加载
         model2 = self.MODEL_CLS()
         result2 = model2.predict(board_vector)
-        self.assertEqual(result1, result2)
+        self.assertNotEqual(result1, result2,
+            "不传参应创建随机模型，不应加载 DEFAULT_MODEL_PATH")
 
     def test_no_load_when_model_not_exists(self):
-        """默认路径不存在时创建新模型"""
+        """不传参数时创建随机初始化模型"""
         self.assertFalse(os.path.exists(self.MODEL_CLS.DEFAULT_MODEL_PATH))
         model = self.MODEL_CLS()
         self.assertEqual(model.name, self.MODEL_NAME)
@@ -217,7 +219,7 @@ class CNNModelSharedMixin:
 
     def test_full_workflow(self):
         """创建 → 预测 → 保存 → 加载 → 再预测，结果一致"""
-        model1 = self.MODEL_CLS()
+        model1 = self.MODEL_CLS(fresh=True)
         board_vector = [0] * 225 + [1]
         result1 = model1.predict(board_vector)
         model1.save(self.model_path)
@@ -361,7 +363,7 @@ class TestCNNV7Model(CNNModelSharedMixin, unittest.TestCase):
 
     def test_model_predict_shape(self):
         """predict 返回 (List[float], float) 元组，策略长度 225"""
-        model = self.MODEL_CLS()
+        model = self.MODEL_CLS(fresh=True)
         result = model.predict([0] * 225 + [1])
         self.assertIsInstance(result, tuple, "predict 应返回元组")
         self.assertEqual(len(result), 2, "元组长度应为 2")
@@ -371,14 +373,14 @@ class TestCNNV7Model(CNNModelSharedMixin, unittest.TestCase):
 
     def test_model_predict_format(self):
         """predict 返回策略元素均为 float"""
-        model = self.MODEL_CLS()
+        model = self.MODEL_CLS(fresh=True)
         policy, _ = model.predict([0] * 225 + [1])
         for prob in policy:
             self.assertIsInstance(prob, float)
 
     def test_model_predict_probability_range(self):
         """[primary] predict 返回策略概率均在 (0, 1) 内"""
-        model = self.MODEL_CLS()
+        model = self.MODEL_CLS(fresh=True)
         policy, _ = model.predict([0] * 225 + [1])
         for prob in policy:
             self.assertGreater(prob, 0.0, "概率应大于 0")
@@ -386,13 +388,13 @@ class TestCNNV7Model(CNNModelSharedMixin, unittest.TestCase):
 
     def test_model_predict_probability_sum(self):
         """[primary] predict 返回策略概率总和为 1"""
-        model = self.MODEL_CLS()
+        model = self.MODEL_CLS(fresh=True)
         policy, _ = model.predict([0] * 225 + [1])
         self.assertAlmostEqual(sum(policy), 1.0, places=5, msg="概率总和应为 1")
 
     def test_model_predict_different_inputs(self):
         """黑方/白方输入均能正常输出"""
-        model = self.MODEL_CLS()
+        model = self.MODEL_CLS(fresh=True)
         policy_black, value_black = model.predict([0] * 225 + [1])
         policy_white, value_white = model.predict([0] * 225 + [2])
         self.assertEqual(len(policy_black), 225)
@@ -402,7 +404,7 @@ class TestCNNV7Model(CNNModelSharedMixin, unittest.TestCase):
 
     def test_model_predict_with_pieces(self):
         """带有棋子的棋盘输入"""
-        model = self.MODEL_CLS()
+        model = self.MODEL_CLS(fresh=True)
         board = [0] * 225
         board[7 * 15 + 7] = 1
         board[7 * 15 + 8] = 2
@@ -413,14 +415,14 @@ class TestCNNV7Model(CNNModelSharedMixin, unittest.TestCase):
 
     def test_model_predict_value_range(self):
         """predict 返回价值在 [-1, 1] 范围内"""
-        model = self.MODEL_CLS()
+        model = self.MODEL_CLS(fresh=True)
         _, value = model.predict([0] * 225 + [1])
         self.assertGreaterEqual(value, -1.0, "价值应 >= -1")
         self.assertLessEqual(value, 1.0, "价值应 <= 1")
 
     def test_model_predict_consistency(self):
         """相同输入产生相同输出"""
-        model = self.MODEL_CLS()
+        model = self.MODEL_CLS(fresh=True)
         board_vector = [0] * 225 + [1]
         policy1, value1 = model.predict(board_vector)
         policy2, value2 = model.predict(board_vector)

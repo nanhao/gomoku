@@ -137,9 +137,9 @@ class TestCNNV6Integration(unittest.TestCase):
     # --- 异常情况：权重文件不存在时 get_model 抛出异常 ---
 
     def test_get_model_missing_weights_raises_error(self):
-        """gen 目录存在但无权重文件时抛出 ValueError"""
+        """gen 目录存在但无权重文件时抛出 FileNotFoundError"""
         # gen2 目录不存在，CNNV6Model(gen=2) 找不到权重文件应报错
-        with self.assertRaises(ValueError,
+        with self.assertRaises(FileNotFoundError,
                                msg="模型权重文件不存在时报错"):
             get_model("cnn_v6.2")
 

@@ -114,7 +114,7 @@ class TestNeuralNetworkModelInit(unittest.TestCase):
         self.assertEqual(model.name, "dummy")
     
     def test_default_init_without_path(self):
-        """不传参数且 DEFAULT_MODEL_PATH=None 时，创建新模型"""
+        """不传参数时创建随机初始化模型（不再静默回退到 DEFAULT_MODEL_PATH）"""
         model = DummyModel()
         self.assertIsNotNone(model.network)
     
@@ -136,29 +136,29 @@ class TestNeuralNetworkModelInit(unittest.TestCase):
         self.assertEqual(result1, result2)
     
     def test_nonexistent_model_path_creates_new(self):
-        """model_path 指向不存在的文件时，创建新模型"""
+        """model_path 指向不存在的文件时，抛出 FileNotFoundError"""
         nonexistent = os.path.join(self.temp_dir, "nonexistent.pth")
-        model = DummyModel(model_path=nonexistent)
-        self.assertEqual(model.name, "dummy")
+        with self.assertRaises(FileNotFoundError):
+            DummyModel(model_path=nonexistent)
     
     def test_default_model_path_auto_load(self):
-        """DEFAULT_MODEL_PATH 存在时自动加载"""
-        # 设置 DEFAULT_MODEL_PATH
+        """不传参数时创建随机初始化模型，DEFAULT_MODEL_PATH 不再自动加载"""
         default_path = os.path.join(self.temp_dir, "default.pth")
         DummyModel.DEFAULT_MODEL_PATH = default_path
         
         try:
-            # 创建并保存模型
+            # 创建并保存模型到默认路径
             model1 = DummyModel(fresh=True)
             board_vector = [0] * 225 + [1]
             result1 = model1.predict(board_vector)
             model1.save()
             
-            # 不传参数，应自动加载默认路径
+            # 不传参数应创建随机模型，不会自动加载 DEFAULT_MODEL_PATH
             model2 = DummyModel()
             result2 = model2.predict(board_vector)
-            
-            self.assertEqual(result1, result2)
+            # 随机初始化模型预测结果应不同于保存的模型
+            self.assertNotEqual(result1, result2,
+                "不传参应创建随机模型，不应加载 DEFAULT_MODEL_PATH")
         finally:
             DummyModel.DEFAULT_MODEL_PATH = None
     

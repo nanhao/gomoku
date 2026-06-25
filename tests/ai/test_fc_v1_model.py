@@ -104,18 +104,18 @@ class TestFCv1Model(unittest.TestCase):
     
     def test_model_name(self):
         """测试模型名称"""
-        model = FCv1Model()
+        model = FCv1Model(fresh=True)
         self.assertEqual(model.name, "fc_v1")
     
     def test_model_initialization_without_path(self):
         """测试不指定路径初始化模型"""
-        model = FCv1Model()
+        model = FCv1Model(fresh=True)
         self.assertIsNotNone(model)
         self.assertEqual(model.name, "fc_v1")
     
     def test_model_predict_shape(self):
         """测试 predict 方法返回形状"""
-        model = FCv1Model()
+        model = FCv1Model(fresh=True)
             
         # 创建 226 维输入向量
         board_vector = [0] * 225 + [1]  # 空棋盘，黑方落子
@@ -127,7 +127,7 @@ class TestFCv1Model(unittest.TestCase):
         
     def test_model_predict_format(self):
         """测试 predict 方法返回格式"""
-        model = FCv1Model()
+        model = FCv1Model(fresh=True)
             
         # 创建 226 维输入向量
         board_vector = [0] * 225 + [1]
@@ -143,7 +143,7 @@ class TestFCv1Model(unittest.TestCase):
         
     def test_model_predict_reward_range(self):
         """测试 predict 方法返回的 reward 范围"""
-        model = FCv1Model()
+        model = FCv1Model(fresh=True)
             
         board_vector = [0] * 225 + [1]
         result = model.predict(board_vector)
@@ -160,7 +160,7 @@ class TestFCv1Model(unittest.TestCase):
         网络输出为 LogSoftmax，predict 方法通过 exp() 还原为概率分布。
         输出应为概率分布，值域 (0, 1)，总和为 1
         """
-        model = FCv1Model()
+        model = FCv1Model(fresh=True)
         
         board_vector = [0] * 225 + [1]
         result = model.predict(board_vector)
@@ -178,7 +178,7 @@ class TestFCv1Model(unittest.TestCase):
         
     def test_model_predict_different_inputs(self):
         """测试不同输入产生输出"""
-        model = FCv1Model()
+        model = FCv1Model(fresh=True)
             
         # 测试黑方落子
         board_black = [0] * 225 + [1]
@@ -193,7 +193,7 @@ class TestFCv1Model(unittest.TestCase):
     def test_model_save_and_load(self):
         """测试模型保存和加载"""
         # 创建并保存模型
-        model1 = FCv1Model()
+        model1 = FCv1Model(fresh=True)
         model1.save(self.model_path)
         
         # 检查文件是否存在
@@ -205,7 +205,7 @@ class TestFCv1Model(unittest.TestCase):
     
     def test_model_save_default_path(self):
         """测试模型保存到默认路径"""
-        model = FCv1Model()
+        model = FCv1Model(fresh=True)
         
         # 保存到默认路径
         default_path = model.save()
@@ -221,16 +221,14 @@ class TestFCv1Model(unittest.TestCase):
                 os.remove(default_path)
     
     def test_model_load_nonexistent_file(self):
-        """测试加载不存在的模型文件"""
+        """显式指定不存在的文件路径 → 抛出 FileNotFoundError"""
         nonexistent_path = os.path.join(self.temp_dir, "nonexistent.pth")
-        
-        # 应该创建新模型而不是报错
-        model = FCv1Model(nonexistent_path)
-        self.assertEqual(model.name, "fc_v1")
+        with self.assertRaises(FileNotFoundError):
+            FCv1Model(nonexistent_path)
     
     def test_model_predict_consistency(self):
         """测试模型预测的一致性（相同输入产生相同输出）"""
-        model = FCv1Model()
+        model = FCv1Model(fresh=True)
         
         board_vector = [0] * 225 + [1]
         
@@ -256,7 +254,7 @@ class TestFCv1ModelIntegration(unittest.TestCase):
     def test_full_workflow(self):
         """测试完整工作流程：创建 -> 预测 -> 保存 -> 加载 -> 预测"""
         # 创建模型
-        model1 = FCv1Model()
+        model1 = FCv1Model(fresh=True)
         
         # 预测
         board_vector = [0] * 225 + [1]
@@ -294,29 +292,28 @@ class TestFCv1ModelDefaultLoad(unittest.TestCase):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
     
     def test_default_load_when_model_exists(self):
-        """测试当默认模型文件存在时，默认加载该模型"""
-        # 创建并保存一个模型
+        """不传参数时创建随机初始化模型，DEFAULT_MODEL_PATH 不再自动加载"""
+        # 创建并保存一个模型到默认路径
         model1 = FCv1Model(fresh=True)
         board_vector = [0] * 225 + [1]
         result1 = model1.predict(board_vector)
         model1.save()  # 保存到默认路径
         
-        # 创建新模型（不传参数），应该自动加载已保存的模型
+        # 不传参应创建随机模型，不会自动加载
         model2 = FCv1Model()
         result2 = model2.predict(board_vector)
         
-        # 结果应该相同（说明加载了已保存的模型）
-        self.assertEqual(result1, result2)
+        # 随机模型与保存的模型预测结果应不同
+        self.assertNotEqual(result1, result2,
+            "不传参应创建随机模型，不应加载 DEFAULT_MODEL_PATH")
     
     def test_no_load_when_model_not_exists(self):
-        """测试当默认模型文件不存在时，创建新模型"""
+        """不传参数时创建随机初始化模型"""
         # 确保默认路径不存在模型文件
         self.assertFalse(os.path.exists(FCv1Model.DEFAULT_MODEL_PATH))
         
-        # 创建模型（不传参数）
+        # 创建模型（不传参数）应成功
         model = FCv1Model()
-        
-        # 应该成功创建
         self.assertEqual(model.name, "fc_v1")
     
     def test_fresh_parameter_skips_load(self):

@@ -326,7 +326,7 @@ class TestFCv1TrainerFreshParameter(_DefaultModelPathIsolatedMixin, unittest.Tes
         self.assertEqual(trainer.model.name, "fc_v1")
 
     def test_trainer_default_loads_existing_model(self):
-        """默认行为加载已保存模型（预测结果一致）"""
+        """不传 fresh 时创建随机初始化模型，不再自动加载 DEFAULT_MODEL_PATH"""
         model1 = FCv1Model(fresh=True)
         board_vector = [0] * 225 + [1]
         result1 = model1.predict(board_vector)
@@ -335,8 +335,9 @@ class TestFCv1TrainerFreshParameter(_DefaultModelPathIsolatedMixin, unittest.Tes
         trainer = FCv1Trainer()
         result2 = trainer.model.predict(board_vector)
         self.assertEqual(len(result1), len(result2))
-        for r1, r2 in zip(result1, result2):
-            self.assertAlmostEqual(r1, r2, places=5)
+        # 随机初始化模型预测结果应不同于已保存模型
+        self.assertNotEqual(result1, result2,
+            "不传 fresh 时应创建随机模型，不应加载 DEFAULT_MODEL_PATH")
 
     def test_trainer_with_model_parameter(self):
         """传入 model 参数 → 训练器使用该实例"""

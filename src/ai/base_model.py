@@ -127,9 +127,13 @@ class NeuralNetworkModel(BaseModel):
         """初始化神经网络模型
 
         Args:
-            model_path: 模型文件路径，如果存在则加载
-            fresh: 是否强制创建新模型（不加载已保存的模型）
-            gen: 代数，指定时 DEFAULT_MODEL_PATH 指向 gen{i}/ 子目录
+            model_path: 模型权重文件路径。指定时必须存在，否则抛出 FileNotFoundError
+            fresh: 是否强制创建新模型（使用随机初始化参数，不加载任何权重）
+            gen: 代数，指定时基于 DEFAULT_MODEL_PATH 构造 gen{gen}/ 子目录路径并加载
+
+        Raises:
+            ValueError: 未指定 model_path 且 fresh=False
+            FileNotFoundError: model_path 或 gen 指向的文件不存在
         """
         super().__init__()
 
@@ -137,6 +141,7 @@ class NeuralNetworkModel(BaseModel):
         self.gen = gen
 
         # 当 gen 不为 None 时，动态覆盖实例的 DEFAULT_MODEL_PATH 为 gen 子目录
+        # （save() 依赖此路径，但不作为加载时的静默回退）
         if gen is not None:
             base_dir = os.path.dirname(self.DEFAULT_MODEL_PATH)
             model_filename = os.path.basename(self.DEFAULT_MODEL_PATH)
@@ -144,24 +149,31 @@ class NeuralNetworkModel(BaseModel):
 
         # 创建神经网络实例（由子类实现）
         self.network = self._create_network()
-        
+
         # GPU 移动由 BaseTrainer 统一管理，模型创建时保持在 CPU
-        
+
         # fresh=True 时，不加载任何模型，使用随机初始化的参数
         if fresh:
             return
-        
-        # 如果指定了 model_path 且文件存在，加载该模型
-        if model_path and os.path.exists(model_path):
-            self.load(model_path)
-        # 否则尝试加载默认路径的模型
-        elif self.DEFAULT_MODEL_PATH and os.path.exists(self.DEFAULT_MODEL_PATH):
-            self.load(self.DEFAULT_MODEL_PATH)
-        # 多代模型显式指定代数时，必须命中权重文件，否则报错
-        # 避免静默回退到随机初始化网络导致用户误以为在使用训练好的模型
+
+        # 确定要加载的权重文件路径
+        if model_path:
+            # 显式指定了路径 → 文件必须存在，绝不静默回退
+            load_path = model_path
+            if not os.path.exists(load_path):
+                raise FileNotFoundError(
+                    f"模型权重文件不存在: {load_path}")
         elif gen is not None:
-            raise ValueError(
-                f"模型权重文件不存在: {self.DEFAULT_MODEL_PATH}")
+            # gen 已在上方改写 DEFAULT_MODEL_PATH 为 gen 子目录
+            load_path = self.DEFAULT_MODEL_PATH
+            if not os.path.exists(load_path):
+                raise FileNotFoundError(
+                    f"模型权重文件不存在: {load_path}")
+        else:
+            # 未指定任何路径 → 使用随机初始化权重
+            return
+
+        self.load(load_path)
     
     @abstractmethod
     def _create_network(self) -> nn.Module:
