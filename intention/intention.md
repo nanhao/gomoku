@@ -179,3 +179,6 @@ cnn_v7 要采用全新的游戏引擎、训练数据和训练方法。
 3，训练时，模型的策略头要拟合 MCTS 的概率分布，价值头要拟合实际结果，可以参照 alphago zero 的论文中的损失函数，但考虑一下要不要防止过拟合的正则项
 4，cnn_v7 的自我对弈生成样本、训练都用新的脚本，不复用原来的。
 alphago zero 的论文已经收录在本项目根目录下了。
+
+# intention_id=25
+src/ai/scripts/mcts_train.py 要像 train_main.py 一样画出双 y 轴曲线图（loss/ val-loss/ grad）。

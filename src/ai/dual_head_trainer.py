@@ -4,16 +4,28 @@
 - 损失函数：l = (z - v)² - πᵀ·p_log
 - 优化器：AdamW（weight_decay=1e-4）
 - 按设计文档 §9 训练规约实现：_train_step → train_epochs → model.save
+- 训练结束后自动生成双 Y 轴损失曲线图（设计文档-25）
 """
 
 import json
 import os
 from abc import ABC, abstractmethod
+from datetime import datetime
 from typing import Dict, List, Optional
 
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
+
+# 尝试导入 matplotlib，用于生成损失曲线图
+# 若不可用则优雅降级，不阻断训练流程
+try:
+    import matplotlib
+    matplotlib.use('Agg')  # 非交互式后端
+    import matplotlib.pyplot as plt
+    _MATPLOTLIB_AVAILABLE = True
+except ImportError:
+    _MATPLOTLIB_AVAILABLE = False
 
 
 def get_device() -> torch.device:
@@ -240,70 +252,83 @@ class DualHeadTrainer(ABC):
         self.model.network.train()
         history = []
 
-        for epoch in range(epochs):
-            # E2: 每 epoch 重新 shuffle
-            n_train = train_inputs.size(0)
-            if shuffle:
-                indices = torch.randperm(n_train)
-                epoch_inputs = train_inputs[indices]
-                epoch_pi = train_pi[indices]
-                epoch_z = train_z[indices]
-            else:
-                epoch_inputs = train_inputs
-                epoch_pi = train_pi
-                epoch_z = train_z
+        try:
+            for epoch in range(epochs):
+                # E2: 每 epoch 重新 shuffle
+                n_train = train_inputs.size(0)
+                if shuffle:
+                    indices = torch.randperm(n_train)
+                    epoch_inputs = train_inputs[indices]
+                    epoch_pi = train_pi[indices]
+                    epoch_z = train_z[indices]
+                else:
+                    epoch_inputs = train_inputs
+                    epoch_pi = train_pi
+                    epoch_z = train_z
 
-            # E3: 按 batch_size 分 batch，逐批调用 _train_step
-            epoch_value_loss = 0.0
-            epoch_policy_loss = 0.0
-            epoch_total_loss = 0.0
-            n_batches = 0
+                # E3: 按 batch_size 分 batch，逐批调用 _train_step
+                epoch_value_loss = 0.0
+                epoch_policy_loss = 0.0
+                epoch_total_loss = 0.0
+                # 累积各 batch 的梯度范数总和（聚合为标量后取 epoch 均值）
+                epoch_grad_sum = 0.0
+                n_batches = 0
 
-            for start in range(0, n_train, batch_size):
-                end = min(start + batch_size, n_train)
-                batch_inputs = epoch_inputs[start:end]
-                batch_pi = epoch_pi[start:end]
-                batch_z = epoch_z[start:end]
+                for start in range(0, n_train, batch_size):
+                    end = min(start + batch_size, n_train)
+                    batch_inputs = epoch_inputs[start:end]
+                    batch_pi = epoch_pi[start:end]
+                    batch_z = epoch_z[start:end]
 
-                result = self._train_step(batch_inputs, batch_pi, batch_z)
+                    result = self._train_step(batch_inputs, batch_pi, batch_z)
 
-                epoch_value_loss += result["value_loss"]
-                epoch_policy_loss += result["policy_loss"]
-                epoch_total_loss += result["total_loss"]
-                n_batches += 1
+                    epoch_value_loss += result["value_loss"]
+                    epoch_policy_loss += result["policy_loss"]
+                    epoch_total_loss += result["total_loss"]
+                    # 聚合当前 batch 的 grad_norms dict 为标量（sum of all param norms）
+                    if "grad_norms" in result:
+                        epoch_grad_sum += sum(result["grad_norms"].values())
+                    n_batches += 1
 
-            # E4: 聚合 epoch 均值
-            avg_value_loss = epoch_value_loss / n_batches if n_batches > 0 else 0.0
-            avg_policy_loss = epoch_policy_loss / n_batches if n_batches > 0 else 0.0
-            avg_total_loss = epoch_total_loss / n_batches if n_batches > 0 else 0.0
+                # E4: 聚合 epoch 均值
+                avg_value_loss = epoch_value_loss / n_batches if n_batches > 0 else 0.0
+                avg_policy_loss = epoch_policy_loss / n_batches if n_batches > 0 else 0.0
+                avg_total_loss = epoch_total_loss / n_batches if n_batches > 0 else 0.0
+                avg_grad_norm = epoch_grad_sum / n_batches if n_batches > 0 else 0.0
 
-            epoch_result = {
-                "epoch": epoch + 1,
-                "value_loss": avg_value_loss,
-                "policy_loss": avg_policy_loss,
-                "total_loss": avg_total_loss,
-            }
+                epoch_result = {
+                    "epoch": epoch + 1,
+                    "value_loss": avg_value_loss,
+                    "policy_loss": avg_policy_loss,
+                    "total_loss": avg_total_loss,
+                    "grad_norm": avg_grad_norm,
+                }
 
-            # E5: 验证集评估（无梯度）
-            if has_val and val_inputs is not None:
-                val_result = self._evaluate_val(val_inputs, val_pi, val_z)
-                epoch_result["val_value_loss"] = val_result["value_loss"]
-                epoch_result["val_policy_loss"] = val_result["policy_loss"]
-                epoch_result["val_total_loss"] = val_result["total_loss"]
+                # E5: 验证集评估（无梯度）
+                if has_val and val_inputs is not None:
+                    val_result = self._evaluate_val(val_inputs, val_pi, val_z)
+                    epoch_result["val_value_loss"] = val_result["value_loss"]
+                    epoch_result["val_policy_loss"] = val_result["policy_loss"]
+                    epoch_result["val_total_loss"] = val_result["total_loss"]
 
-            history.append(epoch_result)
+                history.append(epoch_result)
 
-            # E6: 输出日志
-            if verbose:
-                log_parts = [
-                    f"Epoch {epoch + 1}/{epochs}",
-                    f"value_loss: {avg_value_loss:.4f}",
-                    f"policy_loss: {avg_policy_loss:.4f}",
-                    f"total_loss: {avg_total_loss:.4f}",
-                ]
-                if "val_total_loss" in epoch_result:
-                    log_parts.append(f"val_total_loss: {epoch_result['val_total_loss']:.4f}")
-                print(" | ".join(log_parts))
+                # E6: 输出日志
+                if verbose:
+                    log_parts = [
+                        f"Epoch {epoch + 1}/{epochs}",
+                        f"value_loss: {avg_value_loss:.4f}",
+                        f"policy_loss: {avg_policy_loss:.4f}",
+                        f"total_loss: {avg_total_loss:.4f}",
+                    ]
+                    if "val_total_loss" in epoch_result:
+                        log_parts.append(f"val_total_loss: {epoch_result['val_total_loss']:.4f}")
+                    print(" | ".join(log_parts))
+        except KeyboardInterrupt:
+            print("\n[中断] 检测到 Ctrl+C，正在生成图表...")
+        finally:
+            # 训练结束后（正常或中断）自动生成损失曲线图
+            self._plot_loss_curve(history)
 
         return history
 
@@ -364,3 +389,103 @@ class DualHeadTrainer(ABC):
             "policy_loss": policy_loss,
             "total_loss": total_loss,
         }
+
+    # ---------- 图表生成 ----------
+
+    def _plot_loss_curve(self, history: List[Dict[str, float]]) -> str:
+        """生成双 Y 轴损失曲线图并保存为 PNG（设计文档-25 §3）
+
+        左 Y 轴（Loss）：
+        - total_loss (蓝实线)
+        - value_loss (青虚线 #17becf)
+        - policy_loss (橙虚线 #ff7f0e)
+        - val_total_loss (绿实线，仅当 history 含此字段时)
+
+        右 Y 轴（Gradient Norm）：
+        - grad_norm (红实线)
+
+        Args:
+            history: train_epochs 返回的训练历史记录列表
+
+        Returns:
+            PNG 文件路径；history 为空或 matplotlib 不可用时返回 None
+        """
+        if not history:
+            return None
+
+        if not _MATPLOTLIB_AVAILABLE:
+            return None
+
+        # 读取输出目录配置
+        from src.config.mcts import MCTS_LOSS_LOG_DIR
+        output_dir = MCTS_LOSS_LOG_DIR
+        os.makedirs(output_dir, exist_ok=True)
+
+        # 生成文件名：{model_name}_{timestamp}.png
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        model_name = self.model_name
+        output_path = os.path.join(output_dir, f"{model_name}_{timestamp}.png")
+
+        # 提取各指标
+        epochs = [entry["epoch"] for entry in history]
+        total_losses = [entry["total_loss"] for entry in history]
+        value_losses = [entry["value_loss"] for entry in history]
+        policy_losses = [entry["policy_loss"] for entry in history]
+        grad_norms = [entry.get("grad_norm", 0.0) for entry in history]
+
+        # 判断是否有验证集数据
+        has_val = all("val_total_loss" in entry for entry in history)
+
+        try:
+            # 创建双 Y 轴图
+            fig, ax1 = plt.subplots(figsize=(12, 7))
+            ax2 = ax1.twinx()
+
+            # 左轴：损失曲线
+            ax1.plot(epochs, total_losses, 'b-', label='total_loss',
+                     linewidth=1.5)
+            ax1.plot(epochs, value_losses, '--', color='#17becf',
+                     label='value_loss', linewidth=1.0, alpha=0.8)
+            ax1.plot(epochs, policy_losses, '--', color='#ff7f0e',
+                     label='policy_loss', linewidth=1.0, alpha=0.8)
+
+            if has_val:
+                val_total_losses = [entry["val_total_loss"]
+                                    for entry in history]
+                ax1.plot(epochs, val_total_losses, 'g-',
+                         label='val_total_loss', linewidth=1.5,
+                         marker='o', markersize=3)
+
+            # 右轴：梯度范数
+            ax2.plot(epochs, grad_norms, 'r-', label='grad_norm',
+                     linewidth=1.0, alpha=0.7)
+
+            # 轴标签与颜色
+            ax1.set_xlabel("Epoch")
+            ax1.set_ylabel("Loss", color='b')
+            ax2.set_ylabel("Gradient Norm", color='r')
+            ax1.tick_params(axis='y', labelcolor='b')
+            ax2.tick_params(axis='y', labelcolor='r')
+
+            # 合并图例
+            lines1, labels1 = ax1.get_legend_handles_labels()
+            lines2, labels2 = ax2.get_legend_handles_labels()
+            ax1.legend(lines1 + lines2, labels1 + labels2,
+                       loc='upper right')
+
+            # 标题与网格
+            ax1.set_title(
+                f"Loss Curve - {model_name} "
+                f"(Epoch Level, {len(history)} epochs)"
+            )
+            ax1.grid(True, linestyle='--', alpha=0.7)
+
+            plt.tight_layout()
+            plt.savefig(output_path, dpi=150)
+            plt.close()
+
+            print(f"Loss 曲线图已生成: {output_path}")
+            return output_path
+        except Exception:
+            # 绘图失败不影响训练结果
+            return None

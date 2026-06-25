@@ -340,6 +340,8 @@ python src/ai/scripts/mcts_train.py --model <权重路径> --train-from-dir <数
 | `--device` | 训练设备 | cuda |
 
 > **损失函数**：MSE(价值) + CrossEntropy(策略)，AdamW 优化器含 decoupled weight decay。
+>
+> **损失曲线图**：训练完成后自动生成双 Y 轴 PNG 图表（左轴 Loss，右轴 Gradient Norm），保存至 `mcts_loss_logs/` 目录。即使训练被 Ctrl+C 中断，已完成 epoch 的数据仍会生成图表。
 
 ```bash
 # 示例：从 MCTS 自对弈样本训练
@@ -424,7 +426,7 @@ python -m pytest tests/ -v -s
 python tests/run_tests.py
 ```
 
-> 覆盖全部 1655 个测试（自动发现，无需手工维护测试列表）
+> 使用 pytest 自动发现机制覆盖所有测试。
 >
 > 附加参数示例：
 > - `python -m pytest tests/ -q` —— 静默模式
@@ -535,6 +537,7 @@ python tests/run_tests.py
 | `src/game/save/` | 游戏存档 |
 | `src/ai/ai_data/` | AI 对战记录（record.json） |
 | `src/ai/ai_data/loss_logs/` | 训练 loss 日志和曲线图 |
+| `mcts_loss_logs/` | MCTS 训练损失曲线图（PNG） |
 | `src/ai/train_data/` | 训练样本（sample.json） |
 | `src/ai/merge_samples/` | 合并后的训练样本大文件 |
 | `src/tools/create_samples_tool/` | create_samples 验收工具 |
