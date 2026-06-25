@@ -289,6 +289,66 @@ python -m ai.sample_visualizer --sample data.json --count 3 --no-heatmap --seed 
 
 > 热力图核心算法位于独立可复用的 `src/visualization/heatmap_color.py`（无 UI 依赖，默认白→黄→橙→红 4 色色板 + log 归一化），同时被 `ai/sample_visualizer.py`（matplotlib）和 `gui/components/heatmap.py`（tkinter 回放界面）共用。
 
+### AlphaGo Zero MCTS 训练
+
+基于 cnn_v7 双头模型的强化学习训练体系，通过 MCTS 自对弈生成高质量样本，训练模型逼近 MCTS 决策。
+
+#### MCTS 自我对弈
+
+```bash
+python src/ai/scripts/mcts_self_play.py --model <权重路径> --games <局数> [选项]
+```
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--model` | 模型权重文件路径（.pth） | 必填 |
+| `--games` | 对弈局数 | 必填 |
+| `--simulations` | 每步 MCTS 模拟次数 | 800 |
+| `--c-puct` | PUCT 探索系数 | 2.0 |
+| `--temp-steps` | 温度探索步数（前 N 步 τ=1.0） | 8 |
+| `--temperature` | 温度参数 | 1.0 |
+| `--dirichlet-epsilon` | 狄利克雷噪声比例 | 0.25 |
+| `--dirichlet-alpha` | 狄利克雷分布参数 | 0.03 |
+| `--output` | 输出目录名 | `{model}_mcts_{timestamp}` |
+| `--device` | 推理设备 | cuda |
+
+```bash
+# 示例：使用 cnn_v7 权重进行 100 局 MCTS 自对弈
+python src/ai/scripts/mcts_self_play.py --model src/ai/models/cnn_v7/cnn_v7.pth --games 100
+
+# 示例：自定义模拟次数和输出目录
+python src/ai/scripts/mcts_self_play.py --model cnn_v7.pth --games 50 --simulations 400 --output my_samples
+```
+
+#### MCTS 训练
+
+```bash
+python src/ai/scripts/mcts_train.py --model <权重路径> --train-from-dir <数据目录> --epochs <轮数> [选项]
+```
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--model` | 初始权重文件路径 | 必填 |
+| `--train-from-dir` | 训练数据目录（含 sample.json） | 必填 |
+| `--epochs` | 训练轮数 | 必填 |
+| `--output` | 训练后权重保存路径 | `--model` 的值（覆盖） |
+| `--batch-size` | 训练 batch size | 2048 |
+| `--lr` | 初始学习率 | 0.001 |
+| `--l2-reg` | AdamW weight_decay | 1e-4 |
+| `--val-split` | 验证集比例 | 0.1 |
+| `--no-shuffle` | 关闭训练数据 shuffle | — |
+| `--device` | 训练设备 | cuda |
+
+> **损失函数**：MSE(价值) + CrossEntropy(策略)，AdamW 优化器含 decoupled weight decay。
+
+```bash
+# 示例：从 MCTS 自对弈样本训练
+python src/ai/scripts/mcts_train.py --model cnn_v7.pth --train-from-dir my_samples --epochs 100
+
+# 示例：指定输出路径和验证集比例
+python src/ai/scripts/mcts_train.py --model cnn_v7.pth --train-from-dir my_samples --epochs 200 --output cnn_v7_trained.pth --val-split 0.2
+```
+
 ### 迭代进化训练
 
 自动化「生成样本 → 训练 → 对战评估 → 条件晋升」闭环，使模型持续迭代进化：
@@ -455,6 +515,16 @@ python tests/run_tests.py
 - **特点**：在 cnn_v5 基础上引入 BatchNorm 和残差连接，Conv2+Conv3、Conv4+Conv5 各组成一个残差块
 - **训练方式**：自我对弈 + 棋型评估奖励 + KL 散度监督学习
 - **模型文件**：`src/ai/models/cnn_v6/gen{i}/cnn_v6.pth`（多代模型）
+
+### CNN v7 模型（双头残差卷积 + AlphaGo Zero）
+
+- **输入**：15×15×3 张量（相对视角编码：我方棋子、对方棋子、我方颜色）
+- **输出**：双头 —— 策略头 225 维 LogSoftmax + 价值头 Tanh [-1,1]
+- **网络结构**：Conv1(3→32, BN, ReLU) → 两个残差块(32→32) → 1×1Conv(32→1) → Flatten → {LogSoftmax(策略), FC(225→1)→Tanh(价值)}
+- **参数量**：约 4.0 万
+- **特点**：在 cnn_v6 基础上增加价值头，采用 AlphaGo Zero 相对视角编码
+- **训练方式**：AlphaGo Zero MCTS 自我对弈 + MSE(价值) + CrossEntropy(策略) + AdamW 正则化
+- **模型文件**：`src/ai/models/cnn_v7/gen{i}/cnn_v7.pth`（多代模型）
 
 ---
 
