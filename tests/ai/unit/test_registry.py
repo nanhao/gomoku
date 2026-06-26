@@ -27,11 +27,11 @@ class TestGetModel(unittest.TestCase):
     """测试 get_model 函数"""
 
     def _assert_predict_smoke(self, model):
-        """通用端到端 smoke：predict 返回 225 维非负向量"""
+        """通用端到端 smoke：predict 返回 ModelPredict，policy 225 维非负向量"""
         vector = [0] * 225 + [1]
         probs = model.predict(vector)
-        self.assertEqual(len(probs), 225, "predict 必须返回 225 维")
-        self.assertTrue(all(p >= 0 for p in probs), "概率分布不得为负")
+        self.assertEqual(len(probs.policy), 225, "predict 必须返回 225 维")
+        self.assertTrue(all(p >= 0 for p in probs.policy), "概率分布不得为负")
 
     def test_get_model_random(self):
         """加载 random 模型"""

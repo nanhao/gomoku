@@ -99,39 +99,39 @@ class CNNModelSharedMixin:
         self.assertEqual(model.name, self.MODEL_NAME)
 
     def test_model_predict_shape(self):
-        """predict 返回长度 225"""
+        """predict 返回 ModelPredict 对象，policy 长度 225"""
         model = self.MODEL_CLS(fresh=True)
         result = model.predict([0] * 225 + [1])
-        self.assertEqual(len(result), 225)
+        self.assertEqual(len(result.policy), 225)
 
     def test_model_predict_format(self):
-        """predict 返回元素均为 float"""
+        """predict 返回 policy 元素均为 float"""
         model = self.MODEL_CLS(fresh=True)
         result = model.predict([0] * 225 + [1])
-        for prob in result:
+        for prob in result.policy:
             self.assertIsInstance(prob, float)
 
     def test_model_predict_probability_range(self):
-        """[primary] predict 返回概率均在 (0, 1) 内"""
+        """[primary] predict 返回 policy 概率均在 (0, 1) 内"""
         model = self.MODEL_CLS(fresh=True)
         result = model.predict([0] * 225 + [1])
-        for prob in result:
+        for prob in result.policy:
             self.assertGreater(prob, 0.0, "概率应大于 0")
             self.assertLess(prob, 1.0, "概率应小于 1")
 
     def test_model_predict_probability_sum(self):
-        """[primary] predict 返回概率总和为 1"""
+        """[primary] predict 返回 policy 概率总和为 1"""
         model = self.MODEL_CLS(fresh=True)
         result = model.predict([0] * 225 + [1])
-        self.assertAlmostEqual(sum(result), 1.0, places=5, msg="概率总和应为 1")
+        self.assertAlmostEqual(sum(result.policy), 1.0, places=5, msg="概率总和应为 1")
 
     def test_model_predict_different_inputs(self):
         """黑方/白方输入均能正常输出"""
         model = self.MODEL_CLS(fresh=True)
         result_black = model.predict([0] * 225 + [1])
         result_white = model.predict([0] * 225 + [2])
-        self.assertEqual(len(result_black), 225)
-        self.assertEqual(len(result_white), 225)
+        self.assertEqual(len(result_black.policy), 225)
+        self.assertEqual(len(result_white.policy), 225)
 
     def test_model_predict_with_pieces(self):
         """带有棋子的棋盘输入"""
@@ -141,13 +141,14 @@ class CNNModelSharedMixin:
         board[7 * 15 + 8] = 2
         board.append(1)
         result = model.predict(board)
-        self.assertEqual(len(result), 225)
+        self.assertEqual(len(result.policy), 225)
 
     def test_model_predict_consistency(self):
         """相同输入产生相同输出"""
         model = self.MODEL_CLS(fresh=True)
         board_vector = [0] * 225 + [1]
-        self.assertEqual(model.predict(board_vector), model.predict(board_vector))
+        self.assertEqual(model.predict(board_vector).policy,
+                         model.predict(board_vector).policy)
 
     def test_model_save_and_load(self):
         """save 到指定路径 → 加载后 name 一致"""
@@ -178,7 +179,7 @@ class CNNModelSharedMixin:
         # 不传参应创建随机模型，不会自动加载
         model2 = self.MODEL_CLS()
         result2 = model2.predict(board_vector)
-        self.assertNotEqual(result1, result2,
+        self.assertNotEqual(result1.policy, result2.policy,
             "不传参应创建随机模型，不应加载 DEFAULT_MODEL_PATH")
 
     def test_no_load_when_model_not_exists(self):
@@ -204,7 +205,7 @@ class CNNModelSharedMixin:
         result2 = model2.predict(board_vector)
         model2.save(custom_path)
         model3 = self.MODEL_CLS(model_path=custom_path)
-        self.assertEqual(result2, model3.predict(board_vector))
+        self.assertEqual(result2.policy, model3.predict(board_vector).policy)
 
     def test_vector_to_tensor_conversion(self):
         """base_model.board_vector_to_cnn_tensor 通道布局正确"""
@@ -224,7 +225,7 @@ class CNNModelSharedMixin:
         result1 = model1.predict(board_vector)
         model1.save(self.model_path)
         model2 = self.MODEL_CLS(self.model_path)
-        self.assertEqual(result1, model2.predict(board_vector))
+        self.assertEqual(result1.policy, model2.predict(board_vector).policy)
 
 
 # ---------------------------------------------------------------------------
@@ -359,17 +360,15 @@ class TestCNNV7Model(CNNModelSharedMixin, unittest.TestCase):
     MODEL_NAME = "cnn_v7"
     DEFAULT_FILENAME = "cnn_v7.pth"
 
-    # --- 覆盖 Mixin：predict 返回 (policy, value) 元组 ---
+    # --- 覆盖 Mixin：predict 返回 ModelPredict(value=...) ---
 
     def test_model_predict_shape(self):
-        """predict 返回 (List[float], float) 元组，策略长度 225"""
+        """predict 返回 ModelPredict 对象，策略长度 225，包含 value"""
         model = self.MODEL_CLS(fresh=True)
         result = model.predict([0] * 225 + [1])
-        self.assertIsInstance(result, tuple, "predict 应返回元组")
-        self.assertEqual(len(result), 2, "元组长度应为 2")
-        policy, value = result
-        self.assertEqual(len(policy), 225, "策略长度应为 225")
-        self.assertIsInstance(value, float, "价值应为 float")
+        self.assertEqual(result.type, "policy_value", "cnn_v7 应为 policy_value 类型")
+        self.assertEqual(len(result.policy), 225, "策略长度应为 225")
+        self.assertIsInstance(result.value, float, "价值应为 float")
 
     def test_model_predict_format(self):
         """predict 返回策略元素均为 float"""

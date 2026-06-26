@@ -4,7 +4,7 @@
 """
 
 from typing import List
-from ai.base_model import BaseModel
+from ai.base_model import BaseModel, ModelPredict
 
 
 class RandomModel(BaseModel):
@@ -32,7 +32,7 @@ class RandomModel(BaseModel):
         """加载模型 - RandomModel 无参数需要加载，空操作"""
         pass
     
-    def predict(self, board_vector: List[int]) -> List[float]:
+    def predict(self, board_vector: List[int]) -> "ModelPredict":
         """
         预测每个落子位置的概率
         
@@ -44,7 +44,7 @@ class RandomModel(BaseModel):
             board_vector: 226 维向量，前 225 位是棋盘状态
             
         Returns:
-            225 维概率列表，索引 i 对应位置 (i//15, i%15)
+            ModelPredict 对象，type=TYPE_POLICY_ONLY，value=None
         """
         # 获取棋盘状态（前 225 位）
         board = board_vector[:225]
@@ -54,10 +54,11 @@ class RandomModel(BaseModel):
         
         if empty_count == 0:
             # 棋盘已满，返回均匀分布以遵守接口契约（概率之和为1）
-            return [1.0 / 225] * 225
+            policy = [1.0 / 225] * 225
+        else:
+            # 空位均匀分布概率
+            prob = 1.0 / empty_count
+            # 构建概率列表：空位为 prob，已落子位置为 0
+            policy = [prob if cell == 0 else 0.0 for cell in board]
         
-        # 空位均匀分布概率
-        prob = 1.0 / empty_count
-        
-        # 构建概率列表：空位为 prob，已落子位置为 0
-        return [prob if cell == 0 else 0.0 for cell in board]
+        return ModelPredict(policy=policy)

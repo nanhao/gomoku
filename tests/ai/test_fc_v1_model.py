@@ -122,8 +122,8 @@ class TestFCv1Model(unittest.TestCase):
             
         result = model.predict(board_vector)
             
-        # 结果应该是 225 维
-        self.assertEqual(len(result), 225)
+        # 结果 policy 应该是 225 维
+        self.assertEqual(len(result.policy), 225)
         
     def test_model_predict_format(self):
         """测试 predict 方法返回格式"""
@@ -135,9 +135,9 @@ class TestFCv1Model(unittest.TestCase):
         result = model.predict(board_vector)
             
         # 检查格式：225 维列表，索引 i 对应位置 (i//15, i%15)
-        self.assertEqual(len(result), 225)
+        self.assertEqual(len(result.policy), 225)
         for i in range(225):
-            prob = result[i]
+            prob = result.policy[i]
             # 概率应该是浮点数
             self.assertIsInstance(prob, float)
         
@@ -150,7 +150,7 @@ class TestFCv1Model(unittest.TestCase):
             
         # 检查所有 reward 値在范围内
         for i in range(225):
-            reward = result[i]
+            reward = result.policy[i]
             self.assertGreaterEqual(reward, -1000000)
             self.assertLessEqual(reward, 1000000)
     
@@ -166,14 +166,14 @@ class TestFCv1Model(unittest.TestCase):
         result = model.predict(board_vector)
         
         # 验证结果都是浮点数
-        for prob in result:
+        for prob in result.policy:
             self.assertIsInstance(prob, float)
         
         # 验证范围 (0, 1)
-        self.assertTrue(all(0 < p < 1 for p in result))
+        self.assertTrue(all(0 < p < 1 for p in result.policy))
         
         # 验证总和为 1
-        prob_sum = sum(result)
+        prob_sum = sum(result.policy)
         self.assertAlmostEqual(prob_sum, 1.0, places=5, msg="概率总和应为 1")
         
     def test_model_predict_different_inputs(self):
@@ -183,12 +183,12 @@ class TestFCv1Model(unittest.TestCase):
         # 测试黑方落子
         board_black = [0] * 225 + [1]
         result_black = model.predict(board_black)
-        self.assertEqual(len(result_black), 225)
+        self.assertEqual(len(result_black.policy), 225)
             
         # 测试白方落子
         board_white = [0] * 225 + [2]
         result_white = model.predict(board_white)
-        self.assertEqual(len(result_white), 225)
+        self.assertEqual(len(result_white.policy), 225)
     
     def test_model_save_and_load(self):
         """测试模型保存和加载"""
@@ -236,7 +236,7 @@ class TestFCv1Model(unittest.TestCase):
         result1 = model.predict(board_vector)
         result2 = model.predict(board_vector)
         
-        self.assertEqual(result1, result2)
+        self.assertEqual(result1.policy, result2.policy)
 
 
 class TestFCv1ModelIntegration(unittest.TestCase):
@@ -270,7 +270,7 @@ class TestFCv1ModelIntegration(unittest.TestCase):
         result2 = model2.predict(board_vector)
         
         # 结果应该相同
-        self.assertEqual(result1, result2)
+        self.assertEqual(result1.policy, result2.policy)
 
 
 class TestFCv1ModelDefaultLoad(unittest.TestCase):
@@ -304,7 +304,7 @@ class TestFCv1ModelDefaultLoad(unittest.TestCase):
         result2 = model2.predict(board_vector)
         
         # 随机模型与保存的模型预测结果应不同
-        self.assertNotEqual(result1, result2,
+        self.assertNotEqual(result1.policy, result2.policy,
             "不传参应创建随机模型，不应加载 DEFAULT_MODEL_PATH")
     
     def test_no_load_when_model_not_exists(self):
@@ -345,7 +345,7 @@ class TestFCv1ModelDefaultLoad(unittest.TestCase):
         
         # 验证模型2是独立的实例
         self.assertEqual(model2.name, "fc_v1")
-        self.assertEqual(len(result2), 225)
+        self.assertEqual(len(result2.policy), 225)
     
     def test_model_path_takes_priority_over_default(self):
         """测试指定 model_path 时优先使用该路径，而不是默认路径"""
@@ -365,7 +365,7 @@ class TestFCv1ModelDefaultLoad(unittest.TestCase):
         result3 = model3.predict(board_vector)
         
         # 应该与模型2的结果相同
-        self.assertEqual(result2, result3)
+        self.assertEqual(result2.policy, result3.policy)
 
 
 if __name__ == '__main__':

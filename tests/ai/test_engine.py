@@ -14,7 +14,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from ai.base_model import BaseModel
+from ai.base_model import BaseModel, ModelPredict
 from ai.engine import AIEngine, create_engine
 from ai.models.random.model import RandomModel
 from ai.models.cnn_v2.model import CNNV2Model
@@ -37,7 +37,7 @@ class StubModel(BaseModel):
 
     def predict(self, board_vector):
         self.predict_call_count += 1
-        return list(self._probs)
+        return ModelPredict(policy=list(self._probs))
 
     @property
     def name(self):

@@ -133,7 +133,7 @@ class TestNeuralNetworkModelInit(unittest.TestCase):
         board_vector = [0] * 225 + [1]
         result1 = model1.predict(board_vector)
         result2 = model2.predict(board_vector)
-        self.assertEqual(result1, result2)
+        self.assertEqual(result1.policy, result2.policy)
     
     def test_nonexistent_model_path_creates_new(self):
         """model_path 指向不存在的文件时，抛出 FileNotFoundError"""
@@ -157,7 +157,7 @@ class TestNeuralNetworkModelInit(unittest.TestCase):
             model2 = DummyModel()
             result2 = model2.predict(board_vector)
             # 随机初始化模型预测结果应不同于保存的模型
-            self.assertNotEqual(result1, result2,
+            self.assertNotEqual(result1.policy, result2.policy,
                 "不传参应创建随机模型，不应加载 DEFAULT_MODEL_PATH")
         finally:
             DummyModel.DEFAULT_MODEL_PATH = None
@@ -183,7 +183,7 @@ class TestNeuralNetworkModelInit(unittest.TestCase):
             result3 = model3.predict(board_vector)
             
             # 应与模型2的结果相同，而非模型1
-            self.assertEqual(result2, result3)
+            self.assertEqual(result2.policy, result3.policy)
         finally:
             DummyModel.DEFAULT_MODEL_PATH = None
     
@@ -208,13 +208,13 @@ class TestNeuralNetworkModelPredict(unittest.TestCase):
     """测试 NeuralNetworkModel 的 predict 通用逻辑"""
     
     def test_predict_returns_225_floats(self):
-        """predict 返回 225 维浮点列表"""
+        """predict 返回 policy 为 225 维浮点列表"""
         model = DummyModel(fresh=True)
         board_vector = [0] * 225 + [1]
         result = model.predict(board_vector)
         
-        self.assertEqual(len(result), 225)
-        for prob in result:
+        self.assertEqual(len(result.policy), 225)
+        for prob in result.policy:
             self.assertIsInstance(prob, float)
     
     def test_predict_probability_range(self):
@@ -223,7 +223,7 @@ class TestNeuralNetworkModelPredict(unittest.TestCase):
         board_vector = [0] * 225 + [1]
         result = model.predict(board_vector)
         
-        for prob in result:
+        for prob in result.policy:
             self.assertGreater(prob, 0.0)
             self.assertLess(prob, 1.0)
     
@@ -233,7 +233,7 @@ class TestNeuralNetworkModelPredict(unittest.TestCase):
         board_vector = [0] * 225 + [1]
         result = model.predict(board_vector)
         
-        self.assertAlmostEqual(sum(result), 1.0, places=5)
+        self.assertAlmostEqual(sum(result.policy), 1.0, places=5)
     
     def test_predict_consistency(self):
         """相同输入多次预测结果一致"""
@@ -242,7 +242,7 @@ class TestNeuralNetworkModelPredict(unittest.TestCase):
         
         result1 = model.predict(board_vector)
         result2 = model.predict(board_vector)
-        self.assertEqual(result1, result2)
+        self.assertEqual(result1.policy, result2.policy)
 
     def test_exp_log_softmax_equals_softmax(self):
         """T5-02: exp(log_softmax) = softmax，predict 返回值与直接 Softmax 一致"""
@@ -273,7 +273,7 @@ class TestNeuralNetworkModelPredict(unittest.TestCase):
 
         # predict 返回值应与 softmax 一致
         for i in range(225):
-            self.assertAlmostEqual(predict_result[i],
+            self.assertAlmostEqual(predict_result.policy[i],
                                    softmax_output[0, i].item(),
                                    places=5,
                                    msg=f"predict 返回值应与 softmax 一致，位置 {i} 不一致")
@@ -309,7 +309,7 @@ class TestNeuralNetworkModelSaveLoad(unittest.TestCase):
         model2 = DummyModel(model_path=model_path)
         result2 = model2.predict(board_vector)
         
-        self.assertEqual(result1, result2)
+        self.assertEqual(result1.policy, result2.policy)
     
     def test_save_default_path(self):
         """save 不指定路径时使用 DEFAULT_MODEL_PATH"""

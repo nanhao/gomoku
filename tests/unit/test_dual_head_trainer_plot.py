@@ -184,7 +184,7 @@ class TestPlotLossCurve(unittest.TestCase):
         history = self._create_history(epochs=3)
 
         # 通过 monkey-patch MCTS_LOSS_LOG_DIR 指向临时目录
-        import src.config.mcts as mcts_config
+        import config.mcts as mcts_config
         original_dir = mcts_config.MCTS_LOSS_LOG_DIR
         try:
             mcts_config.MCTS_LOSS_LOG_DIR = self._tmpdir
@@ -204,7 +204,7 @@ class TestPlotLossCurve(unittest.TestCase):
         history = self._create_history(epochs=2)
 
         output_subdir = os.path.join(self._tmpdir, "nested", "subdir")
-        import src.config.mcts as mcts_config
+        import config.mcts as mcts_config
         original_dir = mcts_config.MCTS_LOSS_LOG_DIR
         try:
             mcts_config.MCTS_LOSS_LOG_DIR = output_subdir
@@ -221,7 +221,7 @@ class TestPlotLossCurve(unittest.TestCase):
         trainer = self.ConcreteTrainer(model=model)
         history = self._create_history(epochs=3, with_val=True)
 
-        import src.config.mcts as mcts_config
+        import config.mcts as mcts_config
         original_dir = mcts_config.MCTS_LOSS_LOG_DIR
         try:
             mcts_config.MCTS_LOSS_LOG_DIR = self._tmpdir
@@ -236,7 +236,7 @@ class TestPlotLossCurve(unittest.TestCase):
         trainer = self.ConcreteTrainer(model=model)
         history = self._create_history(epochs=3, with_val=False)
 
-        import src.config.mcts as mcts_config
+        import config.mcts as mcts_config
         original_dir = mcts_config.MCTS_LOSS_LOG_DIR
         try:
             mcts_config.MCTS_LOSS_LOG_DIR = self._tmpdir
@@ -274,7 +274,7 @@ class TestPlotLossCurve(unittest.TestCase):
         trainer = self.ConcreteTrainer(model=model)
 
         # 通过 monkey-patch MCTS_LOSS_LOG_DIR 指向临时目录
-        import src.config.mcts as mcts_config
+        import config.mcts as mcts_config
         original_dir = mcts_config.MCTS_LOSS_LOG_DIR
         try:
             mcts_config.MCTS_LOSS_LOG_DIR = self._tmpdir
@@ -318,7 +318,7 @@ class TestPlotLossCurve(unittest.TestCase):
         trainer = self.ConcreteTrainer(model=model)
         history = self._create_history(epochs=3, with_val=True)
 
-        import src.config.mcts as mcts_config
+        import config.mcts as mcts_config
         original_dir = mcts_config.MCTS_LOSS_LOG_DIR
         try:
             mcts_config.MCTS_LOSS_LOG_DIR = self._tmpdir

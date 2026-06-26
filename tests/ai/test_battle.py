@@ -225,7 +225,7 @@ class TestBattleModule(unittest.TestCase):
         self.assertIsInstance(model, RandomModel)
         self.assertEqual(model.name, "random")
         probs = model.predict([0] * 225 + [1])
-        self.assertEqual(len(probs), 225)
+        self.assertEqual(len(probs.policy), 225)
 
     def test_load_model_fc_v1(self):
         """主流程：加载 fc_v1 模型（通过 registry.get_model）"""
@@ -233,7 +233,7 @@ class TestBattleModule(unittest.TestCase):
         self.assertIsInstance(model, FCv1Model)
         self.assertEqual(model.name, "fc_v1")
         probs = model.predict([0] * 225 + [1])
-        self.assertEqual(len(probs), 225)
+        self.assertEqual(len(probs.policy), 225)
 
     def test_load_model_cnn(self):
         """主流程：加载 cnn_v1 模型（通过 registry.get_model）"""
@@ -241,7 +241,7 @@ class TestBattleModule(unittest.TestCase):
         self.assertIsInstance(model, CNNV1Model)
         self.assertEqual(model.name, "cnn_v1")
         probs = model.predict([0] * 225 + [1])
-        self.assertEqual(len(probs), 225)
+        self.assertEqual(len(probs.policy), 225)
 
     def test_load_model_unknown_raises_value_error(self):
         """边缘：加载未知 AI 名称时抛出 ValueError（通过 registry.get_model）"""

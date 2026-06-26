@@ -61,8 +61,8 @@ class TestMoveToDeviceExplicitCPU(unittest.TestCase):
         model = CNNV3Model(fresh=True)
         model.move_to_device(torch.device('cpu'))
         probs = model.predict([0] * 225 + [1])
-        self.assertEqual(len(probs), 225)
-        for p in probs:
+        self.assertEqual(len(probs.policy), 225)
+        for p in probs.policy:
             self.assertGreaterEqual(p, 0.0)
 
     def test_move_to_device_returns_device(self):
@@ -127,7 +127,7 @@ class TestMoveToDeviceEdgeCases(unittest.TestCase):
             model.predict([0] * 225 + [1])
         model.move_to_device(torch.device('cpu'))
         probs = model.predict([0] * 225 + [1])
-        self.assertEqual(len(probs), 225)
+        self.assertEqual(len(probs.policy), 225)
 
 
 if __name__ == '__main__':

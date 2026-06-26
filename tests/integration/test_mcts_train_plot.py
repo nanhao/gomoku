@@ -83,7 +83,7 @@ class TestMCTSTrainingPlot(unittest.TestCase):
         trainer = ConcreteTrainer(model=model)
 
         # 修改输出目录配置指向临时目录
-        import src.config.mcts as mcts_config
+        import config.mcts as mcts_config
         original_dir = mcts_config.MCTS_LOSS_LOG_DIR
         try:
             mcts_config.MCTS_LOSS_LOG_DIR = self.loss_log_dir
@@ -121,7 +121,7 @@ class TestMCTSTrainingPlot(unittest.TestCase):
         model = MockDualHeadModel()
         trainer = ConcreteTrainer(model=model)
 
-        import src.config.mcts as mcts_config
+        import config.mcts as mcts_config
         original_dir = mcts_config.MCTS_LOSS_LOG_DIR
         try:
             mcts_config.MCTS_LOSS_LOG_DIR = self.loss_log_dir
@@ -161,7 +161,7 @@ class TestMCTSTrainingPlot(unittest.TestCase):
 
         # 模拟 matplotlib 不可用：mock 模块级标志
         # 切换 MCTS_LOSS_LOG_DIR 到临时目录，避免污染项目目录
-        import src.config.mcts as mcts_config
+        import config.mcts as mcts_config
         original_dir = mcts_config.MCTS_LOSS_LOG_DIR
         mcts_config.MCTS_LOSS_LOG_DIR = self.loss_log_dir
         try:
@@ -198,7 +198,7 @@ class TestMCTSTrainingPlot(unittest.TestCase):
 
         nested_dir = os.path.join(self.temp_dir, "nested", "loss_logs")
 
-        import src.config.mcts as mcts_config
+        import config.mcts as mcts_config
         original_dir = mcts_config.MCTS_LOSS_LOG_DIR
         try:
             mcts_config.MCTS_LOSS_LOG_DIR = nested_dir
@@ -228,7 +228,7 @@ class TestMCTSTrainingPlot(unittest.TestCase):
 
         trainer = self.CNNV7Trainer(fresh=True)
 
-        import src.config.mcts as mcts_config
+        import config.mcts as mcts_config
         original_dir = mcts_config.MCTS_LOSS_LOG_DIR
         try:
             mcts_config.MCTS_LOSS_LOG_DIR = self.loss_log_dir

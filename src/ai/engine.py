@@ -110,11 +110,12 @@ class AIEngine:
         # 性能优化：支持传入预计算的 probs，避免重复调用 model.predict
         if probs is None:
             result = self.model.predict(board_vector)
-            # 兼容单头模型（返回 225 维列表）和双头模型（返回 (列表, 价值) 元组）
-            if isinstance(result, tuple):
-                probs = result[0]
-            else:
-                probs = result
+            # 统一通过 ModelPredict 取策略概率
+            probs = result.policy
+
+        # 兼容：如果 probs 是 ModelPredict 对象，提取 .policy
+        if hasattr(probs, 'policy'):
+            probs = probs.policy
 
         # 3. 构建位置-概率列表，排除已有棋子的位置
         valid_positions = []

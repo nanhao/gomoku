@@ -26,6 +26,7 @@ if project_root not in sys.path:
 
 import torch
 from game.game import check_winner, is_board_full
+from ai.base_model import ModelPredict
 
 
 # ---------- Mock 模型：返回固定策略和价值 ----------
@@ -49,7 +50,7 @@ class MockModel:
         if policy is None:
             # 默认均匀分布
             policy = [1.0 / 225] * 225
-        return policy, self._fixed_value
+        return ModelPredict(policy=policy, value=self._fixed_value)
 
     def set_policy(self, policy):
         """设置固定策略"""

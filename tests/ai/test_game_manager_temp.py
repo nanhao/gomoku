@@ -23,6 +23,7 @@ if project_root not in sys.path:
 from game import GomokuController
 from ai.engine import AIEngine, STRATEGY_ARGMAX, STRATEGY_SAMPLING
 from ai.game_manager import AIGameManager
+from ai.base_model import ModelPredict
 from ai.move_sampler import (
     TempConfig,
     TEMP_SIDE_BLACK,
@@ -48,7 +49,7 @@ class _SpyModel:
 
     def predict(self, board_vector):
         self.predict_call_count += 1
-        return [1.0 / 225] * 225
+        return ModelPredict(policy=[1.0 / 225] * 225)
 
 
 class _SpyEngine(AIEngine):

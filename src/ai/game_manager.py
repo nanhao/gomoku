@@ -202,8 +202,8 @@ class AIGameManager:
             # 性能优化：只调用一次 model.predict，结果同时用于记录和落子
             board_vector = AIEngine.board_to_vector(board, player)
             result = engine.model.predict(board_vector)
-            # 兼容单头模型（返回 225 维列表）和双头模型（返回 (列表, 价值) 元组）
-            probs = result[0] if isinstance(result, tuple) else result
+            # 统一通过 ModelPredict 取策略概率
+            probs = result.policy
 
             # 判定本步是否启用温度采样
             use_temp = (

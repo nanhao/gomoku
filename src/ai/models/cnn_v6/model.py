@@ -22,7 +22,7 @@ from typing import List
 import torch
 import torch.nn as nn
 
-from ai.base_model import NeuralNetworkModel, board_vector_to_cnn_tensor
+from ai.base_model import NeuralNetworkModel, board_vector_to_cnn_tensor, ModelPredict
 
 
 class CNNV6Network(nn.Module):
@@ -144,7 +144,7 @@ class CNNV6Model(NeuralNetworkModel):
         """
         return board_vector_to_cnn_tensor(board_vector, device)
 
-    def predict(self, board_vector: List[int]):
+    def predict(self, board_vector: List[int]) -> "ModelPredict":
         """预测落子概率
 
         Args:
@@ -152,7 +152,7 @@ class CNNV6Model(NeuralNetworkModel):
                          最后 1 位是当前落子方（1=黑, 2=白）
 
         Returns:
-            225 维落子概率列表，值域 (0, 1)，总和为 1
+            ModelPredict 对象，type=TYPE_POLICY_ONLY，value=None
         """
         device = next(self.network.parameters()).device
         input_tensor = self._prepare_input(board_vector, device)
@@ -163,4 +163,4 @@ class CNNV6Model(NeuralNetworkModel):
 
         # 策略：LogSoftmax → exp 还原为概率
         policy_probs = policy_tensor.squeeze(0).exp().tolist()
-        return [float(p) for p in policy_probs]
+        return ModelPredict(policy=[float(p) for p in policy_probs])

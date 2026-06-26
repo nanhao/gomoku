@@ -44,9 +44,9 @@ class TestCreateEngineNoFallback:
         assert len(vector) == 226
 
         probs = engine.model.predict(vector)
-        assert len(probs) == 225, f"predict 应返回 225 维，实际 {len(probs)}"
-        assert all(p >= 0 for p in probs), "概率分布不得为负"
-        assert sum(probs) > 0, "概率分布总和必须为正，否则无法采样"
+        assert len(probs.policy) == 225, f"predict 应返回 225 维，实际 {len(probs.policy)}"
+        assert all(p >= 0 for p in probs.policy), "概率分布不得为负"
+        assert sum(probs.policy) > 0, "概率分布总和必须为正，否则无法采样"
 
         # 端到端：get_move 返回合法落子位置
         x, y = engine.get_move(empty_board, current_player=1)

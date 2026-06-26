@@ -21,6 +21,99 @@ import torch
 import torch.nn as nn
 
 
+# ---- ModelPredict：predict() 返回值统一封装 ----
+
+class ModelPredict:
+    """模型预测结果统一封装
+
+    统一所有模型的 predict() 返回值，消除当前返回类型不一致的问题：
+    - 单头模型（random/fc/cnn v1-6）：仅预测概率分布
+    - 双头模型（cnn_v7）：同时预测概率分布 + 局面评估
+
+    通过 type 字段区分：
+    - TYPE_POLICY_ONLY：仅包含策略概率分布
+    - TYPE_POLICY_VALUE：包含策略概率分布 + 局面价值评估
+
+    支持元组解包：
+        result = model.predict(board_vector)
+        policy, value = result  # 兼容旧代码
+
+    Attributes:
+        policy: 225 维落子概率列表，值域 (0, 1)，总和为 1
+        value: 局面价值评估（可选），值域 [-1, 1]，仅 TYPE_POLICY_VALUE 时有效
+        type: 结果类型标识，取值为 TYPE_POLICY_ONLY 或 TYPE_POLICY_VALUE
+    """
+
+    # 类型常量
+    TYPE_POLICY_ONLY = "policy_only"
+    TYPE_POLICY_VALUE = "policy_value"
+
+    # 标准 policy 维度
+    POLICY_DIM = 225
+
+    def __init__(self, policy: List[float], value: Optional[float] = None):
+        """创建预测结果
+
+        Args:
+            policy: 225 维落子概率分布，值域 (0, 1)，总和为 1
+            value: 局面价值评估，None 表示无价值头输出
+
+        Raises:
+            ValueError: policy 长度不为 225
+        """
+        # 校验 policy 维度
+        if len(policy) != self.POLICY_DIM:
+            raise ValueError(
+                f"policy 长度必须为 {self.POLICY_DIM}，实际为 {len(policy)}"
+            )
+
+        self._policy = policy
+        self._value = value
+        self._type = self.TYPE_POLICY_VALUE if value is not None else self.TYPE_POLICY_ONLY
+
+    @property
+    def policy(self) -> List[float]:
+        """225 维落子概率分布"""
+        return self._policy
+
+    @property
+    def value(self) -> Optional[float]:
+        """局面价值评估，TYPE_POLICY_ONLY 时为 None"""
+        return self._value
+
+    @property
+    def type(self) -> str:
+        """结果类型：TYPE_POLICY_ONLY 或 TYPE_POLICY_VALUE"""
+        return self._type
+
+    # ---- 元组解包支持（兼容旧代码） ----
+
+    def __iter__(self):
+        """支持元组解包：policy, value = result"""
+        yield self._policy
+        yield self._value
+
+    def __getitem__(self, index):
+        """支持下标访问：result[0] = policy, result[1] = value"""
+        if index == 0:
+            return self._policy
+        elif index == 1:
+            return self._value
+        raise IndexError(f"ModelPredict 索引 {index} 超出范围（仅支持 0 和 1）")
+
+    def __len__(self):
+        """固定长度为 2（policy + value）"""
+        return 2
+
+    def __repr__(self):
+        """调试输出"""
+        p_len = len(self._policy)
+        if self._value is not None:
+            return (f"ModelPredict(type={self._type!r}, policy_len={p_len}, "
+                    f"value={self._value:.4f})")
+        return f"ModelPredict(type={self._type!r}, policy_len={p_len})"
+
+
 class BaseModel(ABC):
     """AI 模型基类
     
@@ -36,7 +129,7 @@ class BaseModel(ABC):
     """
     
     @abstractmethod
-    def predict(self, board_vector: List[int]) -> List[float]:
+    def predict(self, board_vector: List[int]) -> "ModelPredict":
         """
         预测每个落子位置的概率
         
@@ -45,9 +138,10 @@ class BaseModel(ABC):
                          最后 1 位是当前落子方（1=黑, 2=白）
             
         Returns:
-            225 维列表，格式为 [prob(0,0), prob(0,1), ..., prob(14,14)]
-            元素索引 i 对应棋盘位置 (i//15, i%15)，概率范围：0 <= prob <= 1
-            所有概率之和为 1（LogSoftmax + exp 还原）
+            ModelPredict 对象：
+            - policy: 225 维概率分布，值域 (0, 1)，总和为 1
+            - value: 局面价值评估（仅双头模型），单头模型为 None
+            - type: 结果类型，TYPE_POLICY_ONLY 或 TYPE_POLICY_VALUE
         """
         pass
     
@@ -204,23 +298,21 @@ class NeuralNetworkModel(BaseModel):
         """
         pass
     
-    def predict(self, board_vector: List[int]) -> List[float]:
+    def predict(self, board_vector: List[int]) -> "ModelPredict":
         """预测每个落子位置的概率
         
         通用前向传播流程：
         1. 获取网络所在设备
         2. 将输入转换为张量并移到对应设备
         3. 前向传播（eval 模式，禁用梯度）
-        4. 将输出转换为列表返回
+        4. 将输出封装为 ModelPredict 返回
             
         Args:
             board_vector: 226 维向量，前 225 位是棋盘（按行展开，0=空, 1=黑, 2=白），
                          最后 1 位是当前落子方（1=黑, 2=白）
                 
         Returns:
-            225 维列表，格式为 [prob(0,0), prob(0,1), ..., prob(14,14)]
-            索引 i 对应位置 (i//15, i%15)，概率范围：0 < prob < 1
-            所有概率之和为 1（LogSoftmax + exp 还原）
+            ModelPredict 对象，type=TYPE_POLICY_ONLY，value=None
         """
         # 获取设备（与网络所在设备一致）
         device = next(self.network.parameters()).device
@@ -237,9 +329,9 @@ class NeuralNetworkModel(BaseModel):
         output_values = output_tensor.squeeze(0).exp().tolist()
             
         # 构建 225 维结果，索引 i 对应位置 (i//15, i%15)
-        result = [float(prob) for prob in output_values]
+        policy = [float(prob) for prob in output_values]
             
-        return result
+        return ModelPredict(policy=policy)
     
     def save(self, model_path: str = None) -> str:
         """保存模型参数

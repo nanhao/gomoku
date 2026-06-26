@@ -239,7 +239,9 @@ class MCTSSearcher:
             self._root_hash = root_hash
 
             # 模型预测
-            policy, value = self.model.predict(state)
+            predict_result = self.model.predict(state)
+            policy = predict_result.policy
+            value = predict_result.value
 
             # 创建根节点
             self.tree[root_hash] = {
@@ -467,7 +469,9 @@ class MCTSSearcher:
                 continue
 
             bv = leaf["board"] + [leaf["player"]]
-            policy, value = self.model.predict(bv)
+            predict_result = self.model.predict(bv)
+            policy = predict_result.policy
+            value = predict_result.value
             leaf["policy"] = policy
             leaf["value"] = value
 

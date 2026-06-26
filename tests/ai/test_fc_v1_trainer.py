@@ -334,9 +334,9 @@ class TestFCv1TrainerFreshParameter(_DefaultModelPathIsolatedMixin, unittest.Tes
 
         trainer = FCv1Trainer()
         result2 = trainer.model.predict(board_vector)
-        self.assertEqual(len(result1), len(result2))
+        self.assertEqual(len(result1.policy), len(result2.policy))
         # 随机初始化模型预测结果应不同于已保存模型
-        self.assertNotEqual(result1, result2,
+        self.assertNotEqual(result1.policy, result2.policy,
             "不传 fresh 时应创建随机模型，不应加载 DEFAULT_MODEL_PATH")
 
     def test_trainer_with_model_parameter(self):
@@ -349,8 +349,8 @@ class TestFCv1TrainerFreshParameter(_DefaultModelPathIsolatedMixin, unittest.Tes
         result2 = trainer.model.predict(board_vector)
 
         self.assertIs(trainer.model, custom_model)
-        self.assertEqual(len(result1), len(result2))
-        for r1, r2 in zip(result1, result2):
+        self.assertEqual(len(result1.policy), len(result2.policy))
+        for r1, r2 in zip(result1.policy, result2.policy):
             self.assertAlmostEqual(r1, r2, places=5)
 
     def test_trainer_fresh_with_sample_dir(self):

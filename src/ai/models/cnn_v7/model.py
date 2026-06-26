@@ -25,7 +25,7 @@ from typing import List
 import torch
 import torch.nn as nn
 
-from ai.base_model import NeuralNetworkModel, board_vector_to_cnn_tensor_relative
+from ai.base_model import NeuralNetworkModel, board_vector_to_cnn_tensor_relative, ModelPredict
 
 
 class CNNV7Network(nn.Module):
@@ -161,7 +161,7 @@ class CNNV7Model(NeuralNetworkModel):
         """
         return board_vector_to_cnn_tensor_relative(board_vector, device)
 
-    def predict(self, board_vector: List[int]):
+    def predict(self, board_vector: List[int]) -> "ModelPredict":
         """预测落子概率和局面价值
 
         CNN v7 覆盖基类 predict，处理双头输出（策略 + 价值）。
@@ -171,9 +171,9 @@ class CNNV7Model(NeuralNetworkModel):
                          最后 1 位是当前落子方（1=黑, 2=白）
 
         Returns:
-            (List[float], float) 元组：
-            - 第一个元素：225 维落子概率列表，值域 (0, 1)，总和为 1
-            - 第二个元素：价值标量，值域 [-1, 1]，从当前落子方视角评估胜率
+            ModelPredict 对象，type=TYPE_POLICY_VALUE：
+            - policy: 225 维落子概率列表，值域 (0, 1)，总和为 1
+            - value: 价值标量，值域 [-1, 1]，从当前落子方视角评估胜率
         """
         device = next(self.network.parameters()).device
         input_tensor = self._prepare_input(board_vector, device)
@@ -189,4 +189,4 @@ class CNNV7Model(NeuralNetworkModel):
         # 价值：标量
         value_result = float(value_tensor.squeeze().item())
 
-        return policy_result, value_result
+        return ModelPredict(policy=policy_result, value=value_result)
