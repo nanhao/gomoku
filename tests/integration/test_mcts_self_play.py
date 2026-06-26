@@ -71,7 +71,10 @@ class TestMCTSSelfPlayIntegration(unittest.TestCase):
 
         while move_count < 225:
             state = board + [current_player]
-            action, visit_counts, log_path, root_policy = decider.decide(state)
+            md = decider.get_move(state)
+            x, y = md.get_position()
+            action = x * 15 + y
+            visit_counts = md.get_mcts_visit_counts()
 
             # 验证 action 合法
             self.assertGreaterEqual(action, 0)

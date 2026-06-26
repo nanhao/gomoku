@@ -1,7 +1,7 @@
 """MCTSMoveDecider 单元测试
 
 测试 MCTS 落子决策器：
-- decide 返回 (action, visit_counts, log_path, root_policy)
+- get_move 返回 MoveDecision（含 position 和 mcts_visit_counts）
 - make_move 子树复用
 - 温度选择
 """
@@ -79,42 +79,48 @@ class TestMCTSMoveDecider(unittest.TestCase):
         board.append(player)
         return board
 
-    def test_decide_returns_four_tuple(self):
-        """decide 返回 4 元组 (action, visit_counts, log_path, root_policy)"""
+    def test_get_move_returns_move_decision(self):
+        """get_move 返回 MoveDecision 实例，含 position 和 mcts_visit_counts"""
+        from ai.engine import MoveDecision
         mock_searcher = MockSearcher()
         decider = self.MCTSMoveDecider(mock_searcher)
         state = self._make_state()
-        result = decider.decide(state)
+        result = decider.get_move(state)
 
-        self.assertIsInstance(result, tuple)
-        self.assertEqual(len(result), 4)
-        action, visit_counts, log_path, root_policy = result
-        self.assertIsInstance(action, int)
-        self.assertGreaterEqual(action, 0)
-        self.assertLess(action, 225)
+        self.assertIsInstance(result, MoveDecision)
+        x, y = result.get_position()
+        self.assertIsInstance(x, int)
+        self.assertIsInstance(y, int)
+        self.assertGreaterEqual(x, 0)
+        self.assertLess(x, 15)
+        self.assertGreaterEqual(y, 0)
+        self.assertLess(y, 15)
+        visit_counts = result.get_mcts_visit_counts()
         self.assertIsInstance(visit_counts, list)
         self.assertEqual(len(visit_counts), 225)
-        if log_path is not None:
-            self.assertIsInstance(log_path, str)
-        self.assertIsInstance(root_policy, list)
-        self.assertEqual(len(root_policy), 225)
+        # 验证 flat index = x * 15 + y
+        action = x * 15 + y
+        self.assertGreaterEqual(action, 0)
+        self.assertLess(action, 225)
 
-    def test_decide_selects_legal_action(self):
-        """decide 返回的 action 应在空位中"""
+    def test_get_move_selects_legal_action(self):
+        """get_move 返回的 position 应在空位中"""
         mock_searcher = MockSearcher()
         decider = self.MCTSMoveDecider(mock_searcher)
         state = self._make_state()
-        action, _, _, _ = decider.decide(state)
+        md = decider.get_move(state)
+        x, y = md.get_position()
+        action = x * 15 + y
         # 检查 action 对应位置是空位
         board = state[:225]
-        self.assertEqual(board[action], 0, f"action {action} 应在空位上")
+        self.assertEqual(board[action], 0, f"action ({x},{y}) 应在空位上")
 
-    def test_decide_with_log_key(self):
-        """decide 透传 log_key 给 searcher"""
+    def test_get_move_with_log_key(self):
+        """get_move 透传 log_key 给 searcher"""
         mock_searcher = MockSearcher()
         decider = self.MCTSMoveDecider(mock_searcher)
         state = self._make_state()
-        decider.decide(state, log_key="game0_move5")
+        decider.get_move(state, log_key="game0_move5")
         self.assertEqual(len(mock_searcher.search_calls), 1)
         self.assertEqual(mock_searcher.search_calls[0]["log_key"], "game0_move5")
 
@@ -134,8 +140,9 @@ class TestMCTSMoveDecider(unittest.TestCase):
         # 多次调用检查结果可能不同（但不强求，概率性的）
         actions = set()
         for _ in range(10):
-            action, _, _, _ = decider.decide(state)
-            actions.add(action)
+            md = decider.get_move(state)
+            x, y = md.get_position()
+            actions.add(x * 15 + y)
         # 在温度=1.0时大概率探索多个位置
         # 至少能返回有效 action
         self.assertGreater(len(actions), 0)
@@ -151,8 +158,9 @@ class TestMCTSMoveDecider(unittest.TestCase):
         state = self._make_state()
         # 把 100 设为空位
         state[100] = 0
-        action, _, _, _ = decider.decide(state)
-        self.assertEqual(action, 100)
+        md = decider.get_move(state)
+        x, y = md.get_position()
+        self.assertEqual(x * 15 + y, 100)
 
     def test_make_move_failure_handling(self):
         """advance_root 失败时的处理"""

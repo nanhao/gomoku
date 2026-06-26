@@ -6,16 +6,16 @@
 
 import math
 import random
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
-from config.mcts import MCTS_LOG_ENABLED, MCTS_LOG_DIR
+from ai.engine import MoveDecision
 
 
 class MCTSMoveDecider:
     """MCTS 落子决策器
 
     封装 MCTSSearcher，提供高层次的落子决策 API：
-    - decide(): 搜索 + 温度选择 + 日志路径
+    - get_move(): 搜索 + 温度选择 + 返回 MoveDecision
     - make_move(): 子树复用
 
     不继承/不修改 AIEngine，独立实现。
@@ -41,29 +41,27 @@ class MCTSMoveDecider:
 
     # ---------- 公共 API ----------
 
-    def decide(
+    def get_move(
         self,
         state: List[int],
         log_key: Optional[str] = None,
-    ) -> Tuple[int, List[int], Optional[str], List[float]]:
+    ) -> MoveDecision:
         """对给定状态做出落子决策
 
         流程：
         1. 调用 searcher.search() 执行 MCTS
         2. 根据温度和步数计算 π 分布
         3. 按 π 分布采样落子（或贪婪选择）
-        4. 返回 (action, visit_counts, log_path, root_policy)
+        4. 返回 MoveDecision（含 position 和 mcts_visit_counts）
 
         Args:
             state: 226 维 board_vector
             log_key: 日志标识，透传给 searcher.search()
 
         Returns:
-            (action, visit_counts, log_path, root_policy)：
-            - action: 0-224 扁平索引
-            - visit_counts: 225 维原始访问计数
-            - log_path: 日志文件路径（禁用时 None）
-            - root_policy: 根节点原始策略分布（施加噪声前）
+            MoveDecision 实例，包含：
+            - position: (x, y) 落子坐标
+            - mcts_visit_counts: 225 维原始访问计数
         """
         # MCTS 搜索
         visit_counts, root_value, root_policy = self.searcher.search(
@@ -81,12 +79,10 @@ class MCTSMoveDecider:
             # 温度采样
             action = self._sample_action(visit_counts, state[:225], tau)
 
-        # 计算日志路径
-        log_path = None
-        if MCTS_LOG_ENABLED and log_key is not None:
-            log_path = f"{MCTS_LOG_DIR}/{log_key}.json"
+        # 转换 flat index 为 (x, y) 坐标
+        x, y = action // 15, action % 15
 
-        return action, visit_counts, log_path, root_policy
+        return MoveDecision(x, y, mcts_visit_counts=visit_counts)
 
     def make_move(self, action: int):
         """执行落子，复用子树

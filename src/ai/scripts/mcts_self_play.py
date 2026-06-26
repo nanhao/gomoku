@@ -179,7 +179,10 @@ def play_one_game(model, device, hyperparams: dict, game_idx: int, run_id: str) 
 
         # MCTS 搜索 + 决策
         log_key = f"run{run_id}_game{game_idx}_step{uuid.uuid4().hex[:8]}"
-        action, visit_counts, log_path, root_policy = decider.decide(state, log_key=log_key)
+        md = decider.get_move(state, log_key=log_key)
+        x, y = md.get_position()
+        action = x * 15 + y
+        visit_counts = md.get_mcts_visit_counts()
 
         # 计算 π 分布（τ=1.0 归一化）
         total_visits = sum(visit_counts)

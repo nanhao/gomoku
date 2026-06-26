@@ -198,5 +198,5 @@ now that you have ModeDecision, you can put probs info in the return of AiEngine
 refactor MCTSMoveDecider.decide():
 1, change the function name to get_move
 2, change the return type to MoveDecision
-3, put the position and the mcts_visit_counts into the move_decision
+3, put the position and the mcts_visit_counts into the move_decision. you should add a _mcts_visit_counts field into the MoveDecision
 use TDD to do this refactor
