@@ -90,7 +90,7 @@ python src/ai/battle.py --ai1 fc_v1 --ai2 cnn_v2 --games 20 --temperature 2.0
 python src/ai/battle.py --ai1 cnn_v3.1 --ai2 cnn_v3.2 --games 10 --temp-seed 42
 
 # 组合使用
-python src/ai/battle.py --ai1 cnn_v3.1 --ai2 cnn_v3.2 --games 100 --temperature 0.8 --temp-moves 8 --temp-side random --temp-seed 2026
+python src/ai/battle.py --ai1 cnn_v3.1 --ai2 cnn_v3.2 --games 100 --temperature 2 --temp-moves 2 --temp-side both
 ```
 
 ### 模型训练
@@ -319,7 +319,7 @@ python src/ai/scripts/mcts_self_play.py --model src/ai/models/cnn_v7/cnn_v7.pth 
 # 示例：自定义模拟次数和输出目录
 python src/ai/scripts/mcts_self_play.py --model cnn_v7.pth --games 50 --simulations 400 --output my_samples
 
-python src/ai/scripts/mcts_self_play.py --model cnn_v7.pth --games 2000 --simulations 100 --output samples/mcts/1 --temp-steps 100
+python src/ai/scripts/mcts_self_play.py --model src/ai/models/cnn_v7/gen1/cnn_v7.pth --games 2000 --simulations 100 --output samples/7/v1 --temp-steps 100
 ```
 
 #### MCTS 训练
@@ -350,7 +350,7 @@ python src/ai/scripts/mcts_train.py --model <权重路径> --train-from-dir <数
 python src/ai/scripts/mcts_train.py --model cnn_v7.pth --train-from-dir my_samples --epochs 100
 
 # 示例：指定输出路径和验证集比例
-python src/ai/scripts/mcts_train.py --model cnn_v7.pth --train-from-dir my_samples --epochs 200 --output cnn_v7_trained.pth --val-split 0.2
+python src/ai/scripts/mcts_train.py --model src/ai/models/cnn_v7/gen1/cnn_v7.pth --train-from-dir samples/7/v2 --epochs 300 --output src/ai/models/cnn_v7/gen2/cnn_v7.pth --val-split 0.1
 ```
 
 ### 迭代进化训练

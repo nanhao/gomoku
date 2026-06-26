@@ -417,7 +417,7 @@ class DualHeadTrainer(ABC):
             return None
 
         # 读取输出目录配置
-        from src.config.mcts import MCTS_LOSS_LOG_DIR
+        from config.mcts import MCTS_LOSS_LOG_DIR
         output_dir = MCTS_LOSS_LOG_DIR
         os.makedirs(output_dir, exist_ok=True)
 

@@ -1,0 +1,154 @@
+@startuml tools_interaction
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam sequenceMessageAlign center
+
+' 中文字体配置
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title Tools 模块核心交互流程 — Web 采样工具
+
+' ============================================================
+' 参与者定义（名称与 tools-pkg-deps.svg 节点名完全一致）
+' ============================================================
+
+actor "用户\n(浏览器)" as User
+
+box "tools 包内部模块" #LightYellow
+    participant "create_samples_tool\n——\nFlask 应用\napp.py" as app
+    participant "executor\n——\n子进程执行器" as executor
+    participant "data_parser\n——\n数据解析器" as data_parser
+end box
+
+box "外部依赖" #LightBlue
+    participant "子进程\n(ai/create_samples.py)" as subprocess
+    participant "ai.registry\n(模型注册表)" as registry
+end box
+
+' ============================================================
+' 流程 1：模型列表查询
+' ============================================================
+
+== 流程 1：获取可用模型列表 ==
+
+User -> app : GET /api/create-samples/models
+activate app
+
+app -> subprocess : **子进程调用**\npython -c "from ai.registry import list_models_with_full_name;\nprint(json.dumps(list_models_with_full_name()))"
+activate subprocess
+
+subprocess -> registry : list_models_with_full_name()
+activate registry
+registry --> subprocess : ["cnn_v4.100", "cnn_v5.200", ...]
+deactivate registry
+
+subprocess --> app : JSON 模型列表 (stdout)
+deactivate subprocess
+
+app -> app : json.loads(stdout)\n构造 {"models": [...]}
+app --> User : 200 JSON: {models: [...]}
+deactivate app
+
+' ============================================================
+' 流程 2：样本生成执行
+' ============================================================
+
+== 流程 2：执行样本生成 ==
+
+User -> app : POST /api/create-samples/execute\n{model, output, games, temperature, ...}
+activate app
+
+app -> executor : execute(params, project_root, ai_data_dir)
+activate executor
+
+' --- 步骤 2a：记录执行前状态 ---
+executor -> executor : _scan_dir_names(ai_data_dir)\n→ S_before (目录名集合)
+
+' --- 步骤 2b：构造 CLI 命令 ---
+executor -> executor : build_cli_command(params)\n→ ["python", "ai/create_samples.py",\n   "--model", "cnn_v4.100", "--output", "sample.json", ...]
+
+' --- 步骤 2c：启动子进程 ---
+executor -> subprocess : **子进程调用**\nsubprocess.Popen(cmd_parts,\n  cwd=project_root, shell=False)
+activate subprocess
+
+subprocess -> subprocess : 执行 ai/create_samples.py\n(模型推理 + 自对弈 + 样本生成)
+
+subprocess --> executor : output_text + returncode
+deactivate subprocess
+
+' --- 步骤 2d：发现 round_dir ---
+executor -> executor : discover_round_dir(ai_data_dir, S_before)\n→ S_after - S_before 差集\n→ round_dir 相对路径
+
+' --- 步骤 2e：扫描对局列表 ---
+executor -> data_parser : scan_round_dir(round_dir_abs)
+activate data_parser
+
+data_parser -> data_parser : 扫描数字子目录\n解析每局 record.json\n→ winner / temp_side / total_steps
+
+data_parser --> executor : [{game_id, winner, temp_side, ...}, ...]
+deactivate data_parser
+
+executor --> app : {status: "completed", command, output,\n  round_dir, games: [...]}
+deactivate executor
+
+app --> User : 200 JSON: 执行结果 + 对局列表
+deactivate app
+
+' ============================================================
+' 流程 3：对局步数据查询
+' ============================================================
+
+== 流程 3：获取对局步数据 ==
+
+User -> app : GET /api/create-samples/games/<id>/steps\n?round_dir=...&sample_path=...
+activate app
+
+app -> data_parser : parse_game_steps(round_dir, game_id, sample_path)
+activate data_parser
+
+data_parser -> data_parser : 读取 record.json\n解析 history 列表
+
+alt 有样本文件
+    data_parser -> data_parser : 读取 sample.json\nmatch_samples(history, samples)\n→ {step_index: sample_output}
+end
+
+data_parser -> data_parser : 构建步数据列表\n[{step_index, player, move_position,\n  board, raw_output, sampling_probs, ...}]
+
+data_parser --> app : {game_id, winner, steps: [...]}
+deactivate data_parser
+
+app --> User : 200 JSON: 步数据详情
+deactivate app
+
+' ============================================================
+' 错误处理
+' ============================================================
+
+== 错误处理流程 ==
+
+group 子进程失败 (returncode != 0)
+    executor --> app : {status: "error", command, output, returncode}
+    app --> User : 500 JSON: 含 stderr 错误信息
+end
+
+group 数据解析失败
+    data_parser -> data_parser : FileNotFoundError / JSONDecodeError
+    data_parser --> app : 异常传播
+    app --> User : 404 / 500 JSON: 错误详情
+end
+
+' ============================================================
+' 依赖关系说明
+' ============================================================
+
+note across
+  <b>模块依赖关系（与 tools-pkg-deps.svg 一致）</b>
+  • app → executor, data_parser
+  • executor → data_parser (scan_round_dir)
+  • data_parser：纯数据解析，无内部依赖
+  • 子进程隔离：app 通过 subprocess 间接调用 ai 包，不直接 import ai
+  • 静态文件：app 通过 Flask static_folder 服务 index.html
+end note
+
+@enduml

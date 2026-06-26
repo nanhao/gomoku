@@ -1,0 +1,138 @@
+@startuml visualization_interaction
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam sequenceMessageAlign center
+
+' 中文字体配置
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title Visualization 模块核心交互流程 — 热力图颜色映射
+
+' ============================================================
+' 参与者定义
+' ============================================================
+
+box "可视化层" #LightGreen
+    participant "heatmap_color\n——\n热力图颜色映射" as heatmap
+end box
+
+box "调用方" #LightYellow
+    participant "gui\n(ReplayWindow)" as gui
+    participant "ai\n(sample_visualizer)" as ai
+    participant "其他脚本\n(analyze_*.py)" as scripts
+end box
+
+' ============================================================
+' 流程 1：归一化 → 颜色映射（核心 API 调用链）
+' ============================================================
+
+== 流程 1：核心 API 调用链（归一化 + 颜色映射）==
+
+group 组合 API（最常用路径）
+    gui -> heatmap : rewards_to_rgba(rewards, mode="log", alpha=0.75)
+    activate heatmap
+
+    heatmap -> heatmap : normalize_rewards(rewards, mode="log")
+
+    alt mode == "log"（默认）
+        heatmap -> heatmap : K = 1/max_r\nscaled[i] = log1p(r[i] * K)\n归一化到 [0, 1]
+    else mode == "max"
+        heatmap -> heatmap : scaled[i] = r[i] / max_r
+    else mode == "linear"
+        heatmap -> heatmap : scaled[i] = (r[i] - min) / (max - min)
+    end
+
+    loop 每个位置 i
+        heatmap -> heatmap : value_to_rgb(normalized[i], color_stops)
+        heatmap -> heatmap : 色节点等距线性插值\n白→黄→橙→红 (DEFAULT_COLOR_STOPS)
+    end
+
+    heatmap --> gui : [(r, g, b, alpha), ...] 225 个 RGBA 元组
+    deactivate heatmap
+end
+
+' ============================================================
+' 流程 2：分步调用（高级用例）
+' ============================================================
+
+== 流程 2：分步调用（需要中间结果时）==
+
+group 归一化（获取中间值）
+    ai -> heatmap : normalize_rewards(rewards, mode="max")
+    activate heatmap
+    heatmap --> ai : [0.0, 0.3, 1.0, 0.1, ...] 归一化 [0, 1] 数组
+    deactivate heatmap
+end
+
+group 单值颜色映射
+    ai -> heatmap : value_to_rgb(0.75, custom_stops)
+    activate heatmap
+
+    heatmap -> heatmap : _clamp01(0.75)\n确定色段 idx = int(v / seg_len)\n相邻色节点线性插值 RGB
+
+    heatmap --> ai : (1.0, 0.55, 0.0) 橙色
+    deactivate heatmap
+end
+
+' ============================================================
+' 流程 3：GUI 回放热力图渲染
+' ============================================================
+
+== 流程 3：GUI 回放中的热力图渲染 ==
+
+gui -> gui : 用户浏览回放，选某一手
+
+gui -> heatmap : normalize_rewards(sampling_probs, mode="log")
+activate heatmap
+
+heatmap -> heatmap : log(1 + r*K) / log(1 + max*K)\n极端分布下提升次高位辨识度
+
+heatmap --> gui : 归一化概率 [0, 1] 数组
+deactivate heatmap
+
+gui -> heatmap : rewards_to_rgba(normalized, mode="log")
+activate heatmap
+
+heatmap -> heatmap : 每个位置映射为 RGBA\n白(低) → 黄 → 橙 → 红(高)
+
+heatmap --> gui : RGBA 颜色数组
+deactivate heatmap
+
+gui -> gui : Canvas 上逐格绘制热力图叠加层
+
+' ============================================================
+' 流程 4：脚本分析场景
+' ============================================================
+
+== 流程 4：分析脚本中的用法 ==
+
+scripts -> heatmap : value_to_rgb(single_value)
+activate heatmap
+
+heatmap -> heatmap : _clamp01(value)\n→ 分段线性插值
+
+heatmap --> scripts : (r, g, b) 三元组
+deactivate heatmap
+
+scripts -> scripts : 直接绘图 / 日志输出
+
+' ============================================================
+' 内部函数调用关系
+' ============================================================
+
+note across
+  <b>heatmap_color 内部函数调用关系</b>
+  • rewards_to_rgba() → normalize_rewards() + value_to_rgb()
+  • value_to_rgb() → _clamp01()
+  • normalize_rewards() → 纯数学计算（log1p / max / min）
+  • _clamp01() → 边界截断 [0, 1]
+
+  <b>设计原则</b>
+  • 纯函数，无 UI 依赖（不 import matplotlib / tkinter）
+  • 色板可配置：DEFAULT_COLOR_STOPS = 白→黄→橙→红
+  • 默认 log 模式：专为 softmax 极端分布设计
+  • 3 种归一化模式：log / max / linear
+end note
+
+@enduml
