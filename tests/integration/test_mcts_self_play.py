@@ -81,23 +81,25 @@ class TestMCTSSelfPlayIntegration(unittest.TestCase):
             self.assertLess(action, 225)
             self.assertEqual(board[action], 0, f"Action {action} is not empty")
 
-            # 落子
+            # 落子到棋盘
             board[action] = current_player
 
             # 记录样本
             pi = [c / sum(visit_counts) if sum(visit_counts) > 0 else 0 for c in visit_counts]
             samples.append({"state": state, "pi": pi, "z": 0})  # z 待填入
 
+            # 终局判定
+            winner = check_winner(board, action)
+            is_terminal = (winner != 0) or is_board_full(board)
+
+            if is_terminal:
+                decider.reset()  # 终局无需子树复用
+                if winner == 0:
+                    winner = 0  # 平局
+                break
+
             # 子树复用
             decider.make_move(action)
-
-            # 检查终局
-            winner = check_winner(board, action)
-            if winner != 0:
-                break
-            if is_board_full(board):
-                winner = 0  # 平局
-                break
 
             # 切换玩家
             current_player = 2 if current_player == 1 else 1

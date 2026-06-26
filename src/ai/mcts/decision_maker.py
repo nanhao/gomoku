@@ -88,18 +88,26 @@ class MCTSMoveDecider:
         """执行落子，复用子树
 
         调用 searcher.advance_root(action) 将子节点提升为新根。
-        失败时 reset 搜索树。
+        失败时抛出 RuntimeError（非预期异常状态）。
+        终局时调用方应使用 reset() 而非 make_move。
 
         Args:
             action: 落子位置 0-224
+
+        Raises:
+            RuntimeError: 子树推进失败
         """
         self._step_count += 1
         success = self.searcher.advance_root(action)
         if not success:
-            self.searcher.reset()
+            raise RuntimeError(
+                f"MCTSMoveDecider.make_move({action}): advance_root failed. "
+                f"The child node for action {action} does not exist in the search tree. "
+                f"This indicates an unexpected state — the action should have been visited during search."
+            )
 
     def reset(self):
-        """重置决策器状态"""
+        """重置决策器状态（终局时调用，无需子树复用）"""
         self._step_count = 0
         self.searcher.reset()
 

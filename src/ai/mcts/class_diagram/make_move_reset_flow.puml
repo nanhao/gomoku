@@ -1,0 +1,64 @@
+@startuml
+!theme plain
+
+' Chinese font support
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title MCTSMoveDecider: make_move() / reset() 调用时序
+
+participant "_run_single_game\n(mcts_self_play.py)" as Game
+participant "MCTSMoveDecider\n(decision_maker.py)" as Decider
+participant "MCTSSearcher\n(searcher.py)" as Searcher
+
+== ① 初始化 ==
+Game -> Decider: new MCTSMoveDecider(searcher,\n  temperature, temp_steps)
+activate Decider
+Decider -> Decider: self._step_count = 0
+
+== ② 对局循环（每步重复） ==
+Game -> Decider: get_move(state, log_key)
+activate Decider
+Decider -> Searcher: search(state, log_key)
+activate Searcher
+Searcher --> Decider: (visit_counts, root_value, root_policy)
+deactivate Searcher
+Decider -> Decider: tau = _get_temperature()
+Decider -> Decider: _select_greedy or _sample_action
+Decider --> Game: MoveDecision(x, y,\n  mcts_visit_counts=visit_counts)
+deactivate Decider
+
+Game -> Game: 记录样本 + 落子到 board\n终局判定(check_winner / is_board_full)
+
+== ③ 分支：终局 vs 子树复用 ==
+alt 终局（胜/平）
+    Game -> Decider: reset()
+    activate Decider
+    Decider -> Decider: self._step_count = 0
+    Decider -> Searcher: reset()
+    activate Searcher
+    Searcher -> Searcher: tree.clear() + root = None
+    deactivate Searcher
+    deactivate Decider
+    note right: 终局后无需子树复用\n直接清空搜索树
+    Game -> Game: break（对局结束）
+else 未终局（继续对弈）
+    Game -> Decider: make_move(action)
+    activate Decider
+    Decider -> Decider: self._step_count += 1
+    Decider -> Searcher: advance_root(action)
+    activate Searcher
+    alt 子树推进成功
+        Searcher --> Decider: True
+        note right: 子节点成为新根\n后续搜索复用已有子树
+    else 子树推进失败（异常！）
+        Searcher --> Decider: False
+        Decider --> Game: RuntimeError
+        note right: 非终局下 advance_root\n失败为异常状态
+    end
+    deactivate Searcher
+    deactivate Decider
+    Game -> Game: 切换玩家 + 继续循环
+end
+
+@enduml

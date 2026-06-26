@@ -162,14 +162,26 @@ class TestMCTSMoveDecider(unittest.TestCase):
         x, y = md.get_position()
         self.assertEqual(x * 15 + y, 100)
 
-    def test_make_move_failure_handling(self):
-        """advance_root 失败时的处理"""
+    def test_make_move_failure_raises(self):
+        """advance_root 失败时应抛出 RuntimeError"""
         mock_searcher = MockSearcher()
         mock_searcher.set_advance_result(False)
         decider = self.MCTSMoveDecider(mock_searcher)
-        # make_move 不应抛异常
-        decider.make_move(0)
+        with self.assertRaises(RuntimeError):
+            decider.make_move(0)
         self.assertEqual(len(mock_searcher.advance_root_calls), 1)
+
+    def test_reset_clears_step_count_and_searcher(self):
+        """reset 应重置 _step_count 并调用 searcher.reset"""
+        mock_searcher = MockSearcher()
+        decider = self.MCTSMoveDecider(mock_searcher)
+        # 先走一步，让 _step_count > 0
+        decider.make_move(112)
+        self.assertGreater(decider._step_count, 0)
+        # reset
+        decider.reset()
+        self.assertEqual(decider._step_count, 0)
+        self.assertEqual(len(mock_searcher.reset_calls), 1)
 
 
 class TestMCTSMoveDeciderConstruction(unittest.TestCase):

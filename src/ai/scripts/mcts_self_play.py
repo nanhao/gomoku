@@ -194,19 +194,21 @@ def play_one_game(model, device, hyperparams: dict, game_idx: int, run_id: str) 
         # 记录样本（z 暂填 0，终局后回填）
         samples.append({"state": state, "pi": pi, "z": 0})
 
-        # 落子
+        # 落子到棋盘
         board[action] = current_player
-
-        # 子树复用
-        decider.make_move(action)
 
         # 终局判定
         winner = check_winner(board, action)
-        if winner != 0:
+        is_terminal = (winner != 0) or is_board_full(board)
+
+        if is_terminal:
+            decider.reset()  # 终局无需子树复用
+            if winner == 0:
+                winner = 0  # 平局
             break
-        if is_board_full(board):
-            winner = 0  # 平局
-            break
+
+        # 子树复用
+        decider.make_move(action)
 
         # 切换玩家
         current_player = 2 if current_player == 1 else 1

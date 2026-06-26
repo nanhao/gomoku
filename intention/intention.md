@@ -200,3 +200,6 @@ refactor MCTSMoveDecider.decide():
 2, change the return type to MoveDecision
 3, put the position and the mcts_visit_counts into the move_decision. you should add a _mcts_visit_counts field into the MoveDecision
 use TDD to do this refactor
+
+# intention_id=30
+remove the reset() function in mcts package.
