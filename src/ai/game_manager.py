@@ -199,13 +199,6 @@ class AIGameManager:
             # 根据当前落子方选择对应引擎
             engine = engine_black if player == 1 else engine_white
 
-            # 获取 AI 输入输出（用于记录和落子）
-            # 性能优化：只调用一次 model.predict，结果同时用于记录和落子
-            board_vector = AIEngine.board_to_vector(board, player)
-            result = engine.model.predict(board_vector)
-            # 统一通过 ModelPredict 取策略概率
-            probs = result.policy
-
             # 判定本步是否启用温度采样
             use_temp = (
                 temp_config is not None
@@ -217,7 +210,7 @@ class AIGameManager:
             try:
                 if use_temp:
                     decision = engine.get_move(
-                        board, player, probs=probs,
+                        board, player,
                         strategy=STRATEGY_SAMPLING,
                         temperature=temp_config.temperature,
                         top_k=temp_config.top_k,
@@ -225,14 +218,16 @@ class AIGameManager:
                     )
                     x, y = decision.get_position()
                 else:
-                    decision = engine.get_move(board, player, probs=probs)
+                    decision = engine.get_move(board, player)
                     x, y = decision.get_position()
             except ValueError as e:
                 # 棋盘已满，无法落子，结束当前对局
                 print(f"AI对局 {game_num} 棋盘已满: {e}")
                 break
 
-            # 记录数据
+            # 记录数据（probs 从 MoveDecision 中获取，避免重复调用 model.predict）
+            board_vector = AIEngine.board_to_vector(board, player)
+            probs = decision.get_probs()
             # 第四十一次追加：按策略传递温度采样信息
             if use_temp and temp_config is not None:
                 # 构建 225 维 sampling_probs：对全部 225 个位置统一做温度变换。

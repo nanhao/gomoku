@@ -187,3 +187,16 @@ src/ai/scripts/mcts_train.py 要像 train_main.py 一样画出双 y 轴曲线图
 当前 mcts 包里面的代码是孤岛，和旧体系是完全割裂的。需要做整合。
 把 BaseModel.predict() 的返回值做一层封装，叫做 ModelPredict。
 ModelPredict 有 type 字段，支持多种类型。目前支持两种：a，单纯只预测落子概率分布（对应 random、fc、 cnn v1-6）；b，概率分布+局面评估 （对应 cnn_v7），先做这一层修改，改完跑全量测试，确保通过
+
+# intention_id=27
+refactor the return type of AiEngine.get_move() from tuple to a class called MoveDecision. Put the tuple in this class. Don't change all the functions. Use TDD to do this refactor.
+
+# intention_id=28
+now that you have ModeDecision, you can put probs info in the return of AiEngine.get_move() so that the probs argument is no longger needed. use TDD to do this refactor.
+
+# intention_id=29
+refactor MCTSMoveDecider.decide():
+1, change the function name to get_move
+2, change the return type to MoveDecision
+3, put the position and the mcts_visit_counts into the move_decision
+use TDD to do this refactor

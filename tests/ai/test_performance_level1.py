@@ -40,71 +40,38 @@ class TestGetMoveWithProbs(unittest.TestCase):
         self.model = RandomModel()
         self.engine = AIEngine(self.model)
 
-    def test_get_move_with_probs_returns_valid_position(self):
-        """传入 probs 参数时，应返回合法落子位置"""
+    def test_get_move_returns_valid_position(self):
+        """get_move 应返回合法落子位置，且 probs 通过 get_probs() 获取"""
         board = [[0] * 15 for _ in range(15)]
-        board_vector = AIEngine.board_to_vector(board, 1)
-        probs = self.model.predict(board_vector)
 
-        decision = self.engine.get_move(board, 1, probs=probs)
+        decision = self.engine.get_move(board, 1)
         x, y = decision.get_position()
+        returned_probs = decision.get_probs()
 
         self.assertTrue(0 <= x < 15)
         self.assertTrue(0 <= y < 15)
         self.assertEqual(board[x][y], 0)
+        self.assertIsNotNone(returned_probs, "get_probs() 应返回概率分布")
+        self.assertEqual(len(returned_probs), 225)
 
-    def test_get_move_with_probs_same_result_distribution(self):
-        """传入 probs 与不传 probs 应产生相同分布的落子"""
+    def test_get_move_calls_predict(self):
+        """get_move 应调用 model.predict"""
         board = [[0] * 15 for _ in range(15)]
         board_vector = AIEngine.board_to_vector(board, 1)
-        probs = self.model.predict(board_vector)
-
-        # 不传 probs
-        decision1 = self.engine.get_move(board, 1)
-        x1, y1 = decision1.get_position()
-        # 传入 probs（同样的 probs）
-        decision2 = self.engine.get_move(board, 1, probs=probs)
-        x2, y2 = decision2.get_position()
-
-        # 两个结果都应该是合法位置
-        self.assertTrue(0 <= x1 < 15 and 0 <= y1 < 15)
-        self.assertTrue(0 <= x2 < 15 and 0 <= y2 < 15)
-
-    def test_get_move_with_probs_no_predict_call(self):
-        """传入 probs 时，不应调用 model.predict"""
-        board = [[0] * 15 for _ in range(15)]
-        board_vector = AIEngine.board_to_vector(board, 1)
-        probs = self.model.predict(board_vector)
-
-        with patch.object(self.model, 'predict') as mock_predict:
-            self.engine.get_move(board, 1, probs=probs)
-            # predict 不应被调用
-            mock_predict.assert_not_called()
-
-    def test_get_move_without_probs_calls_predict(self):
-        """不传 probs 时，应调用 model.predict（原有行为不变）"""
-        board = [[0] * 15 for _ in range(15)]
-        board_vector = AIEngine.board_to_vector(board, 1)
-        # 先获取真实的 predict 结果，用于 mock 返回值
         real_probs = self.model.predict(board_vector)
 
         with patch.object(self.model, 'predict', return_value=real_probs) as mock_predict:
             self.engine.get_move(board, 1)
-            # predict 应被调用一次
             mock_predict.assert_called_once()
 
-    def test_get_move_with_probs_on_partial_board(self):
-        """部分填充棋盘，传入 probs 应正确排除已有棋子"""
+    def test_get_move_on_partial_board(self):
+        """部分填充棋盘，get_move 应正确排除已有棋子"""
         board = [[0] * 15 for _ in range(15)]
-        # 填充中心区域
         for i in range(5, 10):
             for j in range(5, 10):
                 board[i][j] = 1
 
-        board_vector = AIEngine.board_to_vector(board, 2)
-        probs = self.model.predict(board_vector)
-
-        decision = self.engine.get_move(board, 2, probs=probs)
+        decision = self.engine.get_move(board, 2)
         x, y = decision.get_position()
 
         self.assertTrue(0 <= x < 15)

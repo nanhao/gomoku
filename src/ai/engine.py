@@ -23,19 +23,26 @@ class MoveDecision:
 
     Attributes:
         _position: (x, y) 落子坐标 tuple
+        _probs: 225 维概率分布（模型原始输出），未传入时为 None
     """
 
-    def __init__(self, x: int, y: int):
+    def __init__(self, x: int, y: int, probs: List[float] = None):
         """
         Args:
             x: 落子行坐标 (0-14)
             y: 落子列坐标 (0-14)
+            probs: 可选的 225 维概率分布
         """
         self._position: Tuple[int, int] = (x, y)
+        self._probs: Optional[List[float]] = probs
 
     def get_position(self) -> Tuple[int, int]:
         """返回落子位置 (x, y) tuple"""
         return self._position
+
+    def get_probs(self) -> Optional[List[float]]:
+        """返回 225 维概率分布，未传入时返回 None"""
+        return self._probs
 
     def __repr__(self) -> str:
         return f"MoveDecision(x={self._position[0]}, y={self._position[1]})"
@@ -94,7 +101,6 @@ class AIEngine:
         self,
         board: List[List[int]],
         current_player: int,
-        probs: List[float] = None,
         strategy: str = STRATEGY_ARGMAX,
         temperature: float = 1.0,
         top_k: Optional[int] = None,
@@ -105,13 +111,12 @@ class AIEngine:
 
         流程：
         1. 将棋盘转换为 226 维向量
-        2. 调用模型获取 225 维概率分布（若已传入 probs 则跳过）
+        2. 调用模型获取 225 维概率分布
         3. 在合法位置（空位）中按 strategy 选择落子
 
         Args:
             board: 15x15 棋盘，0=空, 1=黑, 2=白
             current_player: 当前落子方，1=黑, 2=白
-            probs: 预计算的概率分布（225 维），若提供则跳过 model.predict 调用
             strategy: 落子策略，取值见模块常量 STRATEGY_*。
                 - "argmax"（默认）：选择概率最大的合法位置，并列时随机打破
                 - "sampling"：温度采样（见 ai.move_sampler.temperature_sample）
@@ -123,7 +128,8 @@ class AIEngine:
                 random 模块全局源。
 
         Returns:
-            MoveDecision 对象，可通过 get_position() 获取 (x, y) 落子位置
+            MoveDecision 对象，可通过 get_position() 获取 (x, y) 落子位置，
+            可通过 get_probs() 获取 225 维概率分布
 
         Raises:
             ValueError: 棋盘已满，无空位可落子；strategy 取值未知；
@@ -133,11 +139,9 @@ class AIEngine:
         board_vector = self.board_to_vector(board, current_player)
 
         # 2. 获取模型预测（225 维概率分布 + 可选价值）
-        # 性能优化：支持传入预计算的 probs，避免重复调用 model.predict
-        if probs is None:
-            result = self.model.predict(board_vector)
-            # 统一通过 ModelPredict 取策略概率
-            probs = result.policy
+        result = self.model.predict(board_vector)
+        # 统一通过 ModelPredict 取策略概率
+        probs = result.policy
 
         # 兼容：如果 probs 是 ModelPredict 对象，提取 .policy
         if hasattr(probs, 'policy'):
@@ -158,7 +162,8 @@ class AIEngine:
 
         # 4. 按策略选择位置
         if strategy == STRATEGY_ARGMAX:
-            return self._pick_argmax(valid_positions, valid_probs)
+            x, y = self._pick_argmax(valid_positions, valid_probs)
+            return MoveDecision(x, y, probs=probs)
         if strategy == STRATEGY_SAMPLING:
             # 委托给 ai.move_sampler.temperature_sample（本地导入避免循环依赖）
             from ai.move_sampler import temperature_sample
@@ -169,7 +174,7 @@ class AIEngine:
                 top_k=top_k,
                 rng=rng,
             )
-            return MoveDecision(x, y)
+            return MoveDecision(x, y, probs=probs)
         raise ValueError(
             f"未知落子策略: {strategy!r}，支持的策略为 {_SUPPORTED_STRATEGIES}"
         )
@@ -178,7 +183,7 @@ class AIEngine:
     def _pick_argmax(
         valid_positions: List[Tuple[int, int]],
         valid_probs: List[float],
-    ) -> MoveDecision:
+    ) -> Tuple[int, int]:
         """argmax 选择：从概率最大的合法位置集合中随机选一个。
 
         设计要点：
@@ -193,7 +198,7 @@ class AIEngine:
             valid_probs: 与 valid_positions 一一对应的概率列表
 
         Returns:
-            MoveDecision 对象，包含选中的 (x, y) 坐标
+            选中的 (x, y) 坐标
         """
         max_prob = max(valid_probs)
         candidates = [
@@ -202,7 +207,7 @@ class AIEngine:
         ]
         # 并列时随机挑一个；只有一个候选时 random.choice 等价于直接返回
         x, y = random.choice(candidates)
-        return MoveDecision(x, y)
+        return (x, y)
 
     @staticmethod
     def board_to_vector(board: List[List[int]], current_player: int) -> List[int]:

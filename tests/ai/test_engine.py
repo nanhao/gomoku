@@ -297,20 +297,20 @@ class TestGetMoveStrategy(unittest.TestCase):
 
     # ---------- 预计算 probs ----------
 
-    def test_precomputed_probs_skip_predict(self):
-        """用例 10：传入 probs 时不调用 model.predict，且行为与不传一致。"""
+    def test_move_decision_contains_probs(self):
+        """用例 10：get_probs() 返回模型输出的 225 维概率分布。"""
         board = _empty_board()
         probs_vec = _make_probs([(100, 0.7), (101, 0.3)])
-        stub = StubModel([0.0] * 225)  # 模型自身的概率故意设为全 0
+        stub = StubModel(probs_vec)
         engine = AIEngine(stub)
 
-        decision = engine.get_move(board, 1, probs=probs_vec, strategy="argmax")
-        x, y = decision.get_position()
+        decision = engine.get_move(board, 1, strategy="argmax")
+        returned_probs = decision.get_probs()
 
-        self.assertEqual((x, y), (100 // 15, 100 % 15),
-                         "应使用传入的 probs，而非模型自身的 predict 输出")
-        self.assertEqual(stub.predict_call_count, 0,
-                         "传入预计算 probs 时不应再调用 model.predict")
+        self.assertIsNotNone(returned_probs, "MoveDecision 应包含 probs")
+        self.assertEqual(len(returned_probs), 225)
+        self.assertAlmostEqual(returned_probs[100], 0.7, msg="probs[100] 应与模型输出一致")
+        self.assertAlmostEqual(returned_probs[101], 0.3, msg="probs[101] 应与模型输出一致")
 
 
 class TestGetMoveSamplingStrategy(unittest.TestCase):

@@ -38,6 +38,33 @@ class TestMoveDecision(unittest.TestCase):
         self.assertEqual(d1.get_position(), (1, 2))
         self.assertEqual(d2.get_position(), (3, 4))
 
+    def test_construction_with_probs(self):
+        """构造时传入 probs，get_probs 返回对应的概率列表"""
+        from ai.engine import MoveDecision
+        probs = [0.01] * 225
+        probs[100] = 0.5
+        d = MoveDecision(7, 8, probs=probs)
+        self.assertEqual(d.get_position(), (7, 8))
+        self.assertIsNotNone(d.get_probs())
+        self.assertEqual(len(d.get_probs()), 225)
+        self.assertEqual(d.get_probs()[100], 0.5)
+
+    def test_construction_without_probs_defaults_none(self):
+        """不传 probs 时 get_probs 返回 None"""
+        from ai.engine import MoveDecision
+        d = MoveDecision(3, 5)
+        self.assertIsNone(d.get_probs())
+
+    def test_get_probs_independent_per_instance(self):
+        """两个实例的 probs 互不影响"""
+        from ai.engine import MoveDecision
+        p1 = [0.1] * 225
+        p2 = [0.2] * 225
+        d1 = MoveDecision(1, 2, probs=p1)
+        d2 = MoveDecision(3, 4, probs=p2)
+        self.assertEqual(d1.get_probs()[0], 0.1)
+        self.assertEqual(d2.get_probs()[0], 0.2)
+
 
 if __name__ == "__main__":
     unittest.main()

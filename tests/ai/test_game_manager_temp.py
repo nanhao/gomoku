@@ -63,7 +63,7 @@ class _SpyEngine(AIEngine):
         super().__init__(_SpyModel())
         self.calls: List[dict] = []
 
-    def get_move(self, board, current_player, probs=None,
+    def get_move(self, board, current_player,
                  strategy=STRATEGY_ARGMAX, temperature=1.0,
                  top_k=None, rng=None):
         self.calls.append({
@@ -72,7 +72,7 @@ class _SpyEngine(AIEngine):
             "temperature": temperature,
         })
         return super().get_move(
-            board, current_player, probs=probs, strategy=strategy,
+            board, current_player, strategy=strategy,
             temperature=temperature, top_k=top_k, rng=rng,
         )
 
