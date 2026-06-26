@@ -46,7 +46,8 @@ class TestGetMoveWithProbs(unittest.TestCase):
         board_vector = AIEngine.board_to_vector(board, 1)
         probs = self.model.predict(board_vector)
 
-        x, y = self.engine.get_move(board, 1, probs=probs)
+        decision = self.engine.get_move(board, 1, probs=probs)
+        x, y = decision.get_position()
 
         self.assertTrue(0 <= x < 15)
         self.assertTrue(0 <= y < 15)
@@ -59,9 +60,11 @@ class TestGetMoveWithProbs(unittest.TestCase):
         probs = self.model.predict(board_vector)
 
         # 不传 probs
-        x1, y1 = self.engine.get_move(board, 1)
+        decision1 = self.engine.get_move(board, 1)
+        x1, y1 = decision1.get_position()
         # 传入 probs（同样的 probs）
-        x2, y2 = self.engine.get_move(board, 1, probs=probs)
+        decision2 = self.engine.get_move(board, 1, probs=probs)
+        x2, y2 = decision2.get_position()
 
         # 两个结果都应该是合法位置
         self.assertTrue(0 <= x1 < 15 and 0 <= y1 < 15)
@@ -101,7 +104,8 @@ class TestGetMoveWithProbs(unittest.TestCase):
         board_vector = AIEngine.board_to_vector(board, 2)
         probs = self.model.predict(board_vector)
 
-        x, y = self.engine.get_move(board, 2, probs=probs)
+        decision = self.engine.get_move(board, 2, probs=probs)
+        x, y = decision.get_position()
 
         self.assertTrue(0 <= x < 15)
         self.assertTrue(0 <= y < 15)

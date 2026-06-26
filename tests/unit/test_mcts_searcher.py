@@ -24,6 +24,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
+import numpy as np
 import torch
 from game.game import check_winner, is_board_full
 from ai.base_model import ModelPredict
@@ -133,8 +134,15 @@ class TestMCTSSearcherTerminal(unittest.TestCase):
         for y in range(4):
             board[7 * 15 + y] = 1
         board.append(1)
-        model = MockModel(fixed_value=0.5)
-        searcher = self.MCTSSearcher(model, num_simulations=200)
+        model = MockModel(fixed_value=0.0)
+        searcher = self.MCTSSearcher(
+            model, num_simulations=200,
+            # 关闭 Dirichlet 噪声，确保 PUCT 选择完全由 Q 值驱动
+            dirichlet_epsilon=0.0,
+            dirichlet_alpha=0.03,
+        )
+        # 固定随机种子确保可复现：Dirichlet 噪声依赖 np.random
+        np.random.seed(20260626)
         visit_counts, root_value, root_policy = searcher.search(board)
         self.assertEqual(len(visit_counts), 225)
         # 获胜位置 (7,4) 应有高访问计数（立即获胜的终局节点会被优先选择）

@@ -49,6 +49,7 @@ class TestCreateEngineNoFallback:
         assert sum(probs.policy) > 0, "概率分布总和必须为正，否则无法采样"
 
         # 端到端：get_move 返回合法落子位置
-        x, y = engine.get_move(empty_board, current_player=1)
+        decision = engine.get_move(empty_board, current_player=1)
+        x, y = decision.get_position()
         assert 0 <= x < 15 and 0 <= y < 15, f"落子位置越界: ({x}, {y})"
         assert empty_board[x][y] == 0, f"落子位置 ({x}, {y}) 必须为空"

@@ -129,7 +129,8 @@ class AIGameManager:
         current_player = state["current_player"]
         
         # AI 计算落子位置
-        x, y = self.engine.get_move(board, current_player)
+        decision = self.engine.get_move(board, current_player)
+        x, y = decision.get_position()
         
         # 执行落子
         return self.controller.make_move(x, y)
@@ -215,15 +216,17 @@ class AIGameManager:
 
             try:
                 if use_temp:
-                    x, y = engine.get_move(
+                    decision = engine.get_move(
                         board, player, probs=probs,
                         strategy=STRATEGY_SAMPLING,
                         temperature=temp_config.temperature,
                         top_k=temp_config.top_k,
                         rng=rng,
                     )
+                    x, y = decision.get_position()
                 else:
-                    x, y = engine.get_move(board, player, probs=probs)
+                    decision = engine.get_move(board, player, probs=probs)
+                    x, y = decision.get_position()
             except ValueError as e:
                 # 棋盘已满，无法落子，结束当前对局
                 print(f"AI对局 {game_num} 棋盘已满: {e}")

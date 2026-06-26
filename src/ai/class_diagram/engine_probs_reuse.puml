@@ -1,0 +1,123 @@
+@startuml engine_probs_reuse
+' =============================================================================
+' AIEngine.get_move() probs 参数交互图
+'
+' 展示 probs 预计算参数的两条使用路径：
+'   1. 不传 probs（PvE 模式）：get_move 内部调用 model.predict
+'   2. 传入 probs（AI 内战）：调用方预计算 → get_move 跳过 predict →
+'      同一 probs 复用于数据记录
+' =============================================================================
+
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title AIEngine.get_move() probs 参数：一次预测，多场景复用
+
+' ---------------------------------------------------------------------------
+' 参与者
+' ---------------------------------------------------------------------------
+
+actor "GUI / 用户" as User
+
+participant "AIGameManager\nplay_single_game" as PlaySingleGame
+participant "AIEngine\nget_move()" as Engine
+participant "BaseModel\npredict()" as Model
+participant "DataRecorder\nrecord_move()" as Recorder
+
+' =============================================================================
+' 场景 A：PvE 模式 — 不传 probs，get_move 内部调用 model.predict
+' =============================================================================
+
+newpage 场景 A：PvE 模式（不传 probs）
+
+User -> PlaySingleGame : player_move(x, y)
+
+PlaySingleGame -> PlaySingleGame : 检查轮到 AI 落子
+
+PlaySingleGame -> Engine : get_move(board, player)\n（probs 默认 None）
+
+group AIEngine.get_move 内部流程
+    Engine -> Engine : board_to_vector(board, player)
+
+    Engine -> Model : predict(board_vector)
+    Model --> Engine : ModelPredict(policy, value)
+
+    Engine -> Engine : 过滤空位\n按 strategy 选择落子
+end
+
+Engine --> PlaySingleGame : (x, y)
+
+PlaySingleGame -> PlaySingleGame : controller.make_move(x, y)
+
+' =============================================================================
+' 场景 B：AI 内战 — 传入预计算 probs，一次预测两次复用
+' =============================================================================
+
+newpage 场景 B：AI 内战（传入预计算 probs）
+
+PlaySingleGame -> PlaySingleGame : board_to_vector(board, player)
+
+== Step 1: 预计算（唯一一次 model.predict） ==
+
+PlaySingleGame -> Model : predict(board_vector)
+Model --> PlaySingleGame : ModelPredict(policy, value)
+
+== Step 2: 落子（传入 probs，跳过 model.predict） ==
+
+PlaySingleGame -> Engine : get_move(board, player, probs=policy)
+
+group AIEngine.get_move 内部流程（跳过 predict）
+    Engine -> Engine : probs is not None → 跳过 model.predict
+
+    Engine -> Engine : 过滤空位\n按 strategy 选择落子
+end
+
+Engine --> PlaySingleGame : (x, y)
+
+== Step 3: 数据记录（同一份 probs 再次复用） ==
+
+PlaySingleGame -> Recorder : record_move(\n  board_vector, probs, (x, y))
+note right
+  同一份 model.predict 输出：
+  • 用于落子选择（Step 2）
+  • 用于数据记录（Step 3）
+  避免两次调用神经网络
+end note
+
+' =============================================================================
+' 场景 C：温度采样分支 — probs 同时传给 get_move 和 record_move
+' =============================================================================
+
+newpage 场景 C：AI 内战 + 温度采样（probs 三处复用）
+
+PlaySingleGame -> Model : predict(board_vector)
+Model --> PlaySingleGame : ModelPredict(policy, value)
+
+alt 启用温度采样
+    PlaySingleGame -> Engine : get_move(board, player,\n  probs=policy,\n  strategy="sampling",\n  temperature=T, top_k=K)
+    Engine --> PlaySingleGame : (x, y)
+
+    PlaySingleGame -> PlaySingleGame : 用 policy 计算 sampling_probs
+    note right
+      基于同一份 policy 计算温度变换后的分布
+    end
+
+    PlaySingleGame -> Recorder : record_move(\n  board_vector, probs=policy,\n  (x, y),\n  sampling_probs=...)
+else argmax 策略
+    PlaySingleGame -> Engine : get_move(board, player, probs=policy)
+    Engine --> PlaySingleGame : (x, y)
+
+    PlaySingleGame -> Recorder : record_move(\n  board_vector, probs=policy,\n  (x, y))
+end
+
+note over PlaySingleGame
+  probs 参数的核心价值：
+  一次 model.predict 输出被三处复用——
+  ① get_move 落子选择
+  ② record_move 数据记录
+  ③ sampling_probs 温度分布构建
+  在每步落子中节省一次 GPU 前向推理
+end note
+
+@enduml

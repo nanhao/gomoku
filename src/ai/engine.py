@@ -15,6 +15,32 @@ STRATEGY_SAMPLING = "sampling"
 _SUPPORTED_STRATEGIES = (STRATEGY_ARGMAX, STRATEGY_SAMPLING)
 
 
+class MoveDecision:
+    """AI 引擎落子决策结果
+
+    封装 get_move() 的返回值，替代原有的裸 tuple。
+    设计为可扩展：后续可添加概率分布、价值评估等字段。
+
+    Attributes:
+        _position: (x, y) 落子坐标 tuple
+    """
+
+    def __init__(self, x: int, y: int):
+        """
+        Args:
+            x: 落子行坐标 (0-14)
+            y: 落子列坐标 (0-14)
+        """
+        self._position: Tuple[int, int] = (x, y)
+
+    def get_position(self) -> Tuple[int, int]:
+        """返回落子位置 (x, y) tuple"""
+        return self._position
+
+    def __repr__(self) -> str:
+        return f"MoveDecision(x={self._position[0]}, y={self._position[1]})"
+
+
 def create_engine(ai_name: str) -> "AIEngine":
     """
     根据 AI 名称创建对应的 AIEngine 实例。
@@ -73,7 +99,7 @@ class AIEngine:
         temperature: float = 1.0,
         top_k: Optional[int] = None,
         rng: Optional[random.Random] = None,
-    ) -> Tuple[int, int]:
+    ) -> MoveDecision:
         """
         获取 AI 落子位置
 
@@ -97,7 +123,7 @@ class AIEngine:
                 random 模块全局源。
 
         Returns:
-            (x, y) 落子位置，0 <= x < 15, 0 <= y < 15
+            MoveDecision 对象，可通过 get_position() 获取 (x, y) 落子位置
 
         Raises:
             ValueError: 棋盘已满，无空位可落子；strategy 取值未知；
@@ -136,13 +162,14 @@ class AIEngine:
         if strategy == STRATEGY_SAMPLING:
             # 委托给 ai.move_sampler.temperature_sample（本地导入避免循环依赖）
             from ai.move_sampler import temperature_sample
-            return temperature_sample(
+            x, y = temperature_sample(
                 valid_positions,
                 valid_probs,
                 temperature=temperature,
                 top_k=top_k,
                 rng=rng,
             )
+            return MoveDecision(x, y)
         raise ValueError(
             f"未知落子策略: {strategy!r}，支持的策略为 {_SUPPORTED_STRATEGIES}"
         )
@@ -151,7 +178,7 @@ class AIEngine:
     def _pick_argmax(
         valid_positions: List[Tuple[int, int]],
         valid_probs: List[float],
-    ) -> Tuple[int, int]:
+    ) -> MoveDecision:
         """argmax 选择：从概率最大的合法位置集合中随机选一个。
 
         设计要点：
@@ -166,7 +193,7 @@ class AIEngine:
             valid_probs: 与 valid_positions 一一对应的概率列表
 
         Returns:
-            选中的 (x, y) 坐标
+            MoveDecision 对象，包含选中的 (x, y) 坐标
         """
         max_prob = max(valid_probs)
         candidates = [
@@ -174,7 +201,8 @@ class AIEngine:
             if p == max_prob
         ]
         # 并列时随机挑一个；只有一个候选时 random.choice 等价于直接返回
-        return random.choice(candidates)
+        x, y = random.choice(candidates)
+        return MoveDecision(x, y)
 
     @staticmethod
     def board_to_vector(board: List[List[int]], current_player: int) -> List[int]:
