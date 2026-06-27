@@ -203,3 +203,6 @@ use TDD to do this refactor
 
 # intention_id=30
 remove the reset() function in mcts package.
+
+# intention_id=31
+移除当前 mcts 实现当中的 batch 和 virtual loss 机制
