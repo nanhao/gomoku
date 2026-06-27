@@ -16,17 +16,15 @@ class MCTSSearchLogger:
     在搜索过程中收集数据，搜索结束后写入 JSON 文件。
     """
 
-    def __init__(self, log_dir: str, c_puct: float, virtual_loss: float):
+    def __init__(self, log_dir: str, c_puct: float):
         """初始化日志记录器
 
         Args:
             log_dir: 日志输出目录
             c_puct: PUCT 探索系数（用于日志中的 hyperparams）
-            virtual_loss: Virtual Loss 值（用于日志中的 hyperparams）
         """
         self.log_dir = log_dir
         self.c_puct = c_puct
-        self.virtual_loss = virtual_loss
 
     def init_log_data(
         self,
@@ -50,7 +48,6 @@ class MCTSSearchLogger:
                 "c_puct": self.c_puct,
                 "dirichlet_epsilon": dirichlet_epsilon,
                 "dirichlet_alpha": dirichlet_alpha,
-                "virtual_loss": self.virtual_loss,
             },
             "root_noise": root_noise,
             "simulation_logs": [],

@@ -1,0 +1,52 @@
+@startuml
+skinparam defaultFontName Microsoft YaHei
+title MCTS 搜索流程（单步 Simulation，无 Batch/Virtual Loss）
+
+start
+:根节点状态 s₀;
+:加狄利克雷噪声\nP' = (1-ε)P + ε·Dir(α);
+
+repeat
+  :从根节点开始;
+
+  note right: == 选择阶段 ==
+
+  while (当前节点非叶节点且非终局?) is (是)
+    :PUCT 选择子节点;
+    note right
+      a = argmax(Q + U)
+      U = c_puct × P × √ΣN / (1+N)
+    end note
+  endwhile (否)
+
+  note right: == 评估与扩展阶段 ==
+
+  if (终局?) then (是)
+    :v = 规则判定;
+    note right: 有人胜 → ±1\n平局 → 0
+  else (否)
+    :(p, v) = model.predict(state);
+    note right: 获取先验概率与价值
+    :为所有合法落子创建子边;
+    note right: N=0, W=0, Q=0, P=p
+  endif
+
+  note right: == 回传阶段 ==
+
+  :Backup 沿路径向上;
+  note right
+    N += 1
+    W += v
+    Q = W / N
+    v = -v (切换玩家取反)
+  end note
+
+repeat while (总 simulation 次数 < N?) is (是)
+-> 否;
+
+:输出 visit_counts, root_value;
+:写入搜索日志 JSON;
+note right: {MCTS_LOG_DIR}/{log_key}.json
+stop
+
+@enduml

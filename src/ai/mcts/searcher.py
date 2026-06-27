@@ -1,8 +1,8 @@
 """MCTS 搜索器核心模块
 
 实现 AlphaGo Zero 风格的蒙特卡洛树搜索：
-- PUCT 选择 + Virtual Loss
-- Batch 推理（多叶节点合并评估）
+- PUCT 选择
+- 单步 simulation 循环（selection → evaluation → backup）
 - 回传取反（每层切换玩家视角）
 - 狄利克雷噪声
 - 子树复用（advance_root）
@@ -28,12 +28,10 @@ class MCTSSearcher:
     """MCTS 搜索器
 
     对给定棋盘状态执行指定次数的模拟（simulation），
-    每次模拟经历 selection → expansion → evaluation → backup 四阶段。
+    每次模拟经历 selection → evaluation → backup 三阶段。
 
-    使用 Batch 推理 + Virtual Loss 机制：
-    - 选择阶段对已选边施加 Virtual Loss 惩罚
-    - 收集多个叶节点后合并为一个 batch 调用模型
-    - 回传前撤销 Virtual Loss
+    采用单步 simulation 循环：每轮选择 1 个叶节点→评估→立即回传，
+    无 Batch 收集和 Virtual Loss 机制，简化流程。
     """
 
     def __init__(
@@ -43,20 +41,16 @@ class MCTSSearcher:
         c_puct: float = 2.0,
         dirichlet_epsilon: float = 0.25,
         dirichlet_alpha: float = 0.03,
-        virtual_loss: float = 3,
-        mcts_batch_size: int = 16,
         log_dir: Optional[str] = _LOG_UNSET,
     ):
         """初始化 MCTS 搜索器
 
         Args:
-            model: CNN v7 模型实例，需支持 predict(board_vector) -> (policy, value)
+            model: CNN v7 模型实例，需支持 predict(board_vector) -> ModelPredict
             num_simulations: 每次搜索的总模拟次数，默认 800
             c_puct: PUCT 探索系数，默认 2.0
             dirichlet_epsilon: 狄利克雷噪声比例，默认 0.25
             dirichlet_alpha: 狄利克雷分布参数，默认 0.03
-            virtual_loss: Virtual Loss 值，默认 3
-            mcts_batch_size: 单 batch 最大叶节点数，默认 64
             log_dir: 搜索日志输出目录。未传参时读取 config/mcts.py 配置；
                     显式传 None 禁用日志
         """
@@ -65,8 +59,6 @@ class MCTSSearcher:
         self.c_puct = c_puct
         self.dirichlet_epsilon = dirichlet_epsilon
         self.dirichlet_alpha = dirichlet_alpha
-        self.virtual_loss = virtual_loss
-        self.mcts_batch_size = mcts_batch_size
         self.log_dir: Optional[str] = None
         if log_dir is _LOG_UNSET:
             # 未传参：读取全局配置
@@ -81,8 +73,8 @@ class MCTSSearcher:
         # 根边 N 快照（子树复用时记录初始值，用于 get_result 中计算增量）
         self._root_edge_N_snapshot: Dict[int, int] = {}
 
-        # 日志记录器
-        self._logger = MCTSSearchLogger(self.log_dir, c_puct, virtual_loss) if self.log_dir else None
+        # 日志记录器（不再传递 virtual_loss）
+        self._logger = MCTSSearchLogger(self.log_dir, c_puct) if self.log_dir else None
 
     # ---------- 公共 API ----------
 
@@ -120,31 +112,25 @@ class MCTSSearcher:
                 root_noise=self._get_root_noise(),
             )
 
-        # 主搜索循环
+        # 主搜索循环：每轮 simulation 依次 select → evaluate → backup
         simulation_logs = []
-        sim_id = 0
 
-        while sim_id < sims:
-            # 第一阶段：选择 → 收集叶节点（应用 Virtual Loss）
-            leaf_nodes = self._select_and_collect(sims - sim_id)
+        for sim_id in range(sims):
+            # 第一阶段：选择 → 找到 1 个叶节点
+            leaf_info = self._select()
 
-            # 第二阶段：Batch 推理 + 扩展
-            self._batch_evaluate(leaf_nodes)
+            # 第二阶段：评估叶节点 + 扩展子节点
+            self._evaluate(leaf_info)
 
-            # 第三阶段：回传（撤销 Virtual Loss + Backup）
-            for leaf_info in leaf_nodes:
-                self._backup(leaf_info)
+            # 第三阶段：回传（沿路径向上更新 N/W/Q）
+            self._backup(leaf_info)
 
             # 记录日志
             if log_data is not None:
-                for leaf_info in leaf_nodes:
-                    sim_log = self._logger.build_simulation_log(
-                        sim_id, leaf_info.get("path", []), leaf_info, self.tree
-                    )
-                    simulation_logs.append(sim_log)
-                    sim_id += 1
-            else:
-                sim_id += len(leaf_nodes)
+                sim_log = self._logger.build_simulation_log(
+                    sim_id, leaf_info.get("path", []), leaf_info, self.tree
+                )
+                simulation_logs.append(sim_log)
 
         # 组装结果
         visit_counts, root_value, root_policy = self._get_result()
@@ -305,67 +291,54 @@ class MCTSSearcher:
 
     # ---------- 内部：选择阶段 ----------
 
-    def _select_and_collect(self, remaining_sims: int) -> List[dict]:
-        """选择阶段：沿 PUCT 下降收集叶节点，同时应用 Virtual Loss。
+    def _select(self) -> dict:
+        """选择阶段：沿 PUCT 下降直到叶节点，返回叶节点信息。
 
-        Args:
-            remaining_sims: 本轮剩余模拟次数
+        从根节点出发，每步用 PUCT 选择最优子节点，
+        直到遇到未展开的子节点（叶节点）或终局节点。
 
         Returns:
-            叶节点信息列表，每项含 path, board, player, is_terminal 等
+            叶节点信息字典，含 path, board, player, is_terminal 等
         """
-        batch_size = min(self.mcts_batch_size, remaining_sims)
-        leaf_nodes = []
+        path = []
+        current_hash = self._root_hash
 
-        for _ in range(batch_size):
-            path = []
-            current_hash = self._root_hash
+        while True:
+            node = self.tree[current_hash]
+            board = node["board"]
+            player = node["player"]
 
-            while True:
-                node = self.tree[current_hash]
-                board = node["board"]
-                player = node["player"]
-                edges = node["edges"]
+            # PUCT 选择最优子节点
+            best_action = self._puct_select(current_hash)
+            if best_action is None:
+                # 无合法动作（终局或满棋盘）
+                return self._make_terminal_leaf(current_hash, board, player, path)
 
-                # PUCT 选择最优子节点到叶节点
-                best_action = self._puct_select(current_hash)
-                if best_action is None:
-                    # 无合法动作（终局或满棋盘）
-                    leaf = self._make_terminal_leaf(current_hash, board, player, path)
-                    leaf_nodes.append(leaf)
-                    break
+            edge = node["edges"][best_action]
+            path.append({
+                "state_hash": current_hash,
+                "action": best_action,
+                "player": player,
+            })
 
-                edge = edges[best_action]
-                path.append({
-                    "state_hash": current_hash,
+            child_hash = edge.get("child_hash")
+            if child_hash is None:
+                # 子节点未展开 → 叶节点
+                new_board = list(board)
+                new_board[best_action] = player
+                new_player = 2 if player == 1 else 1
+
+                return {
+                    "path": path,
+                    "state_hash": self._state_hash(new_board, new_player),
                     "action": best_action,
-                    "player": player,
-                })
+                    "board": new_board,
+                    "player": new_player,
+                    "is_terminal": False,
+                    "terminal_value": None,
+                }
 
-                # 应用 Virtual Loss
-                self._apply_virtual_loss(current_hash, best_action)
-
-                child_hash = edge.get("child_hash")
-                if child_hash is None:
-                    # 子节点未展开 → 叶节点
-                    new_board = list(board)
-                    new_board[best_action] = player
-                    new_player = 2 if player == 1 else 1
-
-                    leaf_nodes.append({
-                        "path": path,
-                        "state_hash": self._state_hash(new_board, new_player),
-                        "action": best_action,
-                        "board": new_board,
-                        "player": new_player,
-                        "is_terminal": False,
-                        "terminal_value": None,
-                    })
-                    break
-
-                current_hash = child_hash
-
-        return leaf_nodes
+            current_hash = child_hash
 
     def _puct_select(self, node_hash: str) -> Optional[int]:
         """PUCT 选择：a = argmax(Q + c_puct * P * sqrt(sum_N) / (1 + N))
@@ -423,60 +396,40 @@ class MCTSSearcher:
             "is_terminal": False, "terminal_value": None,
         }
 
-    # ---------- 内部：Virtual Loss ----------
+    # ---------- 内部：评估与扩展 ----------
 
-    def _apply_virtual_loss(self, node_hash: str, action: int):
-        """对指定边施加 Virtual Loss"""
-        edge = self.tree[node_hash]["edges"][action]
-        edge["N"] += self.virtual_loss
-        edge["W"] -= self.virtual_loss
-        edge["Q"] = edge["W"] / edge["N"] if edge["N"] > 0 else 0.0
+    def _evaluate(self, leaf_info: dict):
+        """评估单个叶节点：终局规则判定或模型推理，并展开子边。
 
-    def _undo_virtual_loss(self, node_hash: str, action: int):
-        """撤销指定边的 Virtual Loss"""
-        edge = self.tree[node_hash]["edges"][action]
-        edge["N"] -= self.virtual_loss
-        edge["W"] += self.virtual_loss
-        edge["Q"] = edge["W"] / edge["N"] if edge["N"] > 0 else 0.0
-
-    # ---------- 内部：Batch 推理 + 扩展 ----------
-
-    def _batch_evaluate(self, leaf_nodes: List[dict]):
-        """Batch 推理：对叶节点调用模型评估，并展开子边。
-
-        终局节点由规则判定 value，非终局节点调用 model.predict。
+        Args:
+            leaf_info: _select() 返回的叶节点字典，就地修改添加 value/policy 字段
         """
-        # 分类：终局 vs 需要模型评估
-        for leaf in leaf_nodes:
-            if leaf.get("is_terminal", False):
-                leaf["value"] = leaf.get("terminal_value", 0.0)
-                continue
+        # 终局节点由规则判定价值
+        if leaf_info.get("is_terminal", False):
+            leaf_info["value"] = leaf_info.get("terminal_value", 0.0)
+            return
 
-            # 检查棋盘状态
-            winner = self._check_board_winner(leaf["board"])
-            if winner != 0:
-                leaf["is_terminal"] = True
-                leaf["value"] = -1.0 if winner != leaf["player"] else 1.0
-                continue
-            if is_board_full(leaf["board"]):
-                leaf["is_terminal"] = True
-                leaf["value"] = 0.0
-                continue
+        # 检查棋盘状态（可能漏检的终局）
+        winner = self._check_board_winner(leaf_info["board"])
+        if winner != 0:
+            leaf_info["is_terminal"] = True
+            leaf_info["value"] = -1.0 if winner != leaf_info["player"] else 1.0
+            return
+        if is_board_full(leaf_info["board"]):
+            leaf_info["is_terminal"] = True
+            leaf_info["value"] = 0.0
+            return
 
-        # 对需要模型评估的节点逐个调用 predict
-        for leaf in leaf_nodes:
-            if leaf.get("is_terminal", False) or "value" in leaf:
-                continue
+        # 非终局：调用模型预测并扩展子节点
+        bv = leaf_info["board"] + [leaf_info["player"]]
+        predict_result = self.model.predict(bv)
+        policy = predict_result.policy
+        value = predict_result.value
+        leaf_info["policy"] = policy
+        leaf_info["value"] = value
 
-            bv = leaf["board"] + [leaf["player"]]
-            predict_result = self.model.predict(bv)
-            policy = predict_result.policy
-            value = predict_result.value
-            leaf["policy"] = policy
-            leaf["value"] = value
-
-            # 扩展子节点
-            self._expand_leaf(leaf, policy)
+        # 扩展子节点
+        self._expand_leaf(leaf_info, policy)
 
     @staticmethod
     def _check_board_winner(board: List[int]) -> int:
@@ -523,18 +476,15 @@ class MCTSSearcher:
         """回传阶段：沿路径向上更新 N/W/Q，每层取反 value。
 
         对路径上的每条边：
-        1. 撤销 Virtual Loss
-        2. v = -v（翻转为当前节点玩家视角）
-        3. N += 1, W += v, Q = W / N
+        1. v = -v（翻转为当前节点玩家视角）
+        2. N += 1, W += v, Q = W / N
+        3. 同步更新节点统计量
         """
         v = leaf_info.get("value", 0.0)
 
         for step in reversed(leaf_info.get("path", [])):
             node_hash = step["state_hash"]
             action = step["action"]
-
-            # 撤销 Virtual Loss
-            self._undo_virtual_loss(node_hash, action)
 
             # 翻转为当前节点玩家视角（叶节点 value 是对方视角）
             v = -v

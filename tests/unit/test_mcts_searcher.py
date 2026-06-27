@@ -5,8 +5,7 @@
 - PUCT 选择公式
 - 扩展阶段边创建
 - 回传 N/W/Q + 取反
-- Virtual Loss 施加与撤销
-- Batch 推理流程
+- 单步 simulation 循环（无 Batch/Virtual Loss）
 - advance_root 子树复用
 - 搜索日志 JSON 输出
 """
@@ -246,40 +245,8 @@ class TestMCTSSearcherBackup(unittest.TestCase):
         self.assertLessEqual(rv2, 1.0)
 
 
-class TestMCTSSearcherVirtualLoss(unittest.TestCase):
-    """Virtual Loss 测试"""
-
-    @classmethod
-    def setUpClass(cls):
-        try:
-            from ai.mcts.searcher import MCTSSearcher
-            cls.MCTSSearcher = MCTSSearcher
-        except ImportError:
-            cls.MCTSSearcher = None
-
-    def setUp(self):
-        if self.MCTSSearcher is None:
-            self.skipTest("MCTSSearcher 尚未实现")
-
-    def test_virtual_loss_encourages_diversification(self):
-        """Virtual Loss 应使搜索树分叉"""
-        model = MockModel(fixed_value=0.0)
-        searcher = self.MCTSSearcher(model, num_simulations=50, virtual_loss=3)
-        state = _make_empty_state()
-        visit_counts, _, _ = searcher.search(state)
-        # 多个位置有访问
-        visited = sum(1 for c in visit_counts if c > 0)
-        self.assertGreater(visited, 1)
-
-    def test_virtual_loss_default_value(self):
-        """默认 Virtual Loss 应为 3"""
-        model = MockModel()
-        searcher = self.MCTSSearcher(model)
-        self.assertEqual(searcher.virtual_loss, 3)
-
-
-class TestMCTSSearcherBatch(unittest.TestCase):
-    """Batch 推理流程测试"""
+class TestMCTSSearcherModelCall(unittest.TestCase):
+    """模型调用验证测试（单步 simulation 循环）"""
 
     @classmethod
     def setUpClass(cls):
@@ -294,13 +261,35 @@ class TestMCTSSearcherBatch(unittest.TestCase):
             self.skipTest("MCTSSearcher 尚未实现")
 
     def test_model_called_during_search(self):
-        """搜索过程中模型被调用"""
+        """搜索过程中模型被调用（每轮 simulation 一次评估）"""
         model = MockModel(fixed_value=0.3)
         searcher = self.MCTSSearcher(model, num_simulations=50)
         state = _make_empty_state()
         searcher.search(state)
+        # 模型应被调用：根节点初始化 1 次 + 每轮 simulation 叶节点评估 50 次 = 51 次
         self.assertGreater(len(model.policy_calls), 0,
                            "模型 predict 应该被调用")
+
+    def test_model_call_count_per_simulation(self):
+        """在空棋盘上每轮 simulation 都应触发一次模型评估（无终局时）"""
+        model = MockModel(fixed_value=0.3)
+        num_sims = 20
+        searcher = self.MCTSSearcher(model, num_simulations=num_sims)
+        state = _make_empty_state()
+        searcher.search(state)
+        # 空棋盘无终局：根节点 1 次 + simulation 叶节点 num_sims 次
+        expected_min_calls = num_sims + 1
+        actual_calls = len(model.policy_calls)
+        self.assertEqual(actual_calls, expected_min_calls,
+                         f"Expected ~{expected_min_calls} model calls, got {actual_calls}")
+
+    def test_constructor_rejects_virtual_loss_and_batch_size(self):
+        """构造函数不再接受 virtual_loss 和 mcts_batch_size 参数"""
+        model = MockModel()
+        with self.assertRaises(TypeError):
+            self.MCTSSearcher(model, virtual_loss=3)
+        with self.assertRaises(TypeError):
+            self.MCTSSearcher(model, mcts_batch_size=16)
 
 
 class TestMCTSSearcherAdvanceRoot(unittest.TestCase):
@@ -382,7 +371,13 @@ class TestMCTSSearcherLogging(unittest.TestCase):
         self.assertIn("hyperparams", log_data)
         self.assertIn("result", log_data)
 
-        # 验证结果字段
+        # 验证 hyperparams 不包含 virtual_loss（已移除）
+        hyperparams = log_data["hyperparams"]
+        self.assertNotIn("virtual_loss", hyperparams,
+                         "virtual_loss 应已从日志中移除")
+        self.assertIn("c_puct", hyperparams)
+        self.assertIn("dirichlet_epsilon", hyperparams)
+        self.assertIn("dirichlet_alpha", hyperparams)
         result = log_data["result"]
         self.assertIn("visit_counts", result)
         self.assertIn("root_value", result)
