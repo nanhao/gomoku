@@ -370,14 +370,7 @@ class MCTSSearcher:
     @staticmethod
     def _make_terminal_leaf(node_hash, board, player, path):
         """构造终局叶节点信息"""
-        # 检测终局类型
-        winner = 0
-        for a in range(225):
-            if board[a] != 0:
-                w = check_winner(board, a)
-                if w != 0:
-                    winner = w
-                    break
+        winner = MCTSSearcher._check_board_winner(board)
         if winner != 0:
             return {
                 "path": path, "state_hash": node_hash,
@@ -413,7 +406,9 @@ class MCTSSearcher:
         winner = self._check_board_winner(leaf_info["board"])
         if winner != 0:
             leaf_info["is_terminal"] = True
-            leaf_info["value"] = -1.0 if winner != leaf_info["player"] else 1.0
+            # 胜者必为刚刚落子的对手（leaf_info["player"] 是对手），
+            # 因此从 leaf_info["player"] 视角 value 恒为 -1.0
+            leaf_info["value"] = -1.0
             return
         if is_board_full(leaf_info["board"]):
             leaf_info["is_terminal"] = True
