@@ -74,7 +74,7 @@ class TestMCTSSelfPlayIntegration(unittest.TestCase):
 
             # 将 flat board 转为 15×15 二维矩阵
             board_2d = [[board_flat[i * 15 + j] for j in range(15)] for i in range(15)]
-            md = decider.get_move(board_2d, current_player)
+            md = decider.get_move(board_2d, current_player, strategy="sampling")
             x, y = md.get_position()
             action = x * 15 + y
             visit_counts = md.get_mcts_visit_counts()

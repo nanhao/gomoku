@@ -182,8 +182,8 @@ def play_one_game(model, device, hyperparams: dict, game_idx: int, run_id: str) 
         # 将 flat board 转为 15×15 二维矩阵（get_move 新接口要求）
         board_2d = [[board[i * 15 + j] for j in range(15)] for i in range(15)]
 
-        # MCTS 搜索 + 决策（log_key 由决策器内部自动生成）
-        md = decider.get_move(board_2d, current_player)
+        # MCTS 搜索 + 决策（log_key 由决策器内部自动生成，strategy="sampling" 使用温度探索）
+        md = decider.get_move(board_2d, current_player, strategy="sampling")
         x, y = md.get_position()
         action = x * 15 + y
         visit_counts = md.get_mcts_visit_counts()

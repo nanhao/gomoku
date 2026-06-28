@@ -188,10 +188,14 @@ class AIGameManager:
             else:
                 rng = _stdrandom.Random()
             temp_side_this_game = resolve_temp_side(temp_config.temp_side, rng)
-            # 将本局的 rng 注入引擎（引擎采样参数在构造时已设定，
-            # rng 按局不同，通过直接赋值更新）
+            # 将本局的采样参数注入引擎（rng 按局不同，temperature/top_k
+            # 来自 temp_config，覆盖引擎构造时的默认值）
             engine_black.rng = rng
             engine_white.rng = rng
+            engine_black.temperature = temp_config.temperature
+            engine_white.temperature = temp_config.temperature
+            engine_black.top_k = temp_config.top_k
+            engine_white.top_k = temp_config.top_k
 
         # 游戏循环：交替落子直到游戏结束
         move_count = 0
