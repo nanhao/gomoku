@@ -71,12 +71,11 @@ class TestMCTSMoveDecider(unittest.TestCase):
         if self.MCTSMoveDecider is None:
             self.skipTest("MCTSMoveDecider 尚未实现")
 
-    def _make_state(self, player=1):
-        """创建棋盘状态"""
-        board = [0] * 225
-        # 放置一些棋子避免全空
-        board[112] = player  # 中心
-        board.append(player)
+    @staticmethod
+    def _make_board_2d(player=1):
+        """创建 15×15 二维棋盘（带一个中心棋子）。"""
+        board = [[0] * 15 for _ in range(15)]
+        board[7][7] = player  # 中心位置
         return board
 
     def test_get_move_returns_move_decision(self):
@@ -84,8 +83,8 @@ class TestMCTSMoveDecider(unittest.TestCase):
         from ai.engine import MoveDecision
         mock_searcher = MockSearcher()
         decider = self.MCTSMoveDecider(mock_searcher)
-        state = self._make_state()
-        result = decider.get_move(state)
+        board = self._make_board_2d()
+        result = decider.get_move(board, 1)
 
         self.assertIsInstance(result, MoveDecision)
         x, y = result.get_position()
@@ -107,22 +106,20 @@ class TestMCTSMoveDecider(unittest.TestCase):
         """get_move 返回的 position 应在空位中"""
         mock_searcher = MockSearcher()
         decider = self.MCTSMoveDecider(mock_searcher)
-        state = self._make_state()
-        md = decider.get_move(state)
+        board = self._make_board_2d()
+        md = decider.get_move(board, 1)
         x, y = md.get_position()
-        action = x * 15 + y
         # 检查 action 对应位置是空位
-        board = state[:225]
-        self.assertEqual(board[action], 0, f"action ({x},{y}) 应在空位上")
+        self.assertEqual(board[x][y], 0, f"action ({x},{y}) 应在空位上")
 
-    def test_get_move_with_log_key(self):
-        """get_move 透传 log_key 给 searcher"""
+    def test_get_move_with_log_key_prefix(self):
+        """get_move 使用构造时注入的 log_key_prefix 自动生成 log_key"""
         mock_searcher = MockSearcher()
-        decider = self.MCTSMoveDecider(mock_searcher)
-        state = self._make_state()
-        decider.get_move(state, log_key="game0_move5")
+        decider = self.MCTSMoveDecider(mock_searcher, log_key_prefix="game0")
+        board = self._make_board_2d()
+        decider.get_move(board, 1)
         self.assertEqual(len(mock_searcher.search_calls), 1)
-        self.assertEqual(mock_searcher.search_calls[0]["log_key"], "game0_move5")
+        self.assertEqual(mock_searcher.search_calls[0]["log_key"], "game0_search0")
 
     def test_make_move_calls_advance_root(self):
         """make_move 调用 searcher.advance_root"""
@@ -136,11 +133,11 @@ class TestMCTSMoveDecider(unittest.TestCase):
         """温度 > 0 时应有一定随机性"""
         mock_searcher = MockSearcher()
         decider = self.MCTSMoveDecider(mock_searcher, temperature=1.0)
-        state = self._make_state()
+        board = self._make_board_2d()
         # 多次调用检查结果可能不同（但不强求，概率性的）
         actions = set()
         for _ in range(10):
-            md = decider.get_move(state)
+            md = decider.get_move(board, 1, strategy="sampling")
             x, y = md.get_position()
             actions.add(x * 15 + y)
         # 在温度=1.0时大概率探索多个位置
@@ -155,10 +152,9 @@ class TestMCTSMoveDecider(unittest.TestCase):
         visit_counts[200] = 2
         mock_searcher = MockSearcher(visit_counts=visit_counts)
         decider = self.MCTSMoveDecider(mock_searcher, temperature=0.0)
-        state = self._make_state()
-        # 把 100 设为空位
-        state[100] = 0
-        md = decider.get_move(state)
+        # 创建空棋盘（action 100 = (6,10)，应是空位）
+        board = [[0] * 15 for _ in range(15)]
+        md = decider.get_move(board, 1, strategy="sampling")
         x, y = md.get_position()
         self.assertEqual(x * 15 + y, 100)
 

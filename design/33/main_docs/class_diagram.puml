@@ -1,0 +1,104 @@
+@startuml
+!theme plain
+
+' Chinese font support
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam classFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title 意图33重构后类与依赖关系
+
+class AIEngine {
+  - model: BaseModel
+  - temperature: float
+  - top_k: Optional[int]
+  - rng: Optional[Random]
+  --
+  + __init__(model, temperature, top_k, rng)
+  + get_move(board, current_player, strategy): MoveDecision
+}
+
+class MCTSMoveDecider {
+  - searcher: MCTSSearcher
+  - temperature: float
+  - temp_steps: int
+  - log_key_prefix: Optional[str]
+  - _step_count: int
+  - _search_id: int
+  --
+  + __init__(searcher, temperature, temp_steps, log_key_prefix)
+  + get_move(board, current_player, strategy): MoveDecision
+  + make_move(action)
+  + reset()
+}
+
+class MCTSSearcher {
+  - model
+  - num_simulations: int
+  - c_puct: float
+  - dirichlet_epsilon: float
+  - dirichlet_alpha: float
+  - log_dir: Optional[str]
+  - tree: Dict
+  --
+  + __init__(model, num_simulations, c_puct, ...)
+  + search(state, num_simulations, log_key): Tuple
+  + advance_root(action): bool
+  + reset()
+}
+
+class MCTSSearchLogger {
+  - log_dir: str
+  - c_puct: float
+  --
+  + write_log(log_key, log_data)
+}
+
+class MoveDecision {
+  - _position: Tuple[int, int]
+  - _probs: Optional[List[float]]
+  - _mcts_visit_counts: Optional[List[int]]
+  --
+  + get_position(): Tuple[int, int]
+  + get_probs(): Optional[List[float]]
+  + get_mcts_visit_counts(): Optional[List[int]]
+}
+
+class play_single_game <<static>> {
+  play_single_game(engine_black, engine_white, recorder, ...)
+}
+
+class _run_single_game <<static>> {
+  _run_single_game(model, device, hyperparams, game_idx, run_id)
+}
+
+' 依赖关系
+play_single_game ..> AIEngine : "创建并调用\nget_move(board, player, strategy)"
+AIEngine ..> MoveDecision : 返回
+
+_run_single_game ..> MCTSMoveDecider : "创建并调用\nget_move(board, current_player, strategy)"
+_run_single_game ..> MCTSSearcher : 创建
+MCTSMoveDecider --> MCTSSearcher : "搜索委托\nsearch(state, log_key)"
+MCTSMoveDecider ..> MoveDecision : 返回
+MCTSSearcher --> MCTSSearchLogger : "日志委托\nwrite_log(log_key, data)"
+
+' 接口变更标注
+note right of AIEngine
+  <b>变更</b>
+  +temperature, +top_k, +rng 移入构造
+  get_move 删减这些参数
+end note
+
+note right of MCTSMoveDecider
+  <b>变更</b>
+  +log_key_prefix 移入构造
+  +board/current_player/strategy 加入 get_move
+  -state/log_key 从 get_move 移除
+end note
+
+note bottom of _run_single_game
+  <b>变更</b>
+  移除 import uuid
+  log_key 拼接逻辑移除
+end note
+
+@enduml

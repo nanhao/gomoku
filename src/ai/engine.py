@@ -93,25 +93,43 @@ class AIEngine:
     design/move_sampler_design.md）：
     - "argmax"（默认）：选择概率最大的合法位置；存在并列最大值时随机打破平局
     - "sampling"：温度加权采样，委托给 ai.move_sampler.temperature_sample 实现
+
+    采样参数在构造时注入（设计文档 design/33/main_docs/main_design.md）：
+    - temperature / top_k / rng 一局对弈中不变，构造时注入语义更清晰，
+      调用方不再每次 get_move 时重复传参。
     """
 
-    def __init__(self, model: BaseModel):
+    def __init__(
+        self,
+        model: BaseModel,
+        temperature: float = 1.0,
+        top_k: Optional[int] = None,
+        rng: Optional[random.Random] = None,
+    ):
         """
         初始化 AI 引擎
 
         Args:
             model: AI 模型实例，必须继承 BaseModel
+            temperature: 温度值 T > 0，仅在 strategy="sampling" 时生效。
+                默认 1.0（等价模型原始概率）。T → 0 趋近 argmax；
+                T → ∞ 趋近均匀。
+            top_k: 仅在 strategy="sampling" 时生效，截断阈值；
+                None 表示不截断。
+            rng: 仅在 strategy="sampling" 时生效，可选随机源；
+                None 时使用 random 模块全局源。
+                可通过直接赋值 engine.rng 在构造后替换（如每局重新生成）。
         """
         self.model = model
+        self.temperature = temperature
+        self.top_k = top_k
+        self.rng = rng
 
     def get_move(
         self,
         board: List[List[int]],
         current_player: int,
         strategy: str = STRATEGY_ARGMAX,
-        temperature: float = 1.0,
-        top_k: Optional[int] = None,
-        rng: Optional[random.Random] = None,
     ) -> MoveDecision:
         """
         获取 AI 落子位置
@@ -126,13 +144,8 @@ class AIEngine:
             current_player: 当前落子方，1=黑, 2=白
             strategy: 落子策略，取值见模块常量 STRATEGY_*。
                 - "argmax"（默认）：选择概率最大的合法位置，并列时随机打破
-                - "sampling"：温度采样（见 ai.move_sampler.temperature_sample）
-            temperature: 仅在 strategy="sampling" 时生效，温度值 T > 0。
-                默认 1.0（等价模型原始概率）。T → 0 趋近 argmax；
-                T → ∞ 趋近均匀。argmax 分支完全不使用此参数。
-            top_k: 仅在 strategy="sampling" 时生效，截断阈值；None 表示不截断。
-            rng: 仅在 strategy="sampling" 时生效，可选随机源；None 时使用
-                random 模块全局源。
+                - "sampling"：温度采样（见 ai.move_sampler.temperature_sample），
+                  使用构造时注入的 temperature / top_k / rng。
 
         Returns:
             MoveDecision 对象，可通过 get_position() 获取 (x, y) 落子位置，
@@ -173,13 +186,14 @@ class AIEngine:
             return MoveDecision(x, y, probs=probs)
         if strategy == STRATEGY_SAMPLING:
             # 委托给 ai.move_sampler.temperature_sample（本地导入避免循环依赖）
+            # 使用构造时注入的 temperature / top_k / rng
             from ai.move_sampler import temperature_sample
             x, y = temperature_sample(
                 valid_positions,
                 valid_probs,
-                temperature=temperature,
-                top_k=top_k,
-                rng=rng,
+                temperature=self.temperature,
+                top_k=self.top_k,
+                rng=self.rng,
             )
             return MoveDecision(x, y, probs=probs)
         raise ValueError(

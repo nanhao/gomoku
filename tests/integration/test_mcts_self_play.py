@@ -59,10 +59,10 @@ class TestMCTSSelfPlayIntegration(unittest.TestCase):
         model.move_to_device()
 
         searcher = MCTSSearcher(model, num_simulations=20, log_dir=None)
-        decider = MCTSMoveDecider(searcher, temp_steps=5)
+        decider = MCTSMoveDecider(searcher, temp_steps=5, log_key_prefix="test_game0")
 
-        # 手动模拟一局对弈
-        board = [0] * 225
+        # 手动模拟一局对弈（使用 flat board 维护原始状态，get_move 时转为 2D）
+        board_flat = [0] * 225
         current_player = 1
         samples = []
         move_count = 0
@@ -70,8 +70,11 @@ class TestMCTSSelfPlayIntegration(unittest.TestCase):
         from game.game import check_winner, is_board_full
 
         while move_count < 225:
-            state = board + [current_player]
-            md = decider.get_move(state)
+            state = board_flat + [current_player]
+
+            # 将 flat board 转为 15×15 二维矩阵
+            board_2d = [[board_flat[i * 15 + j] for j in range(15)] for i in range(15)]
+            md = decider.get_move(board_2d, current_player)
             x, y = md.get_position()
             action = x * 15 + y
             visit_counts = md.get_mcts_visit_counts()
@@ -79,18 +82,18 @@ class TestMCTSSelfPlayIntegration(unittest.TestCase):
             # 验证 action 合法
             self.assertGreaterEqual(action, 0)
             self.assertLess(action, 225)
-            self.assertEqual(board[action], 0, f"Action {action} is not empty")
+            self.assertEqual(board_flat[action], 0, f"Action {action} is not empty")
 
             # 落子到棋盘
-            board[action] = current_player
+            board_flat[action] = current_player
 
             # 记录样本
             pi = [c / sum(visit_counts) if sum(visit_counts) > 0 else 0 for c in visit_counts]
             samples.append({"state": state, "pi": pi, "z": 0})  # z 待填入
 
             # 终局判定
-            winner = check_winner(board, action)
-            is_terminal = (winner != 0) or is_board_full(board)
+            winner = check_winner(board_flat, action)
+            is_terminal = (winner != 0) or is_board_full(board_flat)
 
             if is_terminal:
                 decider.reset()  # 终局无需子树复用

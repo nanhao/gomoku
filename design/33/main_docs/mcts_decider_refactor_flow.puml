@@ -1,0 +1,50 @@
+@startuml
+!theme plain
+
+' Chinese font support
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title MCTSMoveDecider: log_key / strategy 重构
+
+== 重构前 ==
+participant "_run_single_game" as Game
+participant "MCTSMoveDecider" as Decider
+participant "MCTSSearcher" as Searcher
+
+Game -> Decider: ① new MCTSMoveDecider(searcher,\n  temperature, temp_steps)
+activate Decider
+
+Game -> Game: ② 每步拼接 log_key\n  = f"run{run_id}_game{game_idx}_step{uuid}"
+
+Game -> Decider: ③ get_move(state, log_key=log_key)
+activate Decider
+Decider -> Searcher: search(state, log_key=log_key)
+activate Searcher
+Searcher --> Decider: (visit_counts, root_value, root_policy)
+deactivate Searcher
+Decider -> Decider: _get_temperature() 决定 tau\n_t_select_greedy or _sample_action
+Decider --> Game: MoveDecision
+deactivate Decider
+
+note over Game, Searcher: 调用方负责拼接 log_key（含 UUID）\n无 strategy 参数，始终按 _get_temperature 决定
+
+== 重构后 ==
+Game -> Decider: ① new MCTSMoveDecider(searcher,\n  temperature, temp_steps,\n  log_key_prefix="run{run_id}_game{game_idx}")
+activate Decider
+Decider -> Decider: _search_id = 0
+
+Game -> Decider: ② get_move(board, current_player,\n  strategy="sampling")
+activate Decider
+Decider -> Decider: board->226维向量\n拼接 log_key = f"{prefix}_search{_search_id}"\n_search_id += 1
+Decider -> Searcher: search(state, log_key=log_key)
+activate Searcher
+Searcher --> Decider: (visit_counts, root_value, root_policy)
+deactivate Searcher
+Decider -> Decider: strategy="sampling" -> _sample_action\nstrategy="argmax" -> _select_greedy
+Decider --> Game: MoveDecision
+deactivate Decider
+
+note over Game, Searcher: log_key_prefix 构造时注入，search_id 内部自增\nboard+current_player 替代 state，与 AiEngine 接口一致\n内部自行转换 board -> 226维向量\nreset() 将 _search_id 归零
+
+@enduml

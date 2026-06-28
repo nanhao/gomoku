@@ -1,0 +1,49 @@
+@startuml
+!theme plain
+
+' Chinese font support
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title AiEngine: temperature/top_k/rng 注入点重构
+
+== 重构前 ==
+participant "play_single_game" as Game
+participant "AIEngine" as Engine
+
+Game -> Engine: ① new AIEngine(model)
+activate Engine
+Engine --> Game: engine
+deactivate Engine
+
+Game -> Engine: ② engine.get_move(board, player,\n  strategy="sampling",\n  temperature=1.0, top_k=None, rng=rng)
+activate Engine
+Engine --> Game: MoveDecision
+deactivate Engine
+
+Game -> Engine: ③ engine.get_move(board, player)\n(无温度参数，走 argmax)
+activate Engine
+Engine --> Game: MoveDecision
+deactivate Engine
+
+note over Game, Engine: temperature/top_k/rng 每次调用时透传\n调用方需记住采样配置
+
+== 重构后 ==
+Game -> Engine: ① new AIEngine(model,\n  temperature=1.0, top_k=None, rng=rng)
+activate Engine
+Engine --> Game: engine
+deactivate Engine
+
+Game -> Engine: ② engine.get_move(board, player,\n  strategy="sampling")
+activate Engine
+Engine --> Game: MoveDecision
+deactivate Engine
+
+Game -> Engine: ③ engine.get_move(board, player)\n(默认 strategy="argmax")
+activate Engine
+Engine --> Game: MoveDecision
+deactivate Engine
+
+note over Game, Engine: temperature/top_k/rng 构造时一次性注入\n调用方无需重复传参
+
+@enduml

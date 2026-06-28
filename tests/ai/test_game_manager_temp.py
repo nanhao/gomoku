@@ -57,6 +57,9 @@ class _SpyEngine(AIEngine):
 
     不改变 get_move 的返回值逻辑（仍真正走父类），但把每次调用
     的 (strategy, temperature, player) 追加到 calls 列表。
+
+    注意：temperature / top_k / rng 已移入 AIEngine 构造函数（设计文档 33），
+    get_move 不再接受这些参数。记录时从 self.temperature 读取。
     """
 
     def __init__(self):
@@ -64,16 +67,14 @@ class _SpyEngine(AIEngine):
         self.calls: List[dict] = []
 
     def get_move(self, board, current_player,
-                 strategy=STRATEGY_ARGMAX, temperature=1.0,
-                 top_k=None, rng=None):
+                 strategy=STRATEGY_ARGMAX):
         self.calls.append({
             "player": current_player,
             "strategy": strategy,
-            "temperature": temperature,
+            "temperature": self.temperature,
         })
         return super().get_move(
             board, current_player, strategy=strategy,
-            temperature=temperature, top_k=top_k, rng=rng,
         )
 
 

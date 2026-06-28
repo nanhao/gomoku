@@ -188,6 +188,10 @@ class AIGameManager:
             else:
                 rng = _stdrandom.Random()
             temp_side_this_game = resolve_temp_side(temp_config.temp_side, rng)
+            # 将本局的 rng 注入引擎（引擎采样参数在构造时已设定，
+            # rng 按局不同，通过直接赋值更新）
+            engine_black.rng = rng
+            engine_white.rng = rng
 
         # 游戏循环：交替落子直到游戏结束
         move_count = 0
@@ -209,12 +213,11 @@ class AIGameManager:
 
             try:
                 if use_temp:
+                    # 引擎采样参数（temperature/top_k/rng）已在构造时注入，
+                    # get_move 仅需传入 board、player、strategy
                     decision = engine.get_move(
                         board, player,
                         strategy=STRATEGY_SAMPLING,
-                        temperature=temp_config.temperature,
-                        top_k=temp_config.top_k,
-                        rng=rng,
                     )
                     x, y = decision.get_position()
                 else:

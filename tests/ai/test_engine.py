@@ -318,6 +318,9 @@ class TestGetMoveSamplingStrategy(unittest.TestCase):
 
     strategy="sampling" 不再抛 NotImplementedError，而是委托给
     ai.move_sampler.temperature_sample 完成温度采样。
+
+    注意：temperature / top_k / rng 已从 get_move() 移入 AIEngine 构造函数（设计文档 33）。
+    本测试通过构造时注入或直接赋值 engine.rng 来传递采样参数。
     """
 
     def test_sampling_strategy_no_longer_raises_not_implemented(self):
@@ -339,12 +342,11 @@ class TestGetMoveSamplingStrategy(unittest.TestCase):
         board[6][6] = 2
         # 构造非均匀分布，测试覆盖
         probs = _make_probs([(0, 0.5), (1, 0.3), (2, 0.2)])
-        engine = AIEngine(StubModel(probs))
+        engine = AIEngine(StubModel(probs), rng=random.Random(2026))
 
-        rng = random.Random(2026)
         for _ in range(100):
             decision = engine.get_move(
-                board, 1, strategy="sampling", temperature=1.0, rng=rng
+                board, 1, strategy="sampling"
             )
             x, y = decision.get_position()
             self.assertEqual(board[x][y], 0, "sampling 必须返回空位")
@@ -353,13 +355,12 @@ class TestGetMoveSamplingStrategy(unittest.TestCase):
         """用例 19：strategy=sampling, T 极小 → 与 argmax 等价。"""
         board = _empty_board()
         probs = _make_probs([(50, 0.8), (51, 0.15), (52, 0.05)])
-        engine = AIEngine(StubModel(probs))
+        engine = AIEngine(StubModel(probs), temperature=0.01, rng=random.Random(7))
 
-        rng = random.Random(7)
         expected = (50 // 15, 50 % 15)
         for _ in range(50):
             pos = engine.get_move(
-                board, 1, strategy="sampling", temperature=0.01, rng=rng
+                board, 1, strategy="sampling"
             ).get_position()
             self.assertEqual(pos, expected)
 
@@ -369,38 +370,42 @@ class TestGetMoveSamplingStrategy(unittest.TestCase):
         probs = _make_probs(
             [(0, 0.25), (1, 0.20), (2, 0.20), (3, 0.20), (4, 0.15)]
         )
-        engine = AIEngine(StubModel(probs))
+        engine = AIEngine(StubModel(probs), temperature=1.2)
 
         rng1 = random.Random(2026)
         rng2 = random.Random(2026)
+        engine.rng = rng1
         seq1 = [
-            engine.get_move(board, 1, strategy="sampling",
-                            temperature=1.2, rng=rng1).get_position()
+            engine.get_move(board, 1, strategy="sampling").get_position()
             for _ in range(30)
         ]
+        engine.rng = rng2
         seq2 = [
-            engine.get_move(board, 1, strategy="sampling",
-                            temperature=1.2, rng=rng2).get_position()
+            engine.get_move(board, 1, strategy="sampling").get_position()
             for _ in range(30)
         ]
         self.assertEqual(seq1, seq2)
 
     def test_sampling_strategy_invalid_temperature_raises(self):
-        """用例 21：T <= 0 → ValueError。"""
+        """用例 21：T <= 0 → ValueError（在构造时或采样时）。"""
         board = _empty_board()
         probs = [1.0 / 225] * 225
-        engine = AIEngine(StubModel(probs))
 
+        # temperature=0.0 在构造时是合法的（因为 argmax 分支也使用同一引擎），
+        # 但调用 sampling 时会由 temperature_sample 抛出 ValueError。
+        engine = AIEngine(StubModel(probs), temperature=0.0)
         with self.assertRaises(ValueError):
-            engine.get_move(board, 1, strategy="sampling", temperature=0.0)
+            engine.get_move(board, 1, strategy="sampling")
+
+        engine2 = AIEngine(StubModel(probs), temperature=-1.0)
         with self.assertRaises(ValueError):
-            engine.get_move(board, 1, strategy="sampling", temperature=-1.0)
+            engine2.get_move(board, 1, strategy="sampling")
 
     def test_argmax_path_unchanged_by_new_params(self):
-        """用例 22：strategy=argmax 默认值下，新参数 temperature/top_k/rng 不影响行为。"""
+        """用例 22：strategy=argmax 默认值下，新参数仅影响构造不影响 argmax 行为。"""
         board = _empty_board()
         probs = _make_probs([(100, 0.9), (101, 0.1)])
-        engine = AIEngine(StubModel(probs))
+        engine = AIEngine(StubModel(probs), temperature=2.0, top_k=3)
 
         # 既不传 strategy 也不传新参数
         pos1 = engine.get_move(board, 1).get_position()

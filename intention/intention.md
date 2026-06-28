@@ -209,3 +209,14 @@ remove the reset() function in mcts package.
 
 # intention_id=32
 当前 mcts 不为终局节点创建子节点，导致在终局节点调用 make_move 的时候会失败，这次要解决这个问题。
+
+# intention_id=33
+do the folowing refactor:
+- move the injection point of temperature/top_k/rng parameters of AiEngine.get_move() into constructor
+- remove the log_key parameter of MCTSMoveDecider.get_move(). instead, inject the log_key_prefix into MCTSMoveDecider from the constructor. MCTSMoveDecider.get_move() should maintain the entire log_key internally. the passing prefix should be "run{run_id}_game{game_idx}", and the get_move() should append "_search{search_id}" to the prefix. The search_id is incrementally from 0, that is to say, start from 0. we don't use uuid in step_id any more.
+- add a parameter called strategy to MCTSMoveDecider.get_move(). the meaning and logic of this parameter is identical to that of AiEngine.get_move()
+- remove the state parameter of MCTSMoveDecider.get_move(). Instead, add board and current_player to it. This make the interface of MCTSMoveDecider.get_move() identical to AiEngine.get_move()
+
+# intention_id=34
+since now the terminated leaf tree of the mcts is created. we don't need the calling-side workaround. And what's more, the reset() calling is meaningless because mcts tree is not shared between games right? I think we can simpified the calling-side to only one calling to make_move without checking and reset().
+Having this change, we can go further. We can make AiEngine and mcts/decision_maker.py into one hierarchy sharing the get_move function. we can move the injection point of parameters which cannot share into the constructor and introduce a builder or factory to create different subclasses.

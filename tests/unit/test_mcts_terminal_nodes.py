@@ -278,10 +278,11 @@ class TestMCTSTerminalNodeCreation(unittest.TestCase):
         """
         from ai.mcts.decision_maker import MCTSMoveDecider
 
-        board = [0] * 225
+        board_flat = [0] * 225
         for y in range(4):
-            board[7 * 15 + y] = 1
-        board.append(1)
+            board_flat[7 * 15 + y] = 1
+        # 构建 226 维 state 用于搜索器初始化
+        state = board_flat + [1]
 
         win_action = 7 * 15 + 4
         policy = self._make_biased_policy(win_action)
@@ -292,8 +293,11 @@ class TestMCTSTerminalNodeCreation(unittest.TestCase):
         )
         decider = MCTSMoveDecider(searcher, temperature=0.0)  # 贪婪选择
 
+        # 将 flat board 转为 15×15 二维矩阵
+        board_2d = [[board_flat[i * 15 + j] for j in range(15)] for i in range(15)]
+
         np.random.seed(42)
-        md = decider.get_move(board)
+        md = decider.get_move(board_2d, 1)  # current_player=1（黑方）
         x, y = md.get_position()
         action = x * 15 + y
 

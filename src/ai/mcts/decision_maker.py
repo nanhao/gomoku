@@ -1,24 +1,30 @@
 """MCTS 落子决策器模块
 
 基于 MCTSSearcher 的搜索结果做出落子决策。
-支持温度采样、子树复用。
+支持温度采样、子树复用、自动日志键生成。
 """
 
 import math
 import random
 from typing import List, Optional
 
-from ai.engine import MoveDecision
+from ai.engine import MoveDecision, AIEngine, STRATEGY_ARGMAX, STRATEGY_SAMPLING
+
+# 支持的策略常量（与 ai.engine 保持一致）
+_SUPPORTED_STRATEGIES = (STRATEGY_ARGMAX, STRATEGY_SAMPLING)
 
 
 class MCTSMoveDecider:
     """MCTS 落子决策器
 
     封装 MCTSSearcher，提供高层次的落子决策 API：
-    - get_move(): 搜索 + 温度选择 + 返回 MoveDecision
-    - make_move(): 子树复用
+    - get_move(board, current_player, strategy): 搜索 + 温度选择 + 返回 MoveDecision
+    - make_move(action): 子树复用
 
     不继承/不修改 AIEngine，独立实现。
+
+    日志键由构造时注入的 log_key_prefix + 内部自增 _search_id 自动生成，
+    调用方无需每次 get_move 传入 log_key。
     """
 
     def __init__(
@@ -26,6 +32,7 @@ class MCTSMoveDecider:
         searcher,
         temperature: float = 1.0,
         temp_steps: int = 8,
+        log_key_prefix: Optional[str] = None,
     ):
         """初始化决策器
 
@@ -33,51 +40,82 @@ class MCTSMoveDecider:
             searcher: MCTSSearcher 实例
             temperature: 温度参数 τ，控制落子随机性
             temp_steps: 温度探索步数（前 N 步 τ=1.0，之后 τ→0），默认 8
+            log_key_prefix: 日志键前缀，格式 "run{run_id}_game{game_idx}"。
+                None 时不输出日志；非 None 时每次 get_move 自动拼接
+                "{log_key_prefix}_search{_search_id}" 作为日志标识。
         """
         self.searcher = searcher
         self.temperature = temperature
         self.temp_steps = temp_steps
+        self.log_key_prefix = log_key_prefix
         self._step_count = 0  # 当前局已走步数
+        self._search_id = 0   # 日志搜索 ID，从 0 递增，reset() 时归零
 
     # ---------- 公共 API ----------
 
     def get_move(
         self,
-        state: List[int],
-        log_key: Optional[str] = None,
+        board: List[List[int]],
+        current_player: int,
+        strategy: str = STRATEGY_ARGMAX,
     ) -> MoveDecision:
-        """对给定状态做出落子决策
+        """对给定棋盘状态做出落子决策
 
         流程：
-        1. 调用 searcher.search() 执行 MCTS
-        2. 根据温度和步数计算 π 分布
-        3. 按 π 分布采样落子（或贪婪选择）
-        4. 返回 MoveDecision（含 position 和 mcts_visit_counts）
+        1. 将 board + current_player 转换为 226 维向量
+        2. 生成 log_key（若 log_key_prefix 非 None）
+        3. 调用 searcher.search() 执行 MCTS
+        4. 根据 strategy 决定落子方式：
+           - "argmax"：强制贪婪选择（访问计数最大）
+           - "sampling"：按内部温度逻辑采样（tau 由 _get_temperature() 决定）
+        5. 返回 MoveDecision（含 position 和 mcts_visit_counts）
 
         Args:
-            state: 226 维 board_vector
-            log_key: 日志标识，透传给 searcher.search()
+            board: 15×15 棋盘矩阵，0=空, 1=黑, 2=白
+            current_player: 当前落子方 (1=黑, 2=白)
+            strategy: 落子策略，与 AiEngine 一致：
+                - "argmax"（默认）：贪婪选择访问计数最大者
+                - "sampling"：按温度从访问计数采样
 
         Returns:
             MoveDecision 实例，包含：
             - position: (x, y) 落子坐标
             - mcts_visit_counts: 225 维原始访问计数
+
+        Raises:
+            ValueError: strategy 取值未知
         """
-        # MCTS 搜索
+        # 校验策略
+        if strategy not in _SUPPORTED_STRATEGIES:
+            raise ValueError(
+                f"未知落子策略: {strategy!r}，支持的策略为 {_SUPPORTED_STRATEGIES}"
+            )
+
+        # 1. 将 board + current_player 转换为 226 维向量
+        state = AIEngine.board_to_vector(board, current_player)
+
+        # 2. 生成 log_key（自增 _search_id）
+        log_key = None
+        if self.log_key_prefix is not None:
+            log_key = f"{self.log_key_prefix}_search{self._search_id}"
+            self._search_id += 1
+
+        # 3. MCTS 搜索
         visit_counts, root_value, root_policy = self.searcher.search(
             state, log_key=log_key
         )
 
-        # 决定当前步的温度
-        tau = self._get_temperature()
-
-        # 从访问计数计算 π 并选择动作
-        if tau <= 0:
-            # 贪婪：选访问计数最大的合法空位
+        # 4. 按策略选择动作
+        if strategy == STRATEGY_ARGMAX:
+            # 强制贪婪选择（忽略温度）
             action = self._select_greedy(visit_counts, state[:225])
-        else:
-            # 温度采样
-            action = self._sample_action(visit_counts, state[:225], tau)
+        else:  # STRATEGY_SAMPLING
+            # 按内部温度逻辑决定 tau，然后采样
+            tau = self._get_temperature()
+            if tau <= 0:
+                action = self._select_greedy(visit_counts, state[:225])
+            else:
+                action = self._sample_action(visit_counts, state[:225], tau)
 
         # 转换 flat index 为 (x, y) 坐标
         x, y = action // 15, action % 15
@@ -107,8 +145,12 @@ class MCTSMoveDecider:
             )
 
     def reset(self):
-        """重置决策器状态（终局时调用，无需子树复用）"""
+        """重置决策器状态（终局时调用，无需子树复用）
+
+        重置 _step_count、_search_id 和底层 searcher。
+        """
         self._step_count = 0
+        self._search_id = 0
         self.searcher.reset()
 
     # ---------- 内部方法 ----------
