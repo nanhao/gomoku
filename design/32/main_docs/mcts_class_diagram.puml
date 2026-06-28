@@ -1,0 +1,91 @@
+@startuml
+skinparam defaultFontName Microsoft YaHei
+title MCTS 模块类图 — 终局节点创建（intention 32）
+
+package "src/ai/mcts" {
+
+  class MCTSSearcher {
+    - model
+    - num_simulations: int
+    - c_puct: float
+    - dirichlet_epsilon: float
+    - dirichlet_alpha: float
+    - tree: Dict[str, dict]
+    - _root_hash: str
+    - _root_edge_N_snapshot: Dict[int, int]
+    - _logger: MCTSSearchLogger
+    --
+    + search(state, num_simulations?, log_key?): Tuple
+    + advance_root(action): bool
+    + reset(): void
+    --
+    - _init_search(state)
+    - _select(): dict
+    - _evaluate(leaf_info)
+    - _expand_leaf(leaf, policy)
+    - _create_terminal_node(leaf) <<新增>>
+    - _backup(leaf_info)
+    - _get_result(): Tuple
+    - _puct_select(node_hash): int
+    - _add_dirichlet_noise(node_hash)
+    - _state_hash(board, player): str
+    - _check_board_winner(board): int
+  }
+
+  class MCTSMoveDecider {
+    - searcher: MCTSSearcher
+    - temperature: float
+    - temp_steps: int
+    - _step_count: int
+    --
+    + get_move(state, log_key?): MoveDecision
+    + make_move(action): void
+    + reset(): void
+    --
+    - _get_temperature(): float
+    - _select_greedy(visit_counts, board): int
+    - _sample_action(visit_counts, board, tau): int
+  }
+
+  class MCTSSearchLogger {
+    - log_dir: str
+    - c_puct: float
+    --
+    + init_log_data(...): dict
+    + build_simulation_log(...): dict
+    + write_log(log_key, data): void
+  }
+
+  class MoveDecision {
+    + x: int
+    + y: int
+    + mcts_visit_counts: List[int]
+    --
+    + get_position(): Tuple[int, int]
+    + get_mcts_visit_counts(): List[int]
+  }
+
+  MCTSMoveDecider --> MCTSSearcher : "调用 search()\nadvance_root()"
+  MCTSSearcher --> MCTSSearchLogger : "日志委托"
+  MCTSMoveDecider ..> MoveDecision : "返回"
+
+  note right of MCTSSearcher::_create_terminal_node
+    <b>意图 32 新增</b>
+    为终局位置创建树节点：
+    · edges = {}（无合法落子）
+    · 链接父边 child_hash
+  end note
+
+  note bottom of MCTSSearcher
+    <b>树节点结构</b>
+    {
+      "board": [225],
+      "player": int,
+      "N": int, "W": float, "Q": float,
+      "edges": { action: {N, W, Q, P, child_hash} }
+    }
+    终局节点 edges = {}
+  end note
+}
+
+@enduml

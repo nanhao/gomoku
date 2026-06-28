@@ -394,12 +394,16 @@ class MCTSSearcher:
     def _evaluate(self, leaf_info: dict):
         """评估单个叶节点：终局规则判定或模型推理，并展开子边。
 
+        终局节点不再早返回，改为调用 _create_terminal_node 创建树节点，
+        确保 advance_root 可通过 child_hash 定位终局节点。
+
         Args:
             leaf_info: _select() 返回的叶节点字典，就地修改添加 value/policy 字段
         """
-        # 终局节点由规则判定价值
+        # 终局节点由规则判定价值（来自 _make_terminal_leaf）
         if leaf_info.get("is_terminal", False):
             leaf_info["value"] = leaf_info.get("terminal_value", 0.0)
+            self._create_terminal_node(leaf_info)
             return
 
         # 检查棋盘状态（可能漏检的终局）
@@ -409,10 +413,12 @@ class MCTSSearcher:
             # 胜者必为刚刚落子的对手（leaf_info["player"] 是对手），
             # 因此从 leaf_info["player"] 视角 value 恒为 -1.0
             leaf_info["value"] = -1.0
+            self._create_terminal_node(leaf_info)
             return
         if is_board_full(leaf_info["board"]):
             leaf_info["is_terminal"] = True
             leaf_info["value"] = 0.0
+            self._create_terminal_node(leaf_info)
             return
 
         # 非终局：调用模型预测并扩展子节点
@@ -454,6 +460,39 @@ class MCTSSearcher:
                         "N": 0, "W": 0.0, "Q": 0.0,
                         "P": policy[action], "child_hash": None,
                     }
+
+        leaf["child_hash"] = child_hash
+
+        # 在父节点边中记录 child_hash
+        if "action" in leaf and leaf.get("path"):
+            parent_info = leaf["path"][-1]
+            parent_hash = parent_info["state_hash"]
+            parent_action = leaf["action"]
+            if parent_hash in self.tree and parent_action in self.tree[parent_hash]["edges"]:
+                self.tree[parent_hash]["edges"][parent_action]["child_hash"] = child_hash
+
+    def _create_terminal_node(self, leaf: dict):
+        """为终局叶节点创建搜索树节点（无子边）并链接父边 child_hash。
+
+        终局位置是合法游戏状态，应存在于搜索树中，以便 advance_root
+        能通过 child_hash 定位并推进根节点。终局节点的 edges 恒为空
+        （无合法落子位置），与 _expand_leaf 创建的节点结构一致。
+
+        若节点已存在于树中（如 _make_terminal_leaf 传入的当前节点），
+        则跳过创建，仅确保父边 child_hash 已链接（幂等）。
+
+        Args:
+            leaf: 叶节点字典，含 board/player/action/path 字段
+        """
+        child_hash = self._state_hash(leaf["board"], leaf["player"])
+        if child_hash not in self.tree:
+            # 创建终局节点：与普通节点结构一致，仅 edges 为空
+            self.tree[child_hash] = {
+                "board": list(leaf["board"]),
+                "player": leaf["player"],
+                "N": 0, "W": 0.0, "Q": 0.0,
+                "edges": {},
+            }
 
         leaf["child_hash"] = child_hash
 

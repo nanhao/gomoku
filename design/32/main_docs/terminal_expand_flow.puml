@@ -1,0 +1,54 @@
+@startuml
+skinparam defaultFontName Microsoft YaHei
+title MCTS 评估与扩展流程 — 终局节点创建（intention 32）
+
+start
+:叶节点 leaf_info
+（_select 返回）;
+
+note right: == 终局判定 ==
+
+if (leaf_info.is_terminal?) then (是)
+  :v = terminal_value;
+  note right: 规则判定值\n胜者视角 -1.0\n平局 0.0
+else (否)
+  :检测 board 胜方;
+  if (winner != 0?) then (是)
+    :leaf_info.is_terminal = True;
+    :v = -1.0;
+  else (否)
+    :检测 board 满盘;
+    if (is_board_full?) then (是)
+      :leaf_info.is_terminal = True;
+      :v = 0.0;
+    else (否)
+      :非终局：model.predict(state);
+      note right: (p, v) = model.predict(board_vector)
+      :_expand_leaf(leaf, p);
+      note right
+        创建节点 + 合法落子边
+        链接父边 child_hash
+      end note
+      stop
+    endif
+  endif
+endif
+
+note right: == 终局节点创建（新增） ==
+
+:_create_terminal_node(leaf);
+note right
+  ① compute child_hash
+  ② 若树中无此 hash：
+    创建节点 board/player/N=0/W=0/Q=0/edges={}
+  ③ 链接父边 child_hash
+end note
+
+:leaf["value"] = v;
+:leaf["child_hash"] = child_hash;
+
+note right: 随后由 _backup 沿路径回传
+
+stop
+
+@enduml

@@ -206,3 +206,6 @@ remove the reset() function in mcts package.
 
 # intention_id=31
 移除当前 mcts 实现当中的 batch 和 virtual loss 机制
+
+# intention_id=32
+当前 mcts 不为终局节点创建子节点，导致在终局节点调用 make_move 的时候会失败，这次要解决这个问题。
