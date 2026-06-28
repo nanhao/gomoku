@@ -1,0 +1,136 @@
+@startuml
+!theme plain
+
+' Chinese font support
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam stateFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title MCTS 搜索树完整生命周期
+
+' ============================================================
+' 主状态：树级别生命周期
+' ============================================================
+state "🌳 空树\n─────────\ntree = {}\n_root_hash = None" as Empty
+
+state "🌱 根节点初始化\n─────────\n_init_search(state)" as RootInit {
+    state "① 模型预测\nmodel.predict(state)\n→ (policy, value)" as ModelPredict
+    state "② 创建根节点\nboard / player / N=0 / W=0 / Q=0\n_root_policy = policy" as CreateRoot
+    state "③ 创建合法动作边\n∀ action where board[a]==0:\n  edge.N=0, W=0, Q=0, P=policy[a]\n  child_hash=None" as CreateEdges
+    state "④ 施加狄利克雷噪声\nP' = (1-ε)·P + ε·Dir(α)\n(仅根节点，含子树复用)" as DirichletNoise
+
+    [*] --> ModelPredict
+    ModelPredict --> CreateRoot
+    CreateRoot --> CreateEdges
+    CreateEdges --> DirichletNoise
+    DirichletNoise --> [*]
+}
+
+state "🔁 搜索循环 (×N次)\n─────────\nfor sim_id in range(sims):\n  select → evaluate → backup" as Searching {
+    state "阶段一：选择\n_select()" as SelectPhase {
+        state "从根沿 PUCT 下降\nscore = Q + c·P·√ΣN / (1+N)" as PUCTWalk
+        state "到达叶节点？\n(child_hash is None)" as LeafCheck
+        state "终局节点？\n(有人胜 / 棋盘满)" as TerminalCheck
+
+        [*] --> PUCTWalk
+        PUCTWalk --> LeafCheck
+        LeafCheck --> TerminalCheck : 是
+        LeafCheck --> PUCTWalk : 否（继续下降）
+        TerminalCheck --> [*]
+    }
+
+    state "阶段二：评估 + 扩展\n_evaluate(leaf)" as EvalPhase {
+        state "终局规则判定\nwinner → value=-1\n平局 → value=0" as TerminalEval
+        state "模型推理\npredict(board+player)\n→ (policy, value)" as ModelEval
+        state "展开子节点\n_expand_leaf()\n创建 child 节点 + 边\n回填父边 child_hash" as ExpandLeaf
+
+        [*] --> TerminalEval : is_terminal
+        [*] --> ModelEval : 非终局
+        TerminalEval --> [*]
+        ModelEval --> ExpandLeaf
+        ExpandLeaf --> [*]
+    }
+
+    state "阶段三：回传\n_backup(leaf)" as BackupPhase {
+        state "沿 path 逆序遍历\nfor step in reversed(path):\n  v = -v (取反切换视角)" as ReverseWalk
+        state "更新边统计量\nedge.N += 1\nedge.W += v\nedge.Q = W / N" as UpdateEdge
+        state "同步更新节点统计量\nnode.N += 1\nnode.W += v\nnode.Q = W / N" as UpdateNode
+
+        [*] --> ReverseWalk
+        ReverseWalk --> UpdateEdge
+        UpdateEdge --> UpdateNode
+        UpdateNode --> ReverseWalk : 下一层父节点
+        ReverseWalk --> [*] : path 遍历完毕
+    }
+
+    SelectPhase --> EvalPhase
+    EvalPhase --> BackupPhase
+    BackupPhase --> SelectPhase : sim_id < sims
+}
+
+state "📊 搜索完成\n─────────\n_get_result()\n→ visit_counts (N增量)\n→ root_value (Q)\n→ root_policy" as SearchDone
+
+state "✂️ 子树推进\n─────────\nadvance_root(action)" as SubtreeAdvance {
+    state "① 定位 child_hash\nroot.edges[action].child_hash" as LocateChild
+    state "② 收集子树节点\n_collect_subtree() DFS\n标记所有可达节点" as CollectSubtree
+    state "③ 剪枝兄弟子树\ndel tree[h] for h ∉ subtree" as PruneSiblings
+    state "④ 提升新根\n_root_hash = child_hash\n(N 快照在下次 _init_search 记录)" as PromoteRoot
+
+    [*] --> LocateChild
+    LocateChild --> CollectSubtree
+    CollectSubtree --> PruneSiblings
+    PruneSiblings --> PromoteRoot
+    PromoteRoot --> [*]
+}
+
+state "🗑️ 销毁\n─────────\nreset()\ntree.clear()\n_root_hash = None" as Destroyed
+
+' ============================================================
+' 状态转换
+' ============================================================
+
+[*] --> Empty : __init__() / reset()
+
+Empty --> RootInit : search(state)\n(全新棋盘，root_hash 不在树中)
+
+RootInit --> Searching : 进入 simulation 循环
+Searching --> SearchDone : 全部 sim 完成
+
+SearchDone --> SubtreeAdvance : make_move(action)\n→ advance_root(action)
+SearchDone --> RootInit : 下一轮 search(state)\n(相同状态，root_hash 已在树中\n走子树复用分支 → 记录 N 快照)
+SearchDone --> Destroyed : reset()\n(终局 / 强制清空)
+
+SubtreeAdvance --> RootInit : 下一轮 search(state)\n(新根 hash 可能已在树中\n重新施加噪声)
+
+RootInit --> Destroyed : reset()\n(中途清空)
+
+Destroyed --> [*]
+
+' ============================================================
+' 图例 / 注释
+' ============================================================
+
+note right of RootInit
+  <b>子树复用路径差异：</b>
+  · 全新根：tree.clear() → 创建 → N快照全0
+  · 复用根：保留 tree → 记录当前 N 快照
+            → 重新施加狄利克雷噪声
+  · get_result() 只报告 N 增量（减快照）
+end note
+
+note right of Searching
+  <b>树在搜索中的生长：</b>
+  · _expand_leaf 每遇到新叶节点即创建子节点
+  · 子节点立即创建所有合法边（P 由模型给出）
+  · 后续 simulation 可沿这些边继续深入
+  · backup 沿 path 逐层累加 N/W，修正 Q
+end note
+
+note right of SubtreeAdvance
+  <b>子树复用价值：</b>
+  · 已探索的子树直接保留，避免重复搜索
+  · advance_root 后再 search 时
+    走 RootInit 的复用分支
+  · 剪枝丢弃的兄弟节点被 GC 回收
+end note
+
+@enduml
