@@ -14,6 +14,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from ai.engine import MoveDecision
+from ai.constants import STRATEGY_SAMPLING
 
 
 # ---------------------------------------------------------------------------
@@ -242,7 +243,7 @@ class TestMCTSMoveDeciderGetMoveSignature(unittest.TestCase):
         # 多次采样后，高频动作应更常出现
         action_counts = {}
         for _ in range(100):
-            result = decider.get_move(board, 1, strategy="sampling")
+            result = decider.get_move(board, 1, strategy=STRATEGY_SAMPLING)
             action = result.get_position()[0] * 15 + result.get_position()[1]
             action_counts[action] = action_counts.get(action, 0) + 1
 
@@ -265,7 +266,7 @@ class TestMCTSMoveDeciderGetMoveSignature(unittest.TestCase):
         board = _make_board_2d()
 
         for _ in range(30):
-            result = decider.get_move(board, 1, strategy="sampling")
+            result = decider.get_move(board, 1, strategy=STRATEGY_SAMPLING)
             action = result.get_position()[0] * 15 + result.get_position()[1]
             self.assertEqual(action, 100, "T=0 时应等价 argmax，始终选 100")
 

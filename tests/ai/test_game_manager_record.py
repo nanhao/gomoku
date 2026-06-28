@@ -22,7 +22,8 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from game import GomokuController
-from ai.engine import AIEngine, STRATEGY_ARGMAX, STRATEGY_SAMPLING
+from ai.engine import AIEngine
+from ai.constants import STRATEGY_ARGMAX, STRATEGY_SAMPLING
 from ai.game_manager import AIGameManager
 from ai.move_sampler import (
     TempConfig,

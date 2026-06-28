@@ -68,13 +68,14 @@ class TestMCTSSelfPlayIntegration(unittest.TestCase):
         move_count = 0
 
         from game.game import check_winner, is_board_full
+        from ai.constants import STRATEGY_SAMPLING
 
         while move_count < 225:
             state = board_flat + [current_player]
 
             # 将 flat board 转为 15×15 二维矩阵
             board_2d = [[board_flat[i * 15 + j] for j in range(15)] for i in range(15)]
-            md = decider.get_move(board_2d, current_player, strategy="sampling")
+            md = decider.get_move(board_2d, current_player, strategy=STRATEGY_SAMPLING)
             x, y = md.get_position()
             action = x * 15 + y
             visit_counts = md.get_mcts_visit_counts()

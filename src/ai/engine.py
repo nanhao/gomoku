@@ -7,12 +7,7 @@ import random
 import math
 from typing import List, Optional, Tuple
 from ai.base_model import BaseModel
-
-
-# 支持的落子策略常量
-STRATEGY_ARGMAX = "argmax"
-STRATEGY_SAMPLING = "sampling"
-_SUPPORTED_STRATEGIES = (STRATEGY_ARGMAX, STRATEGY_SAMPLING)
+from ai.constants import STRATEGY_ARGMAX, STRATEGY_SAMPLING, _SUPPORTED_STRATEGIES
 
 
 class MoveDecision:

@@ -16,6 +16,7 @@ if project_root not in sys.path:
 
 from ai.base_model import BaseModel, ModelPredict
 from ai.engine import AIEngine, create_engine
+from ai.constants import STRATEGY_ARGMAX, STRATEGY_SAMPLING
 from ai.models.random.model import RandomModel
 from ai.models.cnn_v2.model import CNNV2Model
 
@@ -210,7 +211,7 @@ class TestGetMoveStrategy(unittest.TestCase):
         engine = AIEngine(StubModel(probs))
 
         for _ in range(20):
-            decision = engine.get_move(board, 1, strategy="argmax")
+            decision = engine.get_move(board, 1, strategy=STRATEGY_ARGMAX)
             x, y = decision.get_position()
             self.assertEqual((x, y), (7, 7))
 
@@ -225,7 +226,7 @@ class TestGetMoveStrategy(unittest.TestCase):
         random.seed(20260501)
         seen = set()
         for _ in range(200):
-            seen.add(engine.get_move(board, 1, strategy="argmax").get_position())
+            seen.add(engine.get_move(board, 1, strategy=STRATEGY_ARGMAX).get_position())
 
         self.assertIn((0, 0), seen)
         self.assertIn((0, 1), seen)
@@ -240,7 +241,7 @@ class TestGetMoveStrategy(unittest.TestCase):
         probs = _make_probs([(112, 0.9), (0, 0.5), (1, 0.1)])
         engine = AIEngine(StubModel(probs))
 
-        decision = engine.get_move(board, 2, strategy="argmax")
+        decision = engine.get_move(board, 2, strategy=STRATEGY_ARGMAX)
         x, y = decision.get_position()
         self.assertEqual((x, y), (0, 0))
 
@@ -252,7 +253,7 @@ class TestGetMoveStrategy(unittest.TestCase):
         probs = _make_probs([(0, 1.0)])
         engine = AIEngine(StubModel(probs))
 
-        decision = engine.get_move(board, 2, strategy="argmax")
+        decision = engine.get_move(board, 2, strategy=STRATEGY_ARGMAX)
         x, y = decision.get_position()
         self.assertEqual(board[x][y], 0, "回退时必须选空位")
         self.assertNotEqual((x, y), (0, 0), "不能选已占用的位置")
@@ -292,7 +293,7 @@ class TestGetMoveStrategy(unittest.TestCase):
         engine = AIEngine(StubModel(probs))
 
         with self.assertRaises(ValueError) as ctx:
-            engine.get_move(board, 2, strategy="argmax")
+            engine.get_move(board, 2, strategy=STRATEGY_ARGMAX)
         self.assertIn("棋盘已满", str(ctx.exception))
 
     # ---------- 预计算 probs ----------
@@ -304,7 +305,7 @@ class TestGetMoveStrategy(unittest.TestCase):
         stub = StubModel(probs_vec)
         engine = AIEngine(stub)
 
-        decision = engine.get_move(board, 1, strategy="argmax")
+        decision = engine.get_move(board, 1, strategy=STRATEGY_ARGMAX)
         returned_probs = decision.get_probs()
 
         self.assertIsNotNone(returned_probs, "MoveDecision 应包含 probs")
@@ -330,7 +331,7 @@ class TestGetMoveSamplingStrategy(unittest.TestCase):
         engine = AIEngine(StubModel(probs))
 
         # 不传 temperature → 使用默认值 1.0；不抛异常即视为通过
-        decision = engine.get_move(board, 1, strategy="sampling")
+        decision = engine.get_move(board, 1, strategy=STRATEGY_SAMPLING)
         x, y = decision.get_position()
         self.assertTrue(0 <= x < 15 and 0 <= y < 15)
 
@@ -346,7 +347,7 @@ class TestGetMoveSamplingStrategy(unittest.TestCase):
 
         for _ in range(100):
             decision = engine.get_move(
-                board, 1, strategy="sampling"
+                board, 1, strategy=STRATEGY_SAMPLING
             )
             x, y = decision.get_position()
             self.assertEqual(board[x][y], 0, "sampling 必须返回空位")
@@ -360,7 +361,7 @@ class TestGetMoveSamplingStrategy(unittest.TestCase):
         expected = (50 // 15, 50 % 15)
         for _ in range(50):
             pos = engine.get_move(
-                board, 1, strategy="sampling"
+                board, 1, strategy=STRATEGY_SAMPLING
             ).get_position()
             self.assertEqual(pos, expected)
 
@@ -376,12 +377,12 @@ class TestGetMoveSamplingStrategy(unittest.TestCase):
         rng2 = random.Random(2026)
         engine.rng = rng1
         seq1 = [
-            engine.get_move(board, 1, strategy="sampling").get_position()
+            engine.get_move(board, 1, strategy=STRATEGY_SAMPLING).get_position()
             for _ in range(30)
         ]
         engine.rng = rng2
         seq2 = [
-            engine.get_move(board, 1, strategy="sampling").get_position()
+            engine.get_move(board, 1, strategy=STRATEGY_SAMPLING).get_position()
             for _ in range(30)
         ]
         self.assertEqual(seq1, seq2)
@@ -395,11 +396,11 @@ class TestGetMoveSamplingStrategy(unittest.TestCase):
         # 但调用 sampling 时会由 temperature_sample 抛出 ValueError。
         engine = AIEngine(StubModel(probs), temperature=0.0)
         with self.assertRaises(ValueError):
-            engine.get_move(board, 1, strategy="sampling")
+            engine.get_move(board, 1, strategy=STRATEGY_SAMPLING)
 
         engine2 = AIEngine(StubModel(probs), temperature=-1.0)
         with self.assertRaises(ValueError):
-            engine2.get_move(board, 1, strategy="sampling")
+            engine2.get_move(board, 1, strategy=STRATEGY_SAMPLING)
 
     def test_argmax_path_unchanged_by_new_params(self):
         """用例 22：strategy=argmax 默认值下，新参数仅影响构造不影响 argmax 行为。"""
@@ -410,7 +411,7 @@ class TestGetMoveSamplingStrategy(unittest.TestCase):
         # 既不传 strategy 也不传新参数
         pos1 = engine.get_move(board, 1).get_position()
         # 传默认 strategy=argmax
-        pos2 = engine.get_move(board, 1, strategy="argmax").get_position()
+        pos2 = engine.get_move(board, 1, strategy=STRATEGY_ARGMAX).get_position()
         self.assertEqual(pos1, (100 // 15, 100 % 15))
         self.assertEqual(pos2, (100 // 15, 100 % 15))
 

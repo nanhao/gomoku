@@ -8,7 +8,8 @@
 import random as _stdrandom
 from typing import List, NamedTuple, Optional, Tuple
 from game import GomokuController
-from ai.engine import AIEngine, STRATEGY_ARGMAX, STRATEGY_SAMPLING
+from ai.engine import AIEngine
+from ai.constants import STRATEGY_ARGMAX, STRATEGY_SAMPLING
 from ai.data_recorder import DataRecorder
 from ai.move_sampler import TempConfig, resolve_temp_side, should_sample
 

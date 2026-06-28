@@ -19,6 +19,8 @@ if project_root not in sys.path:
 
 import torch
 
+from ai.constants import STRATEGY_SAMPLING
+
 
 class MockSearcher:
     """Mock MCTSSearcher，用于独立测试 MoveDecider"""
@@ -137,7 +139,7 @@ class TestMCTSMoveDecider(unittest.TestCase):
         # 多次调用检查结果可能不同（但不强求，概率性的）
         actions = set()
         for _ in range(10):
-            md = decider.get_move(board, 1, strategy="sampling")
+            md = decider.get_move(board, 1, strategy=STRATEGY_SAMPLING)
             x, y = md.get_position()
             actions.add(x * 15 + y)
         # 在温度=1.0时大概率探索多个位置
@@ -154,7 +156,7 @@ class TestMCTSMoveDecider(unittest.TestCase):
         decider = self.MCTSMoveDecider(mock_searcher, temperature=0.0)
         # 创建空棋盘（action 100 = (6,10)，应是空位）
         board = [[0] * 15 for _ in range(15)]
-        md = decider.get_move(board, 1, strategy="sampling")
+        md = decider.get_move(board, 1, strategy=STRATEGY_SAMPLING)
         x, y = md.get_position()
         self.assertEqual(x * 15 + y, 100)
 

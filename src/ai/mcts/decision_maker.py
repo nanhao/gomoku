@@ -8,10 +8,8 @@ import math
 import random
 from typing import List, Optional
 
-from ai.engine import MoveDecision, AIEngine, STRATEGY_ARGMAX, STRATEGY_SAMPLING
-
-# 支持的策略常量（与 ai.engine 保持一致）
-_SUPPORTED_STRATEGIES = (STRATEGY_ARGMAX, STRATEGY_SAMPLING)
+from ai.engine import MoveDecision, AIEngine
+from ai.constants import STRATEGY_ARGMAX, STRATEGY_SAMPLING, _SUPPORTED_STRATEGIES
 
 
 class MCTSMoveDecider:

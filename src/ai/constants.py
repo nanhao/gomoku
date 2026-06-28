@@ -23,3 +23,8 @@ LOSS_LOG_DIR = os.environ.get(
 
 # Loss 日志记录间隔（每 N 个 epoch 记录一次，默认 200）
 LOSS_LOG_INTERVAL = 200
+
+# 支持的落子策略常量
+STRATEGY_ARGMAX = "argmax"
+STRATEGY_SAMPLING = "sampling"
+_SUPPORTED_STRATEGIES = (STRATEGY_ARGMAX, STRATEGY_SAMPLING)

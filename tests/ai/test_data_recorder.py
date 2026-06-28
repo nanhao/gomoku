@@ -16,6 +16,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from ai.data_recorder import DataRecorder
+from ai.constants import STRATEGY_ARGMAX, STRATEGY_SAMPLING
 
 
 class TestDataRecorder(unittest.TestCase):
@@ -196,7 +197,7 @@ class TestDataRecorder(unittest.TestCase):
             input_vector=[0] * 226,
             output_vector=[0.001] * 225,
             position=(7, 7),
-            strategy="sampling",
+            strategy=STRATEGY_SAMPLING,
             temperature=1.0,
             top_k=None,
             sampling_probs=sampling_probs,
@@ -227,7 +228,7 @@ class TestDataRecorder(unittest.TestCase):
             input_vector=[0] * 226,
             output_vector=[0.001] * 225,
             position=(7, 7),
-            strategy="argmax",
+            strategy=STRATEGY_ARGMAX
         )
 
         recorder.save_game_result(game_id, 1, [0] * 226)
@@ -279,7 +280,7 @@ class TestDataRecorder(unittest.TestCase):
             input_vector=[0] * 226,
             output_vector=[0.001] * 225,
             position=(7, 7),
-            strategy="sampling",
+            strategy=STRATEGY_SAMPLING,
             temperature=1.0,
             top_k=None,
             sampling_probs=[0.001] * 225,
@@ -290,7 +291,7 @@ class TestDataRecorder(unittest.TestCase):
             input_vector=[1] * 226,
             output_vector=[0.002] * 225,
             position=(7, 8),
-            strategy="argmax",
+            strategy=STRATEGY_ARGMAX,
         )
         # 第 3 步：sampling（不同温度）
         recorder.record_move(
@@ -298,7 +299,7 @@ class TestDataRecorder(unittest.TestCase):
             input_vector=[2] * 226,
             output_vector=[0.003] * 225,
             position=(8, 7),
-            strategy="sampling",
+            strategy=STRATEGY_SAMPLING,
             temperature=2.0,
             top_k=5,
             sampling_probs=[0.002] * 225,
@@ -341,7 +342,7 @@ class TestDataRecorder(unittest.TestCase):
             input_vector=[0] * 226,
             output_vector=[0.001] * 225,
             position=(7, 7),
-            strategy="sampling",
+            strategy=STRATEGY_SAMPLING,
             temperature=1.0,
             top_k=None,
             sampling_probs=[0.0] * 225,

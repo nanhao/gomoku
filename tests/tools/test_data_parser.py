@@ -17,6 +17,7 @@ from tools.create_samples_tool.data_parser import (
     match_samples,
     infer_temp_side,
 )
+from ai.constants import STRATEGY_ARGMAX, STRATEGY_SAMPLING
 
 
 # ------------------------------------------------------------------
@@ -221,13 +222,13 @@ class TestParseGameSteps:
         assert s0["player"] == 1
         assert s0["move_position"] == [7, 7]
         assert s0["raw_output"] is not None
-        assert s0["sampling_probs"] is not None  # strategy="sampling"
+        assert s0["sampling_probs"] is not None  # strategy=STRATEGY_SAMPLING
         assert s0["strategy"] == "sampling"
         assert s0["sample_output"] is not None  # step_id 匹配成功
 
         s1 = result["steps"][1]
         assert s1["step_index"] == 1
-        assert s1["sampling_probs"] is None  # strategy="argmax"
+        assert s1["sampling_probs"] is None  # strategy=STRATEGY_ARGMAX
         assert s1["strategy"] == "argmax"
         assert s1["sample_output"] is None  # 无匹配样本
 

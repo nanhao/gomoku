@@ -25,6 +25,7 @@ import torch
 from ai.models.cnn_v7.model import CNNV7Model
 from ai.mcts.searcher import MCTSSearcher
 from ai.mcts.decision_maker import MCTSMoveDecider
+from ai.constants import STRATEGY_SAMPLING
 from game.game import check_winner, is_board_full
 
 
@@ -183,7 +184,7 @@ def play_one_game(model, device, hyperparams: dict, game_idx: int, run_id: str) 
         board_2d = [[board[i * 15 + j] for j in range(15)] for i in range(15)]
 
         # MCTS 搜索 + 决策（log_key 由决策器内部自动生成，strategy="sampling" 使用温度探索）
-        md = decider.get_move(board_2d, current_player, strategy="sampling")
+        md = decider.get_move(board_2d, current_player, strategy=STRATEGY_SAMPLING)
         x, y = md.get_position()
         action = x * 15 + y
         visit_counts = md.get_mcts_visit_counts()

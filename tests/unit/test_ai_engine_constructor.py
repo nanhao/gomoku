@@ -15,7 +15,8 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from ai.base_model import BaseModel, ModelPredict
-from ai.engine import AIEngine, STRATEGY_ARGMAX, STRATEGY_SAMPLING
+from ai.engine import AIEngine
+from ai.constants import STRATEGY_ARGMAX, STRATEGY_SAMPLING
 
 
 # ---------------------------------------------------------------------------
