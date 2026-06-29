@@ -1,0 +1,61 @@
+@startuml
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,sans-serif
+skinparam classFontName Microsoft YaHei,SimHei,sans-serif
+
+title CNNV7Network 类结构图
+
+skinparam classAttributeIconSize 0
+skinparam backgroundColor #FFFFFF
+
+class CNNV7Network {
+  -- 共享卷积层 --
+  + conv1: Conv2d(3→32, k3)
+  + bn1: BatchNorm2d(32)
+  + conv2: Conv2d(32→32, k3)
+  + bn2: BatchNorm2d(32)
+  + conv3: Conv2d(32→32, k3)
+  + bn3: BatchNorm2d(32)
+  + conv4: Conv2d(32→32, k3)
+  + bn4: BatchNorm2d(32)
+  + conv5: Conv2d(32→32, k3)
+  + bn5: BatchNorm2d(32)
+  -- 策略头 --
+  + conv_out: Conv2d(32→1, k1)
+  + log_softmax: LogSoftmax
+  -- 价值头（新） --
+  + value_conv_out: Conv2d(32→1, k1)
+  + value_relu: ReLU
+  + value_fc: Linear(225→1)
+  + value_tanh: Tanh
+  --
+  + forward(x): (policy, value)
+}
+
+note right of CNNV7Network
+  **变更点**:
+  移除 value_fc1, value_fc2
+  新增 value_conv_out, value_fc
+  forward 分支点前移至共享特征层
+end note
+
+class NeuralNetworkModel {
+  + name: str
+  + network: nn.Module
+  + predict(board_vector): ModelPredict
+  # _create_network(): nn.Module
+  # _prepare_input(board_vector, device): Tensor
+}
+
+class CNNV7Model {
+  + DEFAULT_MODEL_PATH: str
+  + _create_network(): CNNV7Network
+  + _prepare_input(board_vector, device): Tensor
+  + predict(board_vector): ModelPredict
+}
+
+CNNV7Model --|> NeuralNetworkModel
+CNNV7Model --> CNNV7Network : creates
+CNNV7Network ..|> torch.nn.Module
+
+@enduml
