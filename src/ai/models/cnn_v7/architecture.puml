@@ -1,0 +1,35 @@
+@startuml
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,sans-serif
+skinparam classFontName Microsoft YaHei,SimHei,sans-serif
+
+title CNN v7 价值头轻量化 — 前向传播数据流
+
+skinparam componentStyle rectangle
+skinparam backgroundColor #FFFFFF
+
+rectangle "输入\n(batch, 3, 15, 15)" as input #LightYellow
+
+rectangle "Conv1(3→32,k3) → BN → ReLU" as conv1 #LightBlue
+rectangle "残差块1\nConv2→BN→ReLU\nConv3→BN → +shortcut → ReLU" as res1 #LightBlue
+rectangle "残差块2\nConv4→BN→ReLU\nConv5→BN → +shortcut → ReLU" as res2 #LightBlue
+
+rectangle "共享特征\n(batch, 32, 15, 15)" as shared #LightGreen
+
+rectangle "**策略头**\nconv_out(32→1,1×1)\n→ Flatten(225)\n→ LogSoftmax\n→ policy (batch,225)" as policy #LightCoral
+
+rectangle "**价值头（新）**\nvalue_conv_out(32→1,1×1)\n→ Flatten(225)\n→ ReLU\n→ FC(225→1)\n→ Tanh\n→ value (batch,1)" as value #LightSalmon
+
+input --> conv1
+conv1 --> res1
+res1 --> res2
+res2 --> shared
+shared --> policy
+shared --> value
+
+note bottom of value
+  参数量: 33(conv) + 226(fc) = 259
+  旧方案: 29,057 (↓112×)
+end note
+
+@enduml

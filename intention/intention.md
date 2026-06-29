@@ -232,3 +232,6 @@ For the make_move() calling. We can add a abstract function called after_move() 
 optimze the value head of cnn_v7:
 Add a hidden FC layer with ReLU between flatten and the output:
 Flatten → FC(225→128) → ReLU → FC(128→1) → Tanh
+
+# intention_id=37
+I think the fc layers of the value head takes two many parameters. I prefer to add remove the fc solution and make the value head branches from before the cnnv_out. So it uses another cnnv_out, than it goes into a relu, then fc(225->1). What do you think?

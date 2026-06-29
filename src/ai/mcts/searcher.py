@@ -37,7 +37,7 @@ class MCTSSearcher:
     def __init__(
         self,
         model,
-        num_simulations: int = 800,
+        num_simulations: int = 600,
         c_puct: float = 2.0,
         dirichlet_epsilon: float = 0.25,
         dirichlet_alpha: float = 0.03,
@@ -47,7 +47,7 @@ class MCTSSearcher:
 
         Args:
             model: CNN v7 模型实例，需支持 predict(board_vector) -> ModelPredict
-            num_simulations: 每次搜索的总模拟次数，默认 800
+            num_simulations: 每次搜索的总模拟次数，默认 600
             c_puct: PUCT 探索系数，默认 2.0
             dirichlet_epsilon: 狄利克雷噪声比例，默认 0.25
             dirichlet_alpha: 狄利克雷分布参数，默认 0.03
