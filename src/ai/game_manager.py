@@ -236,6 +236,11 @@ class AIGameManager:
             # 记录数据（probs 从 MoveDecision 中获取，避免重复调用 model.predict）
             board_vector = AIEngine.board_to_vector(board, player)
             probs = decision.get_probs()
+            # 对于 PolicyValueAiEngine（MCTS），get_probs() 返回 None，
+            # 此时回退到 mcts_visit_counts 作为概率分布的近似
+            mcts_counts = decision.get_mcts_visit_counts()
+            if probs is None and mcts_counts is not None:
+                probs = mcts_counts
             # 第四十一次追加：按策略传递温度采样信息
             if use_temp and temp_config is not None:
                 # 构建 225 维 sampling_probs：对全部 225 个位置统一做温度变换。
@@ -243,22 +248,25 @@ class AIGameManager:
                 # 对全部位置一视同仁可确保 T=1.0 时与 AI output 归一化尺度一致，
                 # T≠1.0 时也能自洽地反映温度变换效果。
                 sampling_probs = [0.0] * 225
-                for i in range(225):
-                    p = probs[i]
-                    sampling_probs[i] = (
-                        (p ** (1.0 / temp_config.temperature)) if p > 0 else 0.0
-                    )
+                if probs is not None:
+                    for i in range(225):
+                        p = probs[i]
+                        sampling_probs[i] = (
+                            (p ** (1.0 / temp_config.temperature)) if p > 0 else 0.0
+                        )
                 recorder.record_move(
                     current_game_id, board_vector, probs, (x, y),
                     strategy=STRATEGY_SAMPLING,
                     temperature=temp_config.temperature,
                     top_k=temp_config.top_k,
                     sampling_probs=sampling_probs,
+                    mcts_probs=mcts_counts,
                 )
             else:
                 recorder.record_move(
                     current_game_id, board_vector, probs, (x, y),
                     strategy=STRATEGY_ARGMAX,
+                    mcts_probs=mcts_counts,
                 )
 
             # 执行落子
