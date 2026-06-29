@@ -12,7 +12,7 @@ import shutil
 import sys
 import tempfile
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 # 添加项目根目录到路径
 project_root = os.path.dirname(
@@ -91,9 +91,10 @@ class TestRecordMoveTempInfo(_TempSaveDirTestBase):
             temperature=1.5, temp_moves=99, temp_side=TEMP_SIDE_BOTH, seed=1,
         )
 
-        AIGameManager.start_ai_vs_ai(
-            engine, engine, num_games=1, recorder=recorder, temp_config=cfg,
-        )
+        with patch('ai.game_manager.create_engine', return_value=engine):
+            AIGameManager.start_ai_vs_ai(
+                "random", "random", num_games=1, recorder=recorder, temp_config=cfg,
+            )
 
         sampling_moves = [
             m for m in recorder.move_calls
@@ -119,9 +120,10 @@ class TestRecordMoveTempInfo(_TempSaveDirTestBase):
             temp_moves=3, temp_side=TEMP_SIDE_BOTH, seed=1,
         )
 
-        AIGameManager.start_ai_vs_ai(
-            engine, engine, num_games=1, recorder=recorder, temp_config=cfg,
-        )
+        with patch('ai.game_manager.create_engine', return_value=engine):
+            AIGameManager.start_ai_vs_ai(
+                "random", "random", num_games=1, recorder=recorder, temp_config=cfg,
+            )
 
         # 阈值（3 步）之后应为 argmax
         argmax_moves = [
@@ -144,9 +146,10 @@ class TestRecordMoveTempInfo(_TempSaveDirTestBase):
             temperature=1.0, temp_moves=99, temp_side=TEMP_SIDE_BOTH, seed=1,
         )
 
-        AIGameManager.start_ai_vs_ai(
-            engine, engine, num_games=1, recorder=recorder, temp_config=cfg,
-        )
+        with patch('ai.game_manager.create_engine', return_value=engine):
+            AIGameManager.start_ai_vs_ai(
+                "random", "random", num_games=1, recorder=recorder, temp_config=cfg,
+            )
 
         sampling_moves = [
             m for m in recorder.move_calls
@@ -168,9 +171,10 @@ class TestRecordMoveTempInfo(_TempSaveDirTestBase):
             temperature=1.0, temp_moves=99, temp_side=TEMP_SIDE_BOTH, seed=1,
         )
 
-        AIGameManager.start_ai_vs_ai(
-            engine, engine, num_games=1, recorder=recorder, temp_config=cfg,
-        )
+        with patch('ai.game_manager.create_engine', return_value=engine):
+            AIGameManager.start_ai_vs_ai(
+                "random", "random", num_games=1, recorder=recorder, temp_config=cfg,
+            )
 
         sampling_moves = [
             m for m in recorder.move_calls
@@ -234,9 +238,10 @@ class TestSamplingProbsOccupiedPositions(_TempSaveDirTestBase):
             temperature=1.0, temp_moves=99, temp_side=TEMP_SIDE_BOTH, seed=1,
         )
 
-        AIGameManager.start_ai_vs_ai(
-            engine, engine, num_games=1, recorder=recorder, temp_config=cfg,
-        )
+        with patch('ai.game_manager.create_engine', return_value=engine):
+            AIGameManager.start_ai_vs_ai(
+                "random", "random", num_games=1, recorder=recorder, temp_config=cfg,
+            )
 
         sampling_moves = [
             m for m in recorder.move_calls
@@ -358,11 +363,12 @@ class TestStartAiVsAiResultFormat(_TempSaveDirTestBase):
         每项含 temp_side_this_game="black" """
         engine = _SpyEngine()
         recorder = _make_recorder()
-        results = AIGameManager.start_ai_vs_ai(
-            engine, engine, 2, recorder,
-            temp_config=TempConfig(temperature=1.0, temp_side="black",
-                                   temp_moves=999, seed=42),
-        )
+        with patch('ai.game_manager.create_engine', return_value=engine):
+            results = AIGameManager.start_ai_vs_ai(
+                "random", "random", 2, recorder,
+                temp_config=TempConfig(temperature=1.0, temp_side="black",
+                                       temp_moves=999, seed=42),
+            )
         for r in results:
             self.assertIn("temp_side_this_game", r)
             self.assertEqual(r["temp_side_this_game"], "black")
@@ -371,9 +377,10 @@ class TestStartAiVsAiResultFormat(_TempSaveDirTestBase):
         """SA-02: 无 temp_config 时结果 temp_side_this_game 为 None"""
         engine = _SpyEngine()
         recorder = _make_recorder()
-        results = AIGameManager.start_ai_vs_ai(
-            engine, engine, 2, recorder,
-        )
+        with patch('ai.game_manager.create_engine', return_value=engine):
+            results = AIGameManager.start_ai_vs_ai(
+                "random", "random", 2, recorder,
+            )
         for r in results:
             self.assertIn("temp_side_this_game", r)
             self.assertIsNone(r["temp_side_this_game"])
@@ -382,11 +389,12 @@ class TestStartAiVsAiResultFormat(_TempSaveDirTestBase):
         """SA-03: temp_side="both" → 每项含 temp_side_this_game="both" """
         engine = _SpyEngine()
         recorder = _make_recorder()
-        results = AIGameManager.start_ai_vs_ai(
-            engine, engine, 2, recorder,
-            temp_config=TempConfig(temperature=1.0, temp_side="both",
-                                   temp_moves=999, seed=42),
-        )
+        with patch('ai.game_manager.create_engine', return_value=engine):
+            results = AIGameManager.start_ai_vs_ai(
+                "random", "random", 2, recorder,
+                temp_config=TempConfig(temperature=1.0, temp_side="both",
+                                       temp_moves=999, seed=42),
+            )
         for r in results:
             self.assertIn("temp_side_this_game", r)
             self.assertEqual(r["temp_side_this_game"], "both")
@@ -395,11 +403,12 @@ class TestStartAiVsAiResultFormat(_TempSaveDirTestBase):
         """SA-04: temp_side="random" → 每项含 temp_side_this_game="black"/"white" """
         engine = _SpyEngine()
         recorder = _make_recorder()
-        results = AIGameManager.start_ai_vs_ai(
-            engine, engine, 5, recorder,
-            temp_config=TempConfig(temperature=1.0, temp_side="random",
-                                   temp_moves=999, seed=2026),
-        )
+        with patch('ai.game_manager.create_engine', return_value=engine):
+            results = AIGameManager.start_ai_vs_ai(
+                "random", "random", 5, recorder,
+                temp_config=TempConfig(temperature=1.0, temp_side="random",
+                                       temp_moves=999, seed=2026),
+            )
         temp_sides = {r["temp_side_this_game"] for r in results}
         # 每项应为 "black" 或 "white"
         for ts in temp_sides:

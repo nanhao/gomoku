@@ -17,11 +17,11 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from ai.game_manager import AIGameManager
-from ai.engine import AIEngine, SinglePolicyAiEngine
 from ai.models.random.model import RandomModel
 from ai.models.fc_v1.model import FCv1Model
 from ai.models.cnn_v1.model import CNNV1Model
 from ai.data_recorder import DataRecorder
+from ai.registry import get_model
 import ai.battle as battle_module
 
 
@@ -54,22 +54,18 @@ class TestStartAiVsAiRandom(unittest.TestCase):
 
     def test_returns_correct_number_of_results(self):
         """主流程：返回结果列表长度等于对战局数"""
-        engine1 = SinglePolicyAiEngine(RandomModel())
-        engine2 = SinglePolicyAiEngine(RandomModel())
         recorder = DataRecorder("test_rnd", self.test_ai_data_dir)
 
         num_games = 3
-        results = AIGameManager.start_ai_vs_ai_random(engine1, engine2, num_games, recorder)
+        results = AIGameManager.start_ai_vs_ai_random("random", "random", num_games, recorder)
 
         self.assertEqual(len(results), num_games)
 
     def test_result_contains_required_fields(self):
         """主流程：每个结果包含必要字段"""
-        engine1 = SinglePolicyAiEngine(RandomModel())
-        engine2 = SinglePolicyAiEngine(RandomModel())
         recorder = DataRecorder("test_rnd", self.test_ai_data_dir)
 
-        results = AIGameManager.start_ai_vs_ai_random(engine1, engine2, 1, recorder)
+        results = AIGameManager.start_ai_vs_ai_random("random", "random", 1, recorder)
 
         r = results[0]
         # 验证所有必要字段存在
@@ -82,22 +78,18 @@ class TestStartAiVsAiRandom(unittest.TestCase):
 
     def test_game_numbers_are_sequential(self):
         """主流程：局数编号从1开始递增"""
-        engine1 = SinglePolicyAiEngine(RandomModel())
-        engine2 = SinglePolicyAiEngine(RandomModel())
         recorder = DataRecorder("test_rnd", self.test_ai_data_dir)
 
-        results = AIGameManager.start_ai_vs_ai_random(engine1, engine2, 4, recorder)
+        results = AIGameManager.start_ai_vs_ai_random("random", "random", 4, recorder)
 
         for i, r in enumerate(results, 1):
             self.assertEqual(r["game"], i)
 
     def test_ai1_and_ai2_colors_are_complementary(self):
         """主流程：每局中 ai1_color 和 ai2_color 互为黑白（一黑一白）"""
-        engine1 = SinglePolicyAiEngine(RandomModel())
-        engine2 = SinglePolicyAiEngine(RandomModel())
         recorder = DataRecorder("test_rnd", self.test_ai_data_dir)
 
-        results = AIGameManager.start_ai_vs_ai_random(engine1, engine2, 5, recorder)
+        results = AIGameManager.start_ai_vs_ai_random("random", "random", 5, recorder)
 
         for r in results:
             # ai1 和 ai2 的颜色之和始终为 3（1+2=3）
@@ -108,22 +100,18 @@ class TestStartAiVsAiRandom(unittest.TestCase):
 
     def test_winner_is_valid(self):
         """主流程：获胜方只能是 1（黑胜）、2（白胜）或 3（平局）"""
-        engine1 = SinglePolicyAiEngine(RandomModel())
-        engine2 = SinglePolicyAiEngine(RandomModel())
         recorder = DataRecorder("test_rnd", self.test_ai_data_dir)
 
-        results = AIGameManager.start_ai_vs_ai_random(engine1, engine2, 3, recorder)
+        results = AIGameManager.start_ai_vs_ai_random("random", "random", 3, recorder)
 
         for r in results:
             self.assertIn(r["winner"], [1, 2, 3])
 
     def test_ai_won_flags_consistent_with_winner_and_color(self):
         """主流程：ai1_won 和 ai2_won 与 winner/color 一致"""
-        engine1 = SinglePolicyAiEngine(RandomModel())
-        engine2 = SinglePolicyAiEngine(RandomModel())
         recorder = DataRecorder("test_rnd", self.test_ai_data_dir)
 
-        results = AIGameManager.start_ai_vs_ai_random(engine1, engine2, 5, recorder)
+        results = AIGameManager.start_ai_vs_ai_random("random", "random", 5, recorder)
 
         for r in results:
             winner = r["winner"]
@@ -138,13 +126,11 @@ class TestStartAiVsAiRandom(unittest.TestCase):
 
     def test_random_side_assignment(self):
         """主流程：多局后执方分配具有随机性（不是全黑或全白）"""
-        engine1 = SinglePolicyAiEngine(RandomModel())
-        engine2 = SinglePolicyAiEngine(RandomModel())
         recorder = DataRecorder("test_rnd", self.test_ai_data_dir)
 
         # 运行 8 局验证随机性（全同色概率 ~0.78%）
         num_games = 8
-        results = AIGameManager.start_ai_vs_ai_random(engine1, engine2, num_games, recorder)
+        results = AIGameManager.start_ai_vs_ai_random("random", "random", num_games, recorder)
 
         ai1_as_black = sum(1 for r in results if r["ai1_color"] == 1)
         ai1_as_white = sum(1 for r in results if r["ai1_color"] == 2)
@@ -155,12 +141,10 @@ class TestStartAiVsAiRandom(unittest.TestCase):
 
     def test_record_files_created(self):
         """主流程：对战后记录文件被正确创建"""
-        engine1 = SinglePolicyAiEngine(RandomModel())
-        engine2 = SinglePolicyAiEngine(RandomModel())
         recorder = DataRecorder("test_rnd", self.test_ai_data_dir)
 
         num_games = 2
-        AIGameManager.start_ai_vs_ai_random(engine1, engine2, num_games, recorder)
+        AIGameManager.start_ai_vs_ai_random("random", "random", num_games, recorder)
 
         round_dir = recorder.get_round_dir()
         for i in range(1, num_games + 1):
@@ -197,11 +181,9 @@ class TestStartAiVsAiRandomEdge(unittest.TestCase):
 
     def test_single_game(self):
         """边缘：只对战 1 局"""
-        engine1 = SinglePolicyAiEngine(RandomModel())
-        engine2 = SinglePolicyAiEngine(RandomModel())
         recorder = DataRecorder("test_rnd_edge", self.test_ai_data_dir)
 
-        results = AIGameManager.start_ai_vs_ai_random(engine1, engine2, 1, recorder)
+        results = AIGameManager.start_ai_vs_ai_random("random", "random", 1, recorder)
 
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["game"], 1)
@@ -221,7 +203,7 @@ class TestBattleModule(unittest.TestCase):
 
     def test_load_model_random(self):
         """主流程：加载 random 模型（通过 registry.get_model）"""
-        model = battle_module.get_model("random")
+        model = get_model("random")
         self.assertIsInstance(model, RandomModel)
         self.assertEqual(model.name, "random")
         probs = model.predict([0] * 225 + [1])
@@ -229,7 +211,7 @@ class TestBattleModule(unittest.TestCase):
 
     def test_load_model_fc_v1(self):
         """主流程：加载 fc_v1 模型（通过 registry.get_model）"""
-        model = battle_module.get_model("fc_v1")
+        model = get_model("fc_v1")
         self.assertIsInstance(model, FCv1Model)
         self.assertEqual(model.name, "fc_v1")
         probs = model.predict([0] * 225 + [1])
@@ -237,7 +219,7 @@ class TestBattleModule(unittest.TestCase):
 
     def test_load_model_cnn(self):
         """主流程：加载 cnn_v1 模型（通过 registry.get_model）"""
-        model = battle_module.get_model("cnn_v1")
+        model = get_model("cnn_v1")
         self.assertIsInstance(model, CNNV1Model)
         self.assertEqual(model.name, "cnn_v1")
         probs = model.predict([0] * 225 + [1])
@@ -246,7 +228,7 @@ class TestBattleModule(unittest.TestCase):
     def test_load_model_unknown_raises_value_error(self):
         """边缘：加载未知 AI 名称时抛出 ValueError（通过 registry.get_model）"""
         with self.assertRaises(ValueError) as ctx:
-            battle_module.get_model("nonexistent_ai")
+            get_model("nonexistent_ai")
         self.assertIn("nonexistent_ai", str(ctx.exception))
 
     def test_get_color_name(self):

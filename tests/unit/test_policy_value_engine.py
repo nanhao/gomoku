@@ -171,8 +171,8 @@ class TestPolicyValueAfterMove(unittest.TestCase):
         x, y = md.get_position()
         action = x * 15 + y
 
-        # 推进不应抛异常
-        engine.after_move(action)
+        # 推进不应抛异常（使用 x, y 坐标）
+        engine.after_move(x, y)
 
         # 步数应递增
         self.assertEqual(engine._step_count, 1)
@@ -194,7 +194,7 @@ class TestPolicyValueAfterMove(unittest.TestCase):
         engine.get_move(board_2d, 1, strategy="argmax")
 
         with self.assertRaises(RuntimeError):
-            engine.after_move(999)  # 无效索引
+            engine.after_move(99, 99)  # 无效坐标 → action = 99*15+99 = 1584
 
     def test_t34_13_after_move_terminal_node(self):
         """T34-13：终局节点 after_move 不抛异常（必胜落子后的推进）"""
@@ -231,11 +231,11 @@ class TestPolicyValueAfterMove(unittest.TestCase):
         self.assertEqual(action, win_action,
                          f"Expected winning action {win_action}, got {action}")
 
-        # 终局节点推进不应抛异常
+        # 终局节点推进不应抛异常（使用 x, y 坐标）
         try:
-            engine.after_move(action)
+            engine.after_move(x, y)
         except RuntimeError as e:
-            self.fail(f"after_move({action}) on terminal node should not raise: {e}")
+            self.fail(f"after_move({x}, {y}) on terminal node should not raise: {e}")
 
 
 if __name__ == "__main__":

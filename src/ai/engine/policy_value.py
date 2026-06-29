@@ -127,23 +127,27 @@ class PolicyValueAiEngine(AIEngine):
 
         return MoveDecision(x, y, mcts_visit_counts=visit_counts)
 
-    def after_move(self, action: int):
+    def after_move(self, x: int, y: int):
         """落子后钩子：推进搜索树根节点
 
-        调用 searcher.advance_root(action) 将子节点提升为新根。
-        与旧 make_move 的关键差异：仅在 advance_root 成功后才递增
-        _step_count（旧实现在失败时也会错误递增）。
+        将棋盘坐标 (x, y) 转为平坦索引 action = x * 15 + y，
+        然后调用 searcher.advance_root(action) 将子节点提升为新根。
+        仅在 advance_root 成功后才递增 _step_count。
 
         Args:
-            action: 落子位置 0-224
+            x: 落子行坐标 0-14
+            y: 落子列坐标 0-14
 
         Raises:
-            RuntimeError: 子树推进失败（action 对应子节点不在树中）
+            RuntimeError: 子树推进失败（action 对应子节点不在树中），
+                异常消息同时包含 (x, y) 坐标和 action 索引。
         """
+        action = x * 15 + y
         success = self.searcher.advance_root(action)
         if not success:
             raise RuntimeError(
-                f"PolicyValueAiEngine.after_move({action}): advance_root failed. "
+                f"PolicyValueAiEngine.after_move(({x}, {y})) / action={action}: "
+                f"advance_root failed. "
                 f"The child node for action {action} does not exist in the search tree. "
                 f"This indicates an unexpected state — the action should have been visited during search."
             )

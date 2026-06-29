@@ -137,9 +137,10 @@ class TestDefaultNoTempConfig(_TempSaveDirTestBase):
         engine = _SpyEngine()
         recorder = _make_recorder()
 
-        AIGameManager.start_ai_vs_ai(
-            engine, engine, num_games=1, recorder=recorder,
-        )
+        with patch('ai.game_manager.create_engine', return_value=engine):
+            AIGameManager.start_ai_vs_ai(
+                "random", "random", num_games=1, recorder=recorder,
+            )
 
         self.assertGreater(len(engine.calls), 0, "应有若干次 get_move 调用")
         for call in engine.calls:
@@ -163,9 +164,10 @@ class TestTempMovesThreshold(_TempSaveDirTestBase):
             temperature=1.0, temp_moves=5, temp_side=TEMP_SIDE_BOTH, seed=42,
         )
 
-        AIGameManager.start_ai_vs_ai(
-            engine, engine, num_games=1, recorder=recorder, temp_config=cfg,
-        )
+        with patch('ai.game_manager.create_engine', return_value=engine):
+            AIGameManager.start_ai_vs_ai(
+                "random", "random", num_games=1, recorder=recorder, temp_config=cfg,
+            )
 
         # 至少 5 步才能触发"前 5 步"的完整验证
         self.assertGreaterEqual(
@@ -204,9 +206,10 @@ class TestTempSideFilter(_TempSaveDirTestBase):
             seed=42,
         )
 
-        AIGameManager.start_ai_vs_ai(
-            engine, engine, num_games=1, recorder=recorder, temp_config=cfg,
-        )
+        with patch('ai.game_manager.create_engine', return_value=engine):
+            AIGameManager.start_ai_vs_ai(
+                "random", "random", num_games=1, recorder=recorder, temp_config=cfg,
+            )
 
         self.assertGreater(len(engine.calls), 0)
         for call in engine.calls:
@@ -241,10 +244,11 @@ class TestTempSideRandom(_TempSaveDirTestBase):
         )
 
         total_games = 20
-        AIGameManager.start_ai_vs_ai(
-            engine, engine, num_games=total_games, recorder=recorder,
-            temp_config=cfg,
-        )
+        with patch('ai.game_manager.create_engine', return_value=engine):
+            AIGameManager.start_ai_vs_ai(
+                "random", "random", num_games=total_games, recorder=recorder,
+                temp_config=cfg,
+            )
 
         # 依 recorder.new_game 触发时往 engine.calls 注入的 boundary 标记
         # 精确切段，每段 == 一整局的所有 get_move 调用。
@@ -300,9 +304,10 @@ class TestGUIPathUnaffected(_TempSaveDirTestBase):
 
         # 模拟 GUI 的调用路径：直接 start_ai_vs_ai(engine, engine, n, recorder)，
         # 不传 temp_config 与任何新参数
-        AIGameManager.start_ai_vs_ai(
-            engine, engine, num_games=1, recorder=recorder,
-        )
+        with patch('ai.game_manager.create_engine', return_value=engine):
+            AIGameManager.start_ai_vs_ai(
+                "random", "random", num_games=1, recorder=recorder,
+            )
 
         # 所有 call 的 temperature 字段应保持默认 1.0（但 strategy=argmax 不使用）
         for call in engine.calls:
@@ -323,9 +328,10 @@ class TestRandomMatchSupportsTempConfig(_TempSaveDirTestBase):
             temperature=1.0, temp_moves=3, temp_side=TEMP_SIDE_BOTH, seed=7,
         )
 
-        AIGameManager.start_ai_vs_ai_random(
-            engine, engine, num_games=1, recorder=recorder, temp_config=cfg,
-        )
+        with patch('ai.game_manager.create_engine', return_value=engine):
+            AIGameManager.start_ai_vs_ai_random(
+                "random", "random", num_games=1, recorder=recorder, temp_config=cfg,
+            )
 
         sampling_calls = [
             c for c in engine.calls if c["strategy"] == STRATEGY_SAMPLING

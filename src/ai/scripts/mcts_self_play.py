@@ -203,7 +203,8 @@ def play_one_game(model, device, hyperparams: dict, game_idx: int, run_id: str) 
         is_terminal = (winner != 0) or is_board_full(board)
 
         # 子树复用（无条件调用 after_move，终局节点的 advance_root 同样成功）
-        engine.after_move(action)
+        # 使用 (x, y) 坐标代替旧 action 索引
+        engine.after_move(x, y)
 
         if is_terminal:
             if winner == 0:

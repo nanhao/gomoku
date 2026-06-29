@@ -130,11 +130,12 @@ class SinglePolicyAiEngine(AIEngine):
             f"未知落子策略: {strategy!r}，支持的策略为 {_SUPPORTED_STRATEGIES}"
         )
 
-    def after_move(self, action: int):
+    def after_move(self, x: int, y: int):
         """落子后钩子：空实现（无子树管理需求）。
 
         Args:
-            action: 落子位置索引 0-224（未使用）
+            x: 落子行坐标 0-14（未使用）
+            y: 落子列坐标 0-14（未使用）
         """
         # SinglePolicyAiEngine 无搜索树，无需任何操作
         pass

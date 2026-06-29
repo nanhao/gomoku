@@ -307,9 +307,9 @@ class TestMCTSTerminalNodeCreation(unittest.TestCase):
 
         # 直接调用 after_move 不应抛异常
         try:
-            engine.after_move(action)
+            engine.after_move(x, y)
         except RuntimeError as e:
-            self.fail(f"after_move({action}) should not raise RuntimeError: {e}")
+            self.fail(f"after_move({x}, {y}) should not raise RuntimeError: {e}")
 
     # ---------- 6.4 回溯正确性 ----------
 

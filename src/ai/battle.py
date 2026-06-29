@@ -29,11 +29,10 @@ if _project_root not in sys.path:
 
 from typing import Optional
 
-from ai.engine import AIEngine, SinglePolicyAiEngine
+from ai.engine import AIEngine
 from ai.data_recorder import DataRecorder
 from ai.game_manager import AIGameManager
 from ai.constants import AI_DATA_DIR
-from ai.registry import get_model
 from ai.move_sampler import TempConfig, SUPPORTED_TEMP_SIDES, TEMP_SIDE_BOTH
 
 
@@ -125,6 +124,9 @@ def run_battle(ai1_name: str, ai2_name: str, num_games: int,
     """
     执行 AI 对战主流程
 
+    AI 名称直接传给 AIGameManager，引擎创建由游戏管理器内部处理。
+    调用方无需手动加载模型、创建引擎或处理 GPU 迁移。
+
     Args:
         ai1_name: AI1 名称
         ai2_name: AI2 名称
@@ -135,28 +137,14 @@ def run_battle(ai1_name: str, ai2_name: str, num_games: int,
     print(f"开始 AI 对战: {ai1_name} vs {ai2_name}, 共 {num_games} 局")
     print()
     
-    # 加载模型（直接调用 registry.get_model，根据 AI 名称获取对应模型实例）
-    model1 = get_model(ai1_name)
-    model2 = get_model(ai2_name)
-
-    # 将模型网络移到 GPU（若可用），加速对弈推理
-    if model1.network is not None:
-        model1.move_to_device()
-    if model2.network is not None:
-        model2.move_to_device()
-    
-    # 创建引擎
-    engine1 = SinglePolicyAiEngine(model1)
-    engine2 = SinglePolicyAiEngine(model2)
-    
     # 创建数据记录器，使用组合 AI 名称作为轮次目录前缀
     round_name = f"{ai1_name}_vs_{ai2_name}"
     # 使用常量定义的 AI 数据目录
     recorder = DataRecorder(round_name, AI_DATA_DIR)
     
-    # 执行对战（每局执方随机），透传 temp_config（不做语义转换）
+    # 执行对战（每局执方随机），start_ai_vs_ai_random 内部每局调用 create_engine
     results = AIGameManager.start_ai_vs_ai_random(
-        engine1, engine2, num_games, recorder, temp_config=temp_config)
+        ai1_name, ai2_name, num_games, recorder, temp_config=temp_config)
     
     # 逐局输出结果
     for r in results:

@@ -1,0 +1,33 @@
+@startuml
+title 对局循环 — after_move 调用时序
+
+participant "play_single_game" as PSG
+participant "engine" as E
+participant "controller" as CTL
+
+loop while not controller.is_over()
+    PSG -> CTL: get_state()
+    CTL --> PSG: board, player
+
+    PSG -> E: get_move(board, player)
+    E --> PSG: MoveDecision(x, y)
+
+    PSG -> CTL: make_move(x, y)
+    CTL --> PSG: result
+
+    PSG -> E: after_move(x, y)
+    note right
+        SinglePolicyAiEngine: no-op
+        PolicyValueAiEngine: advance_root
+    end note
+    alt success
+        E --> PSG: None
+    else advance_root failed
+        E --> PSG: RuntimeError
+        note right: exception propagates to caller\n(start_ai_vs_ai / start_ai_vs_ai_random)
+    end
+
+    PSG -> PSG: move_count += 1
+end
+
+@enduml

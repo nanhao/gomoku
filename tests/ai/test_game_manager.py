@@ -169,12 +169,10 @@ class TestAIGameManagerAIvsAI(unittest.TestCase):
     
     def test_start_ai_vs_ai_single_game(self):
         """测试 AI 内战，1 局"""
-        engine1 = SinglePolicyAiEngine(RandomModel())
-        engine2 = SinglePolicyAiEngine(RandomModel())
         recorder = DataRecorder("random", self.test_ai_data_dir)
         
         results = AIGameManager.start_ai_vs_ai(
-            engine1, engine2, num_games=1, recorder=recorder,
+            "random", "random", num_games=1, recorder=recorder,
             project_root=os.path.dirname(os.path.dirname(__file__))
         )
         
@@ -191,13 +189,11 @@ class TestAIGameManagerAIvsAI(unittest.TestCase):
     
     def test_start_ai_vs_ai_multiple_games(self):
         """测试 AI 内战，多局"""
-        engine1 = SinglePolicyAiEngine(RandomModel())
-        engine2 = SinglePolicyAiEngine(RandomModel())
         recorder = DataRecorder("random", self.test_ai_data_dir)
         
         num_games = 3
         results = AIGameManager.start_ai_vs_ai(
-            engine1, engine2, num_games=num_games, recorder=recorder,
+            "random", "random", num_games=num_games, recorder=recorder,
             project_root=os.path.dirname(os.path.dirname(__file__))
         )
         
@@ -216,29 +212,21 @@ class TestAIGameManagerAIvsAI(unittest.TestCase):
             self.assertTrue(os.path.exists(record_file))
     
     def test_start_ai_vs_ai_unique_save_names(self):
-        """测试 AI 内战多次调用时存档名称唯一性
-        
-        这是回归测试，确保修复了使用 id(controller) 导致存档名冲突的问题。
-        训练周期会多次调用 start_ai_vs_ai，每轮都会创建新的对局，
-        存档名称必须唯一，不能冲突。
-        """
-        engine1 = SinglePolicyAiEngine(RandomModel())
-        engine2 = SinglePolicyAiEngine(RandomModel())
-        
+        """测试 AI 内战多次调用时存档名称唯一性"""
         project_root = os.path.dirname(os.path.dirname(__file__))
         
         # 模拟训练周期：连续调用两次 start_ai_vs_ai
         # 第一次调用（第1轮）
         recorder1 = DataRecorder("test_round", self.test_ai_data_dir)
         results1 = AIGameManager.start_ai_vs_ai(
-            engine1, engine2, num_games=3, recorder=recorder1,
+            "random", "random", num_games=3, recorder=recorder1,
             project_root=project_root
         )
         
         # 第二次调用（第2轮）
         recorder2 = DataRecorder("test_round", self.test_ai_data_dir)
         results2 = AIGameManager.start_ai_vs_ai(
-            engine1, engine2, num_games=3, recorder=recorder2,
+            "random", "random", num_games=3, recorder=recorder2,
             project_root=project_root
         )
         
@@ -288,12 +276,10 @@ class TestEndBoardDimension(unittest.TestCase):
 
     def test_start_ai_vs_ai_end_board_dimension(self):
         """Bug M1: start_ai_vs_ai 保存的 end_board 应为 226 维"""
-        engine1 = SinglePolicyAiEngine(RandomModel())
-        engine2 = SinglePolicyAiEngine(RandomModel())
         recorder = DataRecorder("test_dim", self.test_ai_data_dir)
 
         AIGameManager.start_ai_vs_ai(
-            engine1, engine2, num_games=1, recorder=recorder,
+            "random", "random", num_games=1, recorder=recorder,
             project_root=os.path.dirname(os.path.dirname(__file__))
         )
 
@@ -310,12 +296,10 @@ class TestEndBoardDimension(unittest.TestCase):
 
     def test_start_ai_vs_ai_random_end_board_dimension(self):
         """Bug M1: start_ai_vs_ai_random 保存的 end_board 应为 226 维"""
-        engine1 = SinglePolicyAiEngine(RandomModel())
-        engine2 = SinglePolicyAiEngine(RandomModel())
         recorder = DataRecorder("test_dim_rnd", self.test_ai_data_dir)
 
         AIGameManager.start_ai_vs_ai_random(
-            engine1, engine2, num_games=1, recorder=recorder
+            "random", "random", num_games=1, recorder=recorder
         )
 
         # 读取 record.json 验证 end_board 维度
@@ -356,21 +340,18 @@ class TestGameIdConsistency(unittest.TestCase):
 
     def test_ai_vs_ai_random_uses_recorder_game_id(self):
         """Bug L3: start_ai_vs_ai_random 使用 recorder.current_game_id 而非 game_num"""
-        engine1 = SinglePolicyAiEngine(RandomModel())
-        engine2 = SinglePolicyAiEngine(RandomModel())
-
         # 使用已有的 recorder（模拟 recorder 被复用的情况）
         recorder = DataRecorder("test_gid", self.test_ai_data_dir)
         # 先调用一次 start_ai_vs_ai 使 recorder.current_game_id 递增
         AIGameManager.start_ai_vs_ai(
-            engine1, engine2, num_games=1, recorder=recorder,
+            "random", "random", num_games=1, recorder=recorder,
             project_root=os.path.dirname(os.path.dirname(__file__))
         )
 
         # 此时 recorder.current_game_id = 1
         # 再调用 start_ai_vs_ai_random，新游戏应从 id=2 开始
         results = AIGameManager.start_ai_vs_ai_random(
-            engine1, engine2, num_games=1, recorder=recorder
+            "random", "random", num_games=1, recorder=recorder
         )
 
         # 验证对战成功完成（如果使用了错误的 game_num=1，会触发 game_id 不匹配异常）

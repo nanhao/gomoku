@@ -221,3 +221,9 @@ do the folowing refactor:
 since now the terminated leaf tree of the mcts is created. we don't need the calling-side workaround. And what's more, the reset() calling is meaningless because mcts tree is not shared between games right? I think we can simpified the calling-side to only one calling to make_move without checking and reset().
 Having this change, we can go further. We can make AiEngine and mcts/decision_maker.py into one hierarchy sharing the get_move function. The interface of get_move() function is identical now because we refactor them in intention-33.
 For the make_move() calling. We can add a abstract function called after_move() to the engine interface. The SinglePolicyAiEngine can adopt am empty implementation, while the PolicyValueAiEngine can retain the current implementation.
+
+# intention_id=35
+1, refactor: after_move(action) -> after_move(x, y)
+2, new feature: add a create_engine function in the engine/builder.py. It should return a appropriate AiEngine instance. The choice logic is based on the ai model. If the model's output contians both policy and value, it should use the PolicyValueEngine, otherwise SinglePolicyEngine
+3, new feature: change AiGameManager and battle.py to adopt create_engine() and after_move()
+4, All the AiEngine instance should not be shared across games

@@ -124,9 +124,9 @@ class TestSinglePolicyAfterMove(unittest.TestCase):
 
     def test_t34_06_after_move_is_noop(self):
         """T34-06：after_move 不抛异常，不改变引擎状态"""
-        # 多次调用不应抛异常
-        for action in [0, 112, 224]:
-            self.engine.after_move(action)
+        # 多次调用不应抛异常（使用 (x, y) 坐标）
+        for x, y in [(0, 0), (7, 7), (14, 14)]:
+            self.engine.after_move(x, y)
 
         # 调用 after_move 后 get_move 仍正常工作
         board = [[0] * 15 for _ in range(15)]

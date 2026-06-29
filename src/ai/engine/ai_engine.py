@@ -82,14 +82,16 @@ class AIEngine(ABC):
         ...
 
     @abstractmethod
-    def after_move(self, action: int):
+    def after_move(self, x: int, y: int):
         """落子后钩子
 
         SinglePolicyAiEngine: no-op（无子树管理需求）。
-        PolicyValueAiEngine: 调用 searcher.advance_root(action) 推进搜索树。
+        PolicyValueAiEngine: 调用 searcher.advance_root(action) 推进搜索树，
+        其中 action = x * 15 + y。
 
         Args:
-            action: 落子位置索引 0-224
+            x: 落子行坐标 0-14
+            y: 落子列坐标 0-14
 
         Raises:
             RuntimeError: advance_root 失败时（仅 PolicyValueAiEngine）

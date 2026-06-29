@@ -1,0 +1,36 @@
+@startuml
+title create_engine 智能路由时序
+
+actor Caller as C
+participant "create_engine\n(ai/engine/builder.py)" as CE
+participant "registry" as R
+participant "AIEngineBuilder" as B
+participant "ModelPredict" as MP
+
+C -> CE: create_engine(ai_name)
+CE -> R: get_model(ai_name)
+activate R
+R --> CE: model
+deactivate R
+
+CE -> MP: model.predict(test_board)
+note right: test_board = [0]*226\n(empty board, black to move)
+activate MP
+MP --> CE: result (ModelPredict)
+deactivate MP
+
+alt result.type == TYPE_POLICY_VALUE
+    CE -> B: build_policy_value(model, num_simulations=800, c_puct=2.0,\n        dirichlet_epsilon=0.25, dirichlet_alpha=0.03,\n        temperature=1.0, temp_steps=8,\n        log_key_prefix=None, log_dir=None)
+    activate B
+    B --> CE: PolicyValueAiEngine
+    deactivate B
+else result.type == TYPE_POLICY_ONLY
+    CE -> B: build_single_policy(ai_name)
+    activate B
+    B --> CE: SinglePolicyAiEngine
+    deactivate B
+end
+
+CE --> C: AIEngine instance
+
+@enduml

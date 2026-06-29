@@ -1,0 +1,47 @@
+@startuml
+title AIEngine 继承体系与 create_engine 工厂
+
+abstract class AIEngine {
+    + {abstract} get_move(board, current_player, strategy) : MoveDecision
+    + {abstract} after_move(x, y)
+    + {static} board_to_vector(board, current_player) : List[int]
+}
+
+class SinglePolicyAiEngine {
+    + get_move(board, current_player, strategy) : MoveDecision
+    + after_move(x, y)
+    - model : BaseModel
+    - temperature : float
+    - top_k : int
+    - rng : Random
+}
+
+class PolicyValueAiEngine {
+    + get_move(board, current_player, strategy) : MoveDecision
+    + after_move(x, y)
+    - searcher : MCTSSearcher
+    - temperature : float
+    - temp_steps : int
+    - _step_count : int
+}
+note right of PolicyValueAiEngine
+    accesses model via searcher.model
+end note
+
+class AIEngineBuilder {
+    + {static} build_single_policy(ai_name, ...) : SinglePolicyAiEngine
+    + {static} build_policy_value(model, ...) : PolicyValueAiEngine
+}
+
+() "create_engine" as CE
+() "registry" as REG
+
+AIEngine <|-- SinglePolicyAiEngine
+AIEngine <|-- PolicyValueAiEngine
+CE ..> AIEngineBuilder : delegates to
+CE ..> AIEngine : returns
+CE ..> REG : calls get_model()
+AIEngineBuilder ..> SinglePolicyAiEngine : creates
+AIEngineBuilder ..> PolicyValueAiEngine : creates
+
+@enduml

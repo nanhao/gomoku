@@ -38,31 +38,25 @@ class TestRunBattleTempConfig(unittest.TestCase):
     """UT-1.1 ~ UT-1.4：验证 run_battle() 正确透传 temp_config"""
 
     def setUp(self):
-        """为每个测试创建 mock 依赖链"""
-        self.mock_get_model_patcher = patch('ai.battle.get_model')
-        self.mock_ai_engine_patcher = patch('ai.battle.AIEngine')
+        """为每个测试创建 mock 依赖链
+
+        run_battle() 现在直接传递 AI 名称字符串给 AIGameManager，
+        不再手动创建引擎，因此只需 mock DataRecorder 和 start_ai_vs_ai_random。
+        """
         self.mock_data_recorder_patcher = patch('ai.battle.DataRecorder')
         self.mock_start_patcher = patch(
             'ai.battle.AIGameManager.start_ai_vs_ai_random')
 
-        self.mock_get_model = self.mock_get_model_patcher.start()
-        self.mock_ai_engine = self.mock_ai_engine_patcher.start()
         self.mock_data_recorder = self.mock_data_recorder_patcher.start()
         self.mock_start = self.mock_start_patcher.start()
 
         # 设置 mock 返回值链
-        self.mock_model = MagicMock()
-        self.mock_get_model.return_value = self.mock_model
-        self.mock_engine = MagicMock()
-        self.mock_ai_engine.return_value = self.mock_engine
         self.mock_recorder = MagicMock()
         self.mock_data_recorder.return_value = self.mock_recorder
         self.mock_start.return_value = []
 
     def tearDown(self):
         """停止所有 patcher"""
-        self.mock_get_model_patcher.stop()
-        self.mock_ai_engine_patcher.stop()
         self.mock_data_recorder_patcher.stop()
         self.mock_start_patcher.stop()
 

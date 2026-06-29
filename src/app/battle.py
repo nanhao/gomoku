@@ -7,7 +7,7 @@ app 包是薄的代理层，不包含业务逻辑，全部委托给 ai 包。
 import os
 from typing import Callable, List
 
-from ai import AIGameManager, DataRecorder, Evaluator, create_engine
+from ai import AIGameManager, DataRecorder, Evaluator
 from ai.constants import AI_DATA_DIR, TRAIN_DATA_DIR
 from app.exceptions import ModelLoadError
 
@@ -59,10 +59,9 @@ class BattleSession:
         执行全部对战并生成训练样本
 
         流程：
-        1. 创建两个 AIEngine（委托给 ai.create_engine）
-        2. 创建 DataRecorder
-        3. 逐局调用 AIGameManager.start_ai_vs_ai（每局调用 on_progress）
-        4. 调用 Evaluator.evaluate_round 生成训练样本
+        1. 创建 DataRecorder
+        2. 逐局调用 AIGameManager.start_ai_vs_ai（内部每局创建引擎）
+        3. 调用 Evaluator.evaluate_round 生成训练样本
 
         Args:
             on_progress: 进度回调，每完成一局调用一次，参数为 (current, total)
@@ -70,23 +69,20 @@ class BattleSession:
         Returns:
             对战结果列表，每项为 {"game": 局数, "winner": 获胜方}
         """
-        # 捕获 create_engine 的 ValueError，转换为 ModelLoadError 上抛
-        # 任一方的模型加载失败都会中止整个内战流程
-        try:
-            engine1 = create_engine(self._ai1_name)
-            engine2 = create_engine(self._ai2_name)
-        except ValueError as e:
-            raise ModelLoadError(f"模型加载失败：{e}") from e
-
         battle_name = f"{self._ai1_name}_vs_{self._ai2_name}"
         recorder = DataRecorder(battle_name, self._ai_data_dir)
         self._recorder = recorder
 
-        results = AIGameManager.start_ai_vs_ai(
-            engine1, engine2, self._num_games, recorder,
-            on_progress=on_progress,
-            temp_config=self._temp_config,
-        )
+        # start_ai_vs_ai 内部每局调用 create_engine，调用方无需手动创建引擎
+        # 捕获 create_engine 的 ValueError 并转换为 ModelLoadError
+        try:
+            results = AIGameManager.start_ai_vs_ai(
+                self._ai1_name, self._ai2_name, self._num_games, recorder,
+                on_progress=on_progress,
+                temp_config=self._temp_config,
+            )
+        except ValueError as e:
+            raise ModelLoadError(f"模型加载失败: {e}") from e
 
         # 对战完成后生成训练样本
         evaluator = Evaluator(

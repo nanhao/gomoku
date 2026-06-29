@@ -8,7 +8,7 @@
 import random as _stdrandom
 from typing import List, NamedTuple, Optional, Tuple
 from game import GomokuController
-from ai.engine import AIEngine
+from ai.engine import AIEngine, create_engine
 from ai.constants import STRATEGY_ARGMAX, STRATEGY_SAMPLING
 from ai.data_recorder import DataRecorder
 from ai.move_sampler import TempConfig, resolve_temp_side, should_sample
@@ -264,6 +264,9 @@ class AIGameManager:
             # 执行落子
             controller.make_move(x, y)
 
+            # 落子后钩子：推进当前引擎的搜索树（子树复用）
+            engine.after_move(x, y)
+
             move_count += 1
 
         # 保存结果：获取获胜方和终局棋盘
@@ -278,8 +281,8 @@ class AIGameManager:
 
     @staticmethod
     def start_ai_vs_ai(
-        engine1: AIEngine,
-        engine2: AIEngine,
+        ai1_name: str,
+        ai2_name: str,
         num_games: int,
         recorder: DataRecorder,
         project_root: str = None,
@@ -288,12 +291,13 @@ class AIGameManager:
     ) -> List[dict]:
         """执行 AI 内战
     
-        engine1 执黑，engine2 执白。
+        ai1_name 执黑，ai2_name 执白。
+        每局通过 create_engine 创建新引擎（确保引擎实例不跨局复用）。
         每局游戏独立创建 controller，数据通过 recorder 记录。
     
         Args:
-            engine1: 执黑 AI 引擎
-            engine2: 执白 AI 引擎
+            ai1_name: 执黑 AI 名称（如 "random"、"fc_v1"）
+            ai2_name: 执白 AI 名称（如 "random"、"fc_v1"）
             num_games: 对战局数
             recorder: 数据记录器
             project_root: 项目根目录（保留兼容，内部不使用）
@@ -306,6 +310,10 @@ class AIGameManager:
         results = []
     
         for game_num in range(1, num_games + 1):
+            # 每局创建新引擎（确保不跨局复用）
+            engine1 = create_engine(ai1_name)
+            engine2 = create_engine(ai2_name)
+
             # 固定执方：engine1 执黑，engine2 执白
             result = AIGameManager.play_single_game(
                 engine1, engine2, recorder, game_num,
@@ -326,8 +334,8 @@ class AIGameManager:
     
     @staticmethod
     def start_ai_vs_ai_random(
-        engine1: AIEngine,
-        engine2: AIEngine,
+        ai1_name: str,
+        ai2_name: str,
         num_games: int,
         recorder: DataRecorder,
         temp_config: Optional[TempConfig] = None,
@@ -335,11 +343,12 @@ class AIGameManager:
         """执行 AI 内战（每局执方随机）
     
         每局随机决定 engine1/engine2 各执黑棋还是白棋。
+        每局通过 create_engine 创建新引擎（确保引擎实例不跨局复用）。
         数据通过 recorder 记录。
     
         Args:
-            engine1: AI 引擎 1
-            engine2: AI 引擎 2
+            ai1_name: AI 1 名称（如 "random"、"fc_v1"）
+            ai2_name: AI 2 名称（如 "random"、"fc_v1"）
             num_games: 对战局数
             recorder: 数据记录器
             temp_config: 可选温度采样配置；None 时保持原有 argmax 行为
@@ -362,6 +371,10 @@ class AIGameManager:
             # 随机决定 engine1 执黑还是白
             ai1_color = _random.choice([1, 2])
             ai2_color = 3 - ai1_color  # 互为黑白
+
+            # 每局创建新引擎（确保不跨局复用）
+            engine1 = create_engine(ai1_name)
+            engine2 = create_engine(ai2_name)
     
             # 根据颜色分配引擎：黑方先手
             engine_black = engine1 if ai1_color == 1 else engine2
