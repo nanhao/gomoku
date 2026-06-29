@@ -29,7 +29,7 @@ if _project_root not in sys.path:
 
 from typing import Optional
 
-from ai.engine import AIEngine
+from ai.engine import AIEngine, SinglePolicyAiEngine
 from ai.data_recorder import DataRecorder
 from ai.game_manager import AIGameManager
 from ai.constants import AI_DATA_DIR
@@ -146,8 +146,8 @@ def run_battle(ai1_name: str, ai2_name: str, num_games: int,
         model2.move_to_device()
     
     # 创建引擎
-    engine1 = AIEngine(model1)
-    engine2 = AIEngine(model2)
+    engine1 = SinglePolicyAiEngine(model1)
+    engine2 = SinglePolicyAiEngine(model2)
     
     # 创建数据记录器，使用组合 AI 名称作为轮次目录前缀
     round_name = f"{ai1_name}_vs_{ai2_name}"

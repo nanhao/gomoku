@@ -18,7 +18,7 @@ import argparse
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from ai.registry import get_model
-from ai.engine import AIEngine
+from ai.engine import SinglePolicyAiEngine
 from ai.game_manager import AIGameManager
 from ai.data_recorder import DataRecorder
 from ai.sample_creator import SampleCreator
@@ -225,7 +225,7 @@ def main():
         model.move_to_device()
 
     # 创建 AIEngine
-    engine = AIEngine(model)
+    engine = SinglePolicyAiEngine(model)
 
     # 创建 DataRecorder
     recorder = DataRecorder(ai_name=f"{model.full_name}_battle")

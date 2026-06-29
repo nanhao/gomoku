@@ -18,7 +18,7 @@ if project_root not in sys.path:
 
 from game import GomokuController
 from ai.game_manager import AIGameManager
-from ai.engine import AIEngine
+from ai.engine import SinglePolicyAiEngine
 from ai.models.random.model import RandomModel
 from ai.data_recorder import DataRecorder
 
@@ -49,8 +49,8 @@ class TestPlaySingleGameMainFlow(unittest.TestCase):
 
     def test_normal_game_returns_winner(self):
         """正常完成一局，返回有效的 SingleGameResult"""
-        engine_black = AIEngine(RandomModel())
-        engine_white = AIEngine(RandomModel())
+        engine_black = SinglePolicyAiEngine(RandomModel())
+        engine_white = SinglePolicyAiEngine(RandomModel())
         recorder = DataRecorder("test_unit", self.test_ai_data_dir)
 
         result = AIGameManager.play_single_game(
@@ -64,8 +64,8 @@ class TestPlaySingleGameMainFlow(unittest.TestCase):
 
     def test_normal_game_records_data(self):
         """正常完成一局，recorder 记录了数据文件"""
-        engine_black = AIEngine(RandomModel())
-        engine_white = AIEngine(RandomModel())
+        engine_black = SinglePolicyAiEngine(RandomModel())
+        engine_white = SinglePolicyAiEngine(RandomModel())
         recorder = DataRecorder("test_unit_rec", self.test_ai_data_dir)
 
         AIGameManager.play_single_game(
@@ -80,8 +80,8 @@ class TestPlaySingleGameMainFlow(unittest.TestCase):
     def test_normal_game_record_has_required_fields(self):
         """正常完成一局，record.json 包含必要字段"""
         import json
-        engine_black = AIEngine(RandomModel())
-        engine_white = AIEngine(RandomModel())
+        engine_black = SinglePolicyAiEngine(RandomModel())
+        engine_white = SinglePolicyAiEngine(RandomModel())
         recorder = DataRecorder("test_unit_fields", self.test_ai_data_dir)
 
         AIGameManager.play_single_game(
@@ -106,8 +106,8 @@ class TestPlaySingleGameMainFlow(unittest.TestCase):
     def test_normal_game_end_board_dimension(self):
         """正常完成一局，end_board 为 226 维"""
         import json
-        engine_black = AIEngine(RandomModel())
-        engine_white = AIEngine(RandomModel())
+        engine_black = SinglePolicyAiEngine(RandomModel())
+        engine_white = SinglePolicyAiEngine(RandomModel())
         recorder = DataRecorder("test_unit_dim", self.test_ai_data_dir)
 
         AIGameManager.play_single_game(
@@ -126,8 +126,8 @@ class TestPlaySingleGameMainFlow(unittest.TestCase):
 
     def test_multiple_games_independent(self):
         """多局游戏独立运行，每局都成功完成"""
-        engine_black = AIEngine(RandomModel())
-        engine_white = AIEngine(RandomModel())
+        engine_black = SinglePolicyAiEngine(RandomModel())
+        engine_white = SinglePolicyAiEngine(RandomModel())
         recorder = DataRecorder("test_unit_multi", self.test_ai_data_dir)
 
         winners = []
@@ -175,8 +175,8 @@ class TestPlaySingleGameEdgeCases(unittest.TestCase):
 
     def test_game_without_extra_params(self):
         """仅传入必需参数时，正常运行不报错"""
-        engine_black = AIEngine(RandomModel())
-        engine_white = AIEngine(RandomModel())
+        engine_black = SinglePolicyAiEngine(RandomModel())
+        engine_white = SinglePolicyAiEngine(RandomModel())
         recorder = DataRecorder("test_unit_no_cb", self.test_ai_data_dir)
 
         result = AIGameManager.play_single_game(
@@ -186,8 +186,8 @@ class TestPlaySingleGameEdgeCases(unittest.TestCase):
 
     def test_recorder_game_id_incremented(self):
         """游戏完成后，recorder 的 current_game_id 应正确递增"""
-        engine_black = AIEngine(RandomModel())
-        engine_white = AIEngine(RandomModel())
+        engine_black = SinglePolicyAiEngine(RandomModel())
+        engine_white = SinglePolicyAiEngine(RandomModel())
         recorder = DataRecorder("test_unit_gid", self.test_ai_data_dir)
 
         # 初始 current_game_id 为 0（DataRecorder 初始化时）
@@ -203,8 +203,8 @@ class TestPlaySingleGameEdgeCases(unittest.TestCase):
     def test_recorder_records_moves_with_correct_game_id(self):
         """recorder 使用 current_game_id 记录数据，而非 game_num 参数"""
         import json
-        engine_black = AIEngine(RandomModel())
-        engine_white = AIEngine(RandomModel())
+        engine_black = SinglePolicyAiEngine(RandomModel())
+        engine_white = SinglePolicyAiEngine(RandomModel())
 
         # 创建一个已经有一局记录的 recorder
         recorder = DataRecorder("test_unit_gid_match", self.test_ai_data_dir)
@@ -261,8 +261,8 @@ class TestPlaySingleGameBoardFull(unittest.TestCase):
         import numpy as np
 
         # 创建一个会在 get_move 时抛出 ValueError 的 mock 引擎
-        engine_black = AIEngine(RandomModel())
-        engine_white = AIEngine(RandomModel())
+        engine_black = SinglePolicyAiEngine(RandomModel())
+        engine_white = SinglePolicyAiEngine(RandomModel())
 
         # 构造一个几乎满的棋盘场景：
         # 使用 mock 让 engine_black.get_move 在特定步数抛出 ValueError
@@ -292,8 +292,8 @@ class TestPlaySingleGameBoardFull(unittest.TestCase):
         """棋盘已满时，仍然保存游戏结果"""
         from unittest.mock import MagicMock
 
-        engine_black = AIEngine(RandomModel())
-        engine_white = AIEngine(RandomModel())
+        engine_black = SinglePolicyAiEngine(RandomModel())
+        engine_white = SinglePolicyAiEngine(RandomModel())
 
         # 让 get_move 第一次就抛出 ValueError
         engine_black.get_move = lambda board, player, probs=None: (

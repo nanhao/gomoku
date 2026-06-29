@@ -19,7 +19,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from ai.engine import AIEngine
+from ai.engine import SinglePolicyAiEngine
 from ai.models.random.model import RandomModel
 from ai.shape_detector import detect_shapes
 from ai.sample_loader import SampleLoader
@@ -38,7 +38,7 @@ class TestGetMoveWithProbs(unittest.TestCase):
     def setUp(self):
         """测试前准备"""
         self.model = RandomModel()
-        self.engine = AIEngine(self.model)
+        self.engine = SinglePolicyAiEngine(self.model)
 
     def test_get_move_returns_valid_position(self):
         """get_move 应返回合法落子位置，且 probs 通过 get_probs() 获取"""
@@ -57,7 +57,7 @@ class TestGetMoveWithProbs(unittest.TestCase):
     def test_get_move_calls_predict(self):
         """get_move 应调用 model.predict"""
         board = [[0] * 15 for _ in range(15)]
-        board_vector = AIEngine.board_to_vector(board, 1)
+        board_vector = SinglePolicyAiEngine.board_to_vector(board, 1)
         real_probs = self.model.predict(board_vector)
 
         with patch.object(self.model, 'predict', return_value=real_probs) as mock_predict:

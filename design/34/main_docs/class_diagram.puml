@@ -1,0 +1,104 @@
+@startuml
+!theme plain
+
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam classFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title 意图34：统一引擎类层次
+
+package "ai.engine" {
+  class MoveDecision {
+    - _position: Tuple[int, int]
+    - _probs: Optional[List[float]]
+    - _mcts_visit_counts: Optional[List[int]]
+    --
+    + __init__(x, y, probs, mcts_visit_counts)
+    + get_position(): Tuple[int, int]
+    + get_probs(): Optional[List[float]]
+    + get_mcts_visit_counts(): Optional[List[int]]
+  }
+
+  abstract class AIEngine {
+    + {abstract} get_move(board, current_player, strategy): MoveDecision
+    + {abstract} after_move(action)
+    + {static} board_to_vector(board, current_player): List[int]
+  }
+
+  class SinglePolicyAiEngine {
+    - model: BaseModel
+    - temperature: float
+    - top_k: Optional[int]
+    - rng: Optional[Random]
+    --
+    + __init__(model, temperature, top_k, rng)
+    + get_move(board, current_player, strategy): MoveDecision
+    + after_move(action)
+  }
+
+  class PolicyValueAiEngine {
+    - searcher: MCTSSearcher
+    - temperature: float
+    - temp_steps: int
+    - log_key_prefix: Optional[str]
+    - _step_count: int
+    - _search_id: int
+    --
+    + __init__(searcher, temperature, temp_steps, log_key_prefix)
+    + get_move(board, current_player, strategy): MoveDecision
+    + after_move(action)
+  }
+
+  class AIEngineBuilder {
+    + {static} build_single_policy(ai_name, temperature, top_k, rng): SinglePolicyAiEngine
+    + {static} build_policy_value(model, num_simulations, c_puct, dirichlet_epsilon, dirichlet_alpha, temperature, temp_steps, log_key_prefix, log_dir): PolicyValueAiEngine
+  }
+
+  class create_engine {
+    + (ai_name): SinglePolicyAiEngine
+  }
+}
+
+package "ai.mcts" {
+  class MCTSSearcher {
+    - model
+    - num_simulations: int
+    - c_puct: float
+    - dirichlet_epsilon: float
+    - dirichlet_alpha: float
+    - log_dir: Optional[str]
+    - tree: Dict
+    - _root_hash: Optional[str]
+    --
+    + __init__(model, num_simulations, c_puct, ...)
+    + search(state, num_simulations, log_key): Tuple
+    + advance_root(action): bool
+  }
+
+  class MCTSSearchLogger {
+    - log_dir: str
+    - c_puct: float
+    --
+    + write_log(log_key, log_data)
+  }
+}
+
+class BaseModel {
+  + predict(board_vector): ModelPredict
+  + name: str
+  + save(model_path)
+  + load(model_path)
+}
+
+AIEngine <|-- SinglePolicyAiEngine
+AIEngine <|-- PolicyValueAiEngine
+AIEngine --> MoveDecision : returns
+AIEngineBuilder ..> SinglePolicyAiEngine : creates
+AIEngineBuilder ..> PolicyValueAiEngine : creates
+AIEngineBuilder --> MCTSSearcher : creates
+create_engine ..> AIEngineBuilder : delegates to
+PolicyValueAiEngine --> MCTSSearcher : uses
+MCTSSearcher --> MCTSSearchLogger : uses
+SinglePolicyAiEngine --> BaseModel : uses
+MCTSSearcher --> BaseModel : uses
+
+@enduml

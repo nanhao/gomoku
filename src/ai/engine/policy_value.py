@@ -1,28 +1,30 @@
-"""MCTS 落子决策器模块
+"""策略-价值 AI 引擎模块
 
-基于 MCTSSearcher 的搜索结果做出落子决策。
-支持温度采样、子树复用、自动日志键生成。
+PolicyValueAiEngine：基于 MCTS 搜索的落子引擎。
+封装 MCTSSearcher，提供高层次的落子决策 API：
+- get_move(board, current_player, strategy): 搜索 + 温度选择 + 返回 MoveDecision
+- after_move(action): 子树复用（替代原 make_move + reset）
 """
 
 import math
 import random
 from typing import List, Optional
 
-from ai.engine import MoveDecision, AIEngine
 from ai.constants import STRATEGY_ARGMAX, STRATEGY_SAMPLING, _SUPPORTED_STRATEGIES
+from ai.engine.ai_engine import AIEngine, MoveDecision
 
 
-class MCTSMoveDecider:
-    """MCTS 落子决策器
+class PolicyValueAiEngine(AIEngine):
+    """策略-价值 AI 引擎
 
-    封装 MCTSSearcher，提供高层次的落子决策 API：
-    - get_move(board, current_player, strategy): 搜索 + 温度选择 + 返回 MoveDecision
-    - make_move(action): 子树复用
-
-    不继承/不修改 AIEngine，独立实现。
+    基于 MCTSSearcher 的搜索结果做出落子决策。
+    支持温度采样、子树复用、自动日志键生成。
 
     日志键由构造时注入的 log_key_prefix + 内部自增 _search_id 自动生成，
     调用方无需每次 get_move 传入 log_key。
+
+    不可跨局复用：内部 searcher 的搜索树在局末会推进到终局根节点，
+    后续局的 get_move 会从错误的根状态开始。每局必须创建新实例。
     """
 
     def __init__(
@@ -32,7 +34,7 @@ class MCTSMoveDecider:
         temp_steps: int = 8,
         log_key_prefix: Optional[str] = None,
     ):
-        """初始化决策器
+        """初始化策略-价值引擎
 
         Args:
             searcher: MCTSSearcher 实例
@@ -47,7 +49,7 @@ class MCTSMoveDecider:
         self.temp_steps = temp_steps
         self.log_key_prefix = log_key_prefix
         self._step_count = 0  # 当前局已走步数
-        self._search_id = 0   # 日志搜索 ID，从 0 递增，reset() 时归零
+        self._search_id = 0   # 日志搜索 ID，从 0 递增
 
     # ---------- 公共 API ----------
 
@@ -60,18 +62,19 @@ class MCTSMoveDecider:
         """对给定棋盘状态做出落子决策
 
         流程：
-        1. 将 board + current_player 转换为 226 维向量
-        2. 生成 log_key（若 log_key_prefix 非 None）
-        3. 调用 searcher.search() 执行 MCTS
-        4. 根据 strategy 决定落子方式：
+        1. 检查棋盘是否已满
+        2. 将 board + current_player 转换为 226 维向量
+        3. 生成 log_key（若 log_key_prefix 非 None）
+        4. 调用 searcher.search() 执行 MCTS
+        5. 根据 strategy 决定落子方式：
            - "argmax"：强制贪婪选择（访问计数最大）
            - "sampling"：按内部温度逻辑采样（tau 由 _get_temperature() 决定）
-        5. 返回 MoveDecision（含 position 和 mcts_visit_counts）
+        6. 返回 MoveDecision（含 position 和 mcts_visit_counts）
 
         Args:
             board: 15×15 棋盘矩阵，0=空, 1=黑, 2=白
             current_player: 当前落子方 (1=黑, 2=白)
-            strategy: 落子策略，与 AiEngine 一致：
+            strategy: 落子策略，与 SinglePolicyAiEngine 一致：
                 - "argmax"（默认）：贪婪选择访问计数最大者
                 - "sampling"：按温度从访问计数采样
 
@@ -81,8 +84,12 @@ class MCTSMoveDecider:
             - mcts_visit_counts: 225 维原始访问计数
 
         Raises:
-            ValueError: strategy 取值未知
+            ValueError: 棋盘已满，无空位可落子；strategy 取值未知
         """
+        # 棋盘已满检查（与 SinglePolicyAiEngine 行为一致）
+        if all(board[i][j] != 0 for i in range(15) for j in range(15)):
+            raise ValueError("棋盘已满，无空位可落子")
+
         # 校验策略
         if strategy not in _SUPPORTED_STRATEGIES:
             raise ValueError(
@@ -120,36 +127,28 @@ class MCTSMoveDecider:
 
         return MoveDecision(x, y, mcts_visit_counts=visit_counts)
 
-    def make_move(self, action: int):
-        """执行落子，复用子树
+    def after_move(self, action: int):
+        """落子后钩子：推进搜索树根节点
 
         调用 searcher.advance_root(action) 将子节点提升为新根。
-        失败时抛出 RuntimeError（非预期异常状态）。
-        终局时调用方应使用 reset() 而非 make_move。
+        与旧 make_move 的关键差异：仅在 advance_root 成功后才递增
+        _step_count（旧实现在失败时也会错误递增）。
 
         Args:
             action: 落子位置 0-224
 
         Raises:
-            RuntimeError: 子树推进失败
+            RuntimeError: 子树推进失败（action 对应子节点不在树中）
         """
-        self._step_count += 1
         success = self.searcher.advance_root(action)
         if not success:
             raise RuntimeError(
-                f"MCTSMoveDecider.make_move({action}): advance_root failed. "
+                f"PolicyValueAiEngine.after_move({action}): advance_root failed. "
                 f"The child node for action {action} does not exist in the search tree. "
                 f"This indicates an unexpected state — the action should have been visited during search."
             )
-
-    def reset(self):
-        """重置决策器状态（终局时调用，无需子树复用）
-
-        重置 _step_count、_search_id 和底层 searcher。
-        """
-        self._step_count = 0
-        self._search_id = 0
-        self.searcher.reset()
+        # 仅在成功后才递增步数（修正旧 make_move 的缺陷）
+        self._step_count += 1
 
     # ---------- 内部方法 ----------
 

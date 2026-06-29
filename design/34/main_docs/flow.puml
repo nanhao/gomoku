@@ -1,0 +1,56 @@
+@startuml
+!theme plain
+
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title 意图34：统一后落子流程
+
+actor Game
+
+Game -> Engine: get_move(board, current_player, strategy)
+activate Engine
+
+alt SinglePolicyAiEngine
+    Engine -> Model: predict(board_vector)
+    Model --> Engine: probs
+    Engine -> Engine: strategy 选择 (argmax / sampling)
+else PolicyValueAiEngine
+    Engine -> Searcher: search(state, log_key)
+    activate Searcher
+    Searcher --> Engine: (visit_counts, root_value, root_policy)
+    deactivate Searcher
+    Engine -> Engine: strategy 选择 (argmax / sampling from visit_counts)
+end
+
+Engine --> Game: MoveDecision
+deactivate Engine
+
+Game -> Game: board[action] = current_player
+
+Game -> Engine: after_move(action)
+activate Engine
+alt SinglePolicyAiEngine
+    Engine -> Engine: no-op
+else PolicyValueAiEngine
+    Engine -> Searcher: advance_root(action)
+    activate Searcher
+    Searcher --> Engine: True (success)
+    deactivate Searcher
+    Engine -> Engine: _step_count += 1
+end
+deactivate Engine
+
+Game -> Game: check_winner / is_board_full
+alt is_terminal
+    Game -> Game: break (game over)
+else
+    Game -> Game: switch player, continue
+end
+
+note over Game, Searcher
+  after_move 无条件调用，无需 is_terminal 判断
+  终局节点的 advance_root 同样成功（意图32保证终局节点在树中）
+  reset() 已彻底删除，每局创建新实例
+end note
+
+@enduml

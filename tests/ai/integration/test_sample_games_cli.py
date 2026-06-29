@@ -91,7 +91,7 @@ def _create_record_json(round_dir, game_num, winner, history=None):
 
 @patch('ai.create_samples.DataRecorder')
 @patch('ai.create_samples.AIGameManager')
-@patch('ai.create_samples.AIEngine')
+@patch('ai.create_samples.SinglePolicyAiEngine')
 @patch('ai.create_samples.get_model')
 class TestArgMutualExclusion(unittest.TestCase):
     """A 组: --games 与 --sample_games 互斥校验"""
@@ -193,7 +193,7 @@ class TestArgMutualExclusion(unittest.TestCase):
 
 @patch('ai.create_samples.DataRecorder')
 @patch('ai.create_samples.AIGameManager')
-@patch('ai.create_samples.AIEngine')
+@patch('ai.create_samples.SinglePolicyAiEngine')
 @patch('ai.create_samples.get_model')
 class TestGameLoop(unittest.TestCase):
     """D 组: --sample_games 对弈循环"""

@@ -8,7 +8,7 @@ import os
 from typing import List, Optional, TYPE_CHECKING
 
 from ai.constants import AI_DATA_DIR, TRAIN_DATA_DIR
-from ai.engine import AIEngine
+from ai.engine import SinglePolicyAiEngine
 from ai.game_manager import AIGameManager
 from ai.data_recorder import DataRecorder
 from ai.evaluator import Evaluator
@@ -72,7 +72,7 @@ def run_self_play_and_evaluate(
             model.move_to_device()
 
         # 2. 创建 AI 引擎
-        engine = AIEngine(model)
+        engine = SinglePolicyAiEngine(model)
 
         # 2. 创建数据记录器，ai_name 为 {model_name}_{name_prefix}
         model_name = model.name

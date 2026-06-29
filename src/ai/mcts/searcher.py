@@ -195,11 +195,6 @@ class MCTSSearcher:
                     stack.append(ch)
         return result
 
-    def reset(self):
-        """清空搜索树"""
-        self.tree.clear()
-        self._root_hash = None
-
     # ---------- 内部：初始化 ----------
 
     @staticmethod

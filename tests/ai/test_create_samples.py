@@ -27,7 +27,7 @@ from ai.create_samples import main
 
 @patch('ai.create_samples.DataRecorder')
 @patch('ai.create_samples.AIGameManager')
-@patch('ai.create_samples.AIEngine')
+@patch('ai.create_samples.SinglePolicyAiEngine')
 @patch('ai.create_samples.get_model')
 class TestCliCreatesOutputFile(unittest.TestCase):
     """执行后输出文件存在且格式正确"""
@@ -93,7 +93,7 @@ class TestCliCreatesOutputFile(unittest.TestCase):
 
 @patch('ai.create_samples.DataRecorder')
 @patch('ai.create_samples.AIGameManager')
-@patch('ai.create_samples.AIEngine')
+@patch('ai.create_samples.SinglePolicyAiEngine')
 @patch('ai.create_samples.get_model')
 class TestCliOutputHasCorrectSampleCount(unittest.TestCase):
     """输出样本数与对局数一致（排除平局）"""
@@ -206,7 +206,7 @@ class TestCliOutputHasCorrectSampleCount(unittest.TestCase):
 
 @patch('ai.create_samples.DataRecorder')
 @patch('ai.create_samples.AIGameManager')
-@patch('ai.create_samples.AIEngine')
+@patch('ai.create_samples.SinglePolicyAiEngine')
 @patch('ai.create_samples.get_model')
 class TestCliNoAugment(unittest.TestCase):
     """--no-augment 参数测试"""
@@ -309,7 +309,7 @@ def _setup_common_mocks(tmpdir, mock_get_model, mock_engine_cls,
 
 @patch('ai.create_samples.DataRecorder')
 @patch('ai.create_samples.AIGameManager')
-@patch('ai.create_samples.AIEngine')
+@patch('ai.create_samples.SinglePolicyAiEngine')
 @patch('ai.create_samples.get_model')
 class TestCliTempSamplingFlags(unittest.TestCase):
     """create_samples.py 的温度采样 CLI 参数解析 + 透传行为"""
@@ -449,7 +449,7 @@ class TestCliTempSideDefault(unittest.TestCase):
 
 @patch('ai.create_samples.DataRecorder')
 @patch('ai.create_samples.AIGameManager')
-@patch('ai.create_samples.AIEngine')
+@patch('ai.create_samples.SinglePolicyAiEngine')
 @patch('ai.create_samples.get_model')
 class TestCliStatsOutput(unittest.TestCase):
     """统计输出测试（STAT-01 ~ STAT-04）"""

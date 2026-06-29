@@ -33,7 +33,7 @@ def _mock_generator_dependencies(mock_engine, mock_evaluator_cls, mock_recorder_
     """统一 Mock SelfPlayGenerator.generate 的外部依赖
 
     Args:
-        mock_engine: AIEngine mock
+        mock_engine: SinglePolicyAiEngine mock
         mock_evaluator_cls: Evaluator 类 mock
         mock_recorder_cls: DataRecorder 类 mock
         mock_start: AIGameManager.start_ai_vs_ai mock
@@ -64,7 +64,7 @@ class TestSelfPlayGeneratorDataRecorder(unittest.TestCase):
     @patch('ai.self_play_generator.AIGameManager.start_ai_vs_ai')
     @patch('ai.self_play_generator.DataRecorder')
     @patch('ai.self_play_generator.Evaluator')
-    @patch('ai.self_play_generator.AIEngine')
+    @patch('ai.self_play_generator.SinglePolicyAiEngine')
     def test_generate_creates_data_recorder_with_correct_name(
         self, mock_engine, mock_evaluator_cls, mock_recorder_cls, mock_start
     ):
@@ -88,7 +88,7 @@ class TestSelfPlayGeneratorGameManager(unittest.TestCase):
     @patch('ai.self_play_generator.AIGameManager.start_ai_vs_ai')
     @patch('ai.self_play_generator.DataRecorder')
     @patch('ai.self_play_generator.Evaluator')
-    @patch('ai.self_play_generator.AIEngine')
+    @patch('ai.self_play_generator.SinglePolicyAiEngine')
     def test_generate_calls_start_ai_vs_ai_with_correct_games(
         self, mock_engine, mock_evaluator_cls, mock_recorder_cls, mock_start
     ):
@@ -108,7 +108,7 @@ class TestSelfPlayGeneratorGameManager(unittest.TestCase):
     @patch('ai.self_play_generator.AIGameManager.start_ai_vs_ai')
     @patch('ai.self_play_generator.DataRecorder')
     @patch('ai.self_play_generator.Evaluator')
-    @patch('ai.self_play_generator.AIEngine')
+    @patch('ai.self_play_generator.SinglePolicyAiEngine')
     def test_generate_calls_start_ai_vs_ai_with_same_engine(
         self, mock_engine, mock_evaluator_cls, mock_recorder_cls, mock_start
     ):
@@ -130,7 +130,7 @@ class TestSelfPlayGeneratorEvaluator(unittest.TestCase):
     @patch('ai.self_play_generator.AIGameManager.start_ai_vs_ai')
     @patch('ai.self_play_generator.DataRecorder')
     @patch('ai.self_play_generator.Evaluator')
-    @patch('ai.self_play_generator.AIEngine')
+    @patch('ai.self_play_generator.SinglePolicyAiEngine')
     def test_generate_calls_evaluator_evaluate_round(
         self, mock_engine, mock_evaluator_cls, mock_recorder_cls, mock_start
     ):
@@ -153,7 +153,7 @@ class TestSelfPlayGeneratorEvaluator(unittest.TestCase):
     @patch('ai.self_play_generator.AIGameManager.start_ai_vs_ai')
     @patch('ai.self_play_generator.DataRecorder')
     @patch('ai.self_play_generator.Evaluator')
-    @patch('ai.self_play_generator.AIEngine')
+    @patch('ai.self_play_generator.SinglePolicyAiEngine')
     def test_generate_passes_max_workers_to_evaluator(
         self, mock_engine, mock_evaluator_cls, mock_recorder_cls, mock_start
     ):
@@ -175,7 +175,7 @@ class TestSelfPlayGeneratorResult(unittest.TestCase):
     @patch('ai.self_play_generator.AIGameManager.start_ai_vs_ai')
     @patch('ai.self_play_generator.DataRecorder')
     @patch('ai.self_play_generator.Evaluator')
-    @patch('ai.self_play_generator.AIEngine')
+    @patch('ai.self_play_generator.SinglePolicyAiEngine')
     def test_generate_returns_correct_result_dict(
         self, mock_engine, mock_evaluator_cls, mock_recorder_cls, mock_start
     ):
@@ -215,7 +215,7 @@ class TestSelfPlayGeneratorKeyboardInterrupt(unittest.TestCase):
     @patch('ai.self_play_generator.AIGameManager.start_ai_vs_ai')
     @patch('ai.self_play_generator.DataRecorder')
     @patch('ai.self_play_generator.Evaluator')
-    @patch('ai.self_play_generator.AIEngine')
+    @patch('ai.self_play_generator.SinglePolicyAiEngine')
     def test_generate_with_keyboard_interrupt_after_recorder_created(
         self, mock_engine, mock_evaluator_cls, mock_recorder_cls, mock_start
     ):
@@ -238,7 +238,7 @@ class TestSelfPlayGeneratorKeyboardInterrupt(unittest.TestCase):
     @patch('ai.self_play_generator.AIGameManager.start_ai_vs_ai')
     @patch('ai.self_play_generator.DataRecorder')
     @patch('ai.self_play_generator.Evaluator')
-    @patch('ai.self_play_generator.AIEngine')
+    @patch('ai.self_play_generator.SinglePolicyAiEngine')
     def test_generate_with_keyboard_interrupt_before_recorder_created(
         self, mock_engine, mock_evaluator_cls, mock_recorder_cls, mock_start
     ):

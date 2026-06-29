@@ -17,7 +17,7 @@ if project_root not in sys.path:
 
 from game import GomokuController
 from ai.game_manager import AIGameManager
-from ai.engine import AIEngine
+from ai.engine import SinglePolicyAiEngine
 from ai.models.random.model import RandomModel
 from ai.data_recorder import DataRecorder
 
@@ -32,7 +32,7 @@ class TestAIGameManager(unittest.TestCase):
         
         # 创建 controller 和引擎
         self.controller = GomokuController(self.test_save_dir)
-        self.engine = AIEngine(RandomModel())
+        self.engine = SinglePolicyAiEngine(RandomModel())
     
     def tearDown(self):
         """测试后清理"""
@@ -169,8 +169,8 @@ class TestAIGameManagerAIvsAI(unittest.TestCase):
     
     def test_start_ai_vs_ai_single_game(self):
         """测试 AI 内战，1 局"""
-        engine1 = AIEngine(RandomModel())
-        engine2 = AIEngine(RandomModel())
+        engine1 = SinglePolicyAiEngine(RandomModel())
+        engine2 = SinglePolicyAiEngine(RandomModel())
         recorder = DataRecorder("random", self.test_ai_data_dir)
         
         results = AIGameManager.start_ai_vs_ai(
@@ -191,8 +191,8 @@ class TestAIGameManagerAIvsAI(unittest.TestCase):
     
     def test_start_ai_vs_ai_multiple_games(self):
         """测试 AI 内战，多局"""
-        engine1 = AIEngine(RandomModel())
-        engine2 = AIEngine(RandomModel())
+        engine1 = SinglePolicyAiEngine(RandomModel())
+        engine2 = SinglePolicyAiEngine(RandomModel())
         recorder = DataRecorder("random", self.test_ai_data_dir)
         
         num_games = 3
@@ -222,8 +222,8 @@ class TestAIGameManagerAIvsAI(unittest.TestCase):
         训练周期会多次调用 start_ai_vs_ai，每轮都会创建新的对局，
         存档名称必须唯一，不能冲突。
         """
-        engine1 = AIEngine(RandomModel())
-        engine2 = AIEngine(RandomModel())
+        engine1 = SinglePolicyAiEngine(RandomModel())
+        engine2 = SinglePolicyAiEngine(RandomModel())
         
         project_root = os.path.dirname(os.path.dirname(__file__))
         
@@ -288,8 +288,8 @@ class TestEndBoardDimension(unittest.TestCase):
 
     def test_start_ai_vs_ai_end_board_dimension(self):
         """Bug M1: start_ai_vs_ai 保存的 end_board 应为 226 维"""
-        engine1 = AIEngine(RandomModel())
-        engine2 = AIEngine(RandomModel())
+        engine1 = SinglePolicyAiEngine(RandomModel())
+        engine2 = SinglePolicyAiEngine(RandomModel())
         recorder = DataRecorder("test_dim", self.test_ai_data_dir)
 
         AIGameManager.start_ai_vs_ai(
@@ -310,8 +310,8 @@ class TestEndBoardDimension(unittest.TestCase):
 
     def test_start_ai_vs_ai_random_end_board_dimension(self):
         """Bug M1: start_ai_vs_ai_random 保存的 end_board 应为 226 维"""
-        engine1 = AIEngine(RandomModel())
-        engine2 = AIEngine(RandomModel())
+        engine1 = SinglePolicyAiEngine(RandomModel())
+        engine2 = SinglePolicyAiEngine(RandomModel())
         recorder = DataRecorder("test_dim_rnd", self.test_ai_data_dir)
 
         AIGameManager.start_ai_vs_ai_random(
@@ -356,8 +356,8 @@ class TestGameIdConsistency(unittest.TestCase):
 
     def test_ai_vs_ai_random_uses_recorder_game_id(self):
         """Bug L3: start_ai_vs_ai_random 使用 recorder.current_game_id 而非 game_num"""
-        engine1 = AIEngine(RandomModel())
-        engine2 = AIEngine(RandomModel())
+        engine1 = SinglePolicyAiEngine(RandomModel())
+        engine2 = SinglePolicyAiEngine(RandomModel())
 
         # 使用已有的 recorder（模拟 recorder 被复用的情况）
         recorder = DataRecorder("test_gid", self.test_ai_data_dir)

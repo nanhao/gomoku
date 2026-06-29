@@ -21,7 +21,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from game import GomokuController
-from ai.engine import AIEngine
+from ai.engine import SinglePolicyAiEngine
 from ai.constants import STRATEGY_ARGMAX, STRATEGY_SAMPLING
 from ai.game_manager import AIGameManager
 from ai.base_model import ModelPredict
@@ -53,7 +53,7 @@ class _SpyModel:
         return ModelPredict(policy=[1.0 / 225] * 225)
 
 
-class _SpyEngine(AIEngine):
+class _SpyEngine(SinglePolicyAiEngine):
     """记录每次 get_move 调用参数的 AIEngine 子类。
 
     不改变 get_move 的返回值逻辑（仍真正走父类），但把每次调用

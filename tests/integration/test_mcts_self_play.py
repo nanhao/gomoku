@@ -28,7 +28,7 @@ class TestMCTSSelfPlayIntegration(unittest.TestCase):
             cls.mcts_self_play = None
         try:
             from ai.mcts.searcher import MCTSSearcher
-            from ai.mcts.decision_maker import MCTSMoveDecider
+            from ai.engine import PolicyValueAiEngine
             cls.has_mcts = True
         except ImportError:
             cls.has_mcts = False
@@ -44,14 +44,14 @@ class TestMCTSSelfPlayIntegration(unittest.TestCase):
     def test_import_modules(self):
         """验证 MCTS 模块可导入"""
         from ai.mcts.searcher import MCTSSearcher
-        from ai.mcts.decision_maker import MCTSMoveDecider
+        from ai.engine import PolicyValueAiEngine
         self.assertIsNotNone(MCTSSearcher)
-        self.assertIsNotNone(MCTSMoveDecider)
+        self.assertIsNotNone(PolicyValueAiEngine)
 
     def test_run_single_game_generates_samples(self):
         """单局自对弈生成 sample.json"""
         from ai.mcts.searcher import MCTSSearcher
-        from ai.mcts.decision_maker import MCTSMoveDecider
+        from ai.engine import PolicyValueAiEngine
         from ai.models.cnn_v7.model import CNNV7Model
 
         # 创建随机初始化模型
@@ -59,7 +59,7 @@ class TestMCTSSelfPlayIntegration(unittest.TestCase):
         model.move_to_device()
 
         searcher = MCTSSearcher(model, num_simulations=20, log_dir=None)
-        decider = MCTSMoveDecider(searcher, temp_steps=5, log_key_prefix="test_game0")
+        engine = PolicyValueAiEngine(searcher, temp_steps=5, log_key_prefix="test_game0")
 
         # 手动模拟一局对弈（使用 flat board 维护原始状态，get_move 时转为 2D）
         board_flat = [0] * 225
@@ -75,7 +75,7 @@ class TestMCTSSelfPlayIntegration(unittest.TestCase):
 
             # 将 flat board 转为 15×15 二维矩阵
             board_2d = [[board_flat[i * 15 + j] for j in range(15)] for i in range(15)]
-            md = decider.get_move(board_2d, current_player, strategy=STRATEGY_SAMPLING)
+            md = engine.get_move(board_2d, current_player, strategy=STRATEGY_SAMPLING)
             x, y = md.get_position()
             action = x * 15 + y
             visit_counts = md.get_mcts_visit_counts()
@@ -88,6 +88,9 @@ class TestMCTSSelfPlayIntegration(unittest.TestCase):
             # 落子到棋盘
             board_flat[action] = current_player
 
+            # 子树复用（在终局判定之前无条件调用）
+            engine.after_move(action)
+
             # 记录样本
             pi = [c / sum(visit_counts) if sum(visit_counts) > 0 else 0 for c in visit_counts]
             samples.append({"state": state, "pi": pi, "z": 0})  # z 待填入
@@ -97,13 +100,9 @@ class TestMCTSSelfPlayIntegration(unittest.TestCase):
             is_terminal = (winner != 0) or is_board_full(board_flat)
 
             if is_terminal:
-                decider.reset()  # 终局无需子树复用
                 if winner == 0:
                     winner = 0  # 平局
                 break
-
-            # 子树复用
-            decider.make_move(action)
 
             # 切换玩家
             current_player = 2 if current_player == 1 else 1

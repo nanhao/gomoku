@@ -1,6 +1,6 @@
 """AI 引擎测试
 
-测试 AIEngine 类的所有公共方法。
+测试 SinglePolicyAiEngine 类的所有公共方法。
 """
 
 import sys
@@ -15,7 +15,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from ai.base_model import BaseModel, ModelPredict
-from ai.engine import AIEngine, create_engine
+from ai.engine import AIEngine, SinglePolicyAiEngine, create_engine
 from ai.constants import STRATEGY_ARGMAX, STRATEGY_SAMPLING
 from ai.models.random.model import RandomModel
 from ai.models.cnn_v2.model import CNNV2Model
@@ -24,7 +24,7 @@ from ai.models.cnn_v2.model import CNNV2Model
 class StubModel(BaseModel):
     """测试桩模型：predict 恒定返回构造时指定的概率向量。
 
-    用于在不依赖真实神经网络的前提下，精确控制 AIEngine 接收到的概率分布，
+    用于在不依赖真实神经网络的前提下，精确控制 SinglePolicyAiEngine 接收到的概率分布，
     从而验证落子策略（argmax / sampling / 未知策略）的行为。
     """
 
@@ -64,18 +64,18 @@ def _make_probs(pairs, total=225):
     return probs
 
 
-class TestAIEngine(unittest.TestCase):
+class TestSinglePolicyAiEngine(unittest.TestCase):
     """AI 引擎测试类"""
     
     def setUp(self):
         """测试前准备"""
         self.model = RandomModel()
-        self.engine = AIEngine(self.model)
+        self.engine = SinglePolicyAiEngine(self.model)
     
     def test_board_to_vector_empty_board(self):
         """测试空棋盘转向量"""
         board = [[0] * 15 for _ in range(15)]
-        vector = AIEngine.board_to_vector(board, 1)
+        vector = SinglePolicyAiEngine.board_to_vector(board, 1)
         
         # 验证长度
         self.assertEqual(len(vector), 226)
@@ -90,7 +90,7 @@ class TestAIEngine(unittest.TestCase):
         board[7][7] = 1  # 黑子
         board[7][8] = 2  # 白子
         
-        vector = AIEngine.board_to_vector(board, 2)
+        vector = SinglePolicyAiEngine.board_to_vector(board, 2)
         
         # 验证长度
         self.assertEqual(len(vector), 226)
@@ -208,7 +208,7 @@ class TestGetMoveStrategy(unittest.TestCase):
         board = _empty_board()
         # (7,7) 索引 = 7*15+7 = 112，概率明显最大
         probs = _make_probs([(112, 0.9), (0, 0.05), (1, 0.05)])
-        engine = AIEngine(StubModel(probs))
+        engine = SinglePolicyAiEngine(StubModel(probs))
 
         for _ in range(20):
             decision = engine.get_move(board, 1, strategy=STRATEGY_ARGMAX)
@@ -220,7 +220,7 @@ class TestGetMoveStrategy(unittest.TestCase):
         board = _empty_board()
         # (0,0)=idx 0 与 (0,1)=idx 1 并列 0.4，(0,2)=idx 2 为 0.2
         probs = _make_probs([(0, 0.4), (1, 0.4), (2, 0.2)])
-        engine = AIEngine(StubModel(probs))
+        engine = SinglePolicyAiEngine(StubModel(probs))
 
         # 固定随机种子，避免偶发失败；仍要求覆盖两个并列候选
         random.seed(20260501)
@@ -239,7 +239,7 @@ class TestGetMoveStrategy(unittest.TestCase):
         board[7][7] = 1  # 占住 idx 112
         # idx 112 概率最大，但已占用；idx 0 次大且为空
         probs = _make_probs([(112, 0.9), (0, 0.5), (1, 0.1)])
-        engine = AIEngine(StubModel(probs))
+        engine = SinglePolicyAiEngine(StubModel(probs))
 
         decision = engine.get_move(board, 2, strategy=STRATEGY_ARGMAX)
         x, y = decision.get_position()
@@ -251,7 +251,7 @@ class TestGetMoveStrategy(unittest.TestCase):
         # 模型把所有概率压在 (0,0)，且 (0,0) 已落子 → 空位全 0
         board[0][0] = 1
         probs = _make_probs([(0, 1.0)])
-        engine = AIEngine(StubModel(probs))
+        engine = SinglePolicyAiEngine(StubModel(probs))
 
         decision = engine.get_move(board, 2, strategy=STRATEGY_ARGMAX)
         x, y = decision.get_position()
@@ -264,7 +264,7 @@ class TestGetMoveStrategy(unittest.TestCase):
         """用例 5：不传 strategy 时，行为等价于 argmax。"""
         board = _empty_board()
         probs = _make_probs([(50, 0.8), (51, 0.2)])
-        engine = AIEngine(StubModel(probs))
+        engine = SinglePolicyAiEngine(StubModel(probs))
 
         # 多次调用都应稳定返回概率最大的位置
         for _ in range(20):
@@ -279,7 +279,7 @@ class TestGetMoveStrategy(unittest.TestCase):
         """用例 8：未知 strategy 值应抛 ValueError。"""
         board = _empty_board()
         probs = [1.0 / 225] * 225
-        engine = AIEngine(StubModel(probs))
+        engine = SinglePolicyAiEngine(StubModel(probs))
 
         with self.assertRaises(ValueError):
             engine.get_move(board, 1, strategy="foo")
@@ -290,7 +290,7 @@ class TestGetMoveStrategy(unittest.TestCase):
         """用例 9：棋盘已满时仍抛 ValueError（与既有行为一致）。"""
         board = [[1] * 15 for _ in range(15)]
         probs = [1.0 / 225] * 225
-        engine = AIEngine(StubModel(probs))
+        engine = SinglePolicyAiEngine(StubModel(probs))
 
         with self.assertRaises(ValueError) as ctx:
             engine.get_move(board, 2, strategy=STRATEGY_ARGMAX)
@@ -303,7 +303,7 @@ class TestGetMoveStrategy(unittest.TestCase):
         board = _empty_board()
         probs_vec = _make_probs([(100, 0.7), (101, 0.3)])
         stub = StubModel(probs_vec)
-        engine = AIEngine(stub)
+        engine = SinglePolicyAiEngine(stub)
 
         decision = engine.get_move(board, 1, strategy=STRATEGY_ARGMAX)
         returned_probs = decision.get_probs()
@@ -320,7 +320,7 @@ class TestGetMoveSamplingStrategy(unittest.TestCase):
     strategy="sampling" 不再抛 NotImplementedError，而是委托给
     ai.move_sampler.temperature_sample 完成温度采样。
 
-    注意：temperature / top_k / rng 已从 get_move() 移入 AIEngine 构造函数（设计文档 33）。
+    注意：temperature / top_k / rng 已从 get_move() 移入 SinglePolicyAiEngine 构造函数（设计文档 33）。
     本测试通过构造时注入或直接赋值 engine.rng 来传递采样参数。
     """
 
@@ -328,7 +328,7 @@ class TestGetMoveSamplingStrategy(unittest.TestCase):
         """用例 17：sampling 策略不再抛 NotImplementedError。"""
         board = _empty_board()
         probs = [1.0 / 225] * 225
-        engine = AIEngine(StubModel(probs))
+        engine = SinglePolicyAiEngine(StubModel(probs))
 
         # 不传 temperature → 使用默认值 1.0；不抛异常即视为通过
         decision = engine.get_move(board, 1, strategy=STRATEGY_SAMPLING)
@@ -343,7 +343,7 @@ class TestGetMoveSamplingStrategy(unittest.TestCase):
         board[6][6] = 2
         # 构造非均匀分布，测试覆盖
         probs = _make_probs([(0, 0.5), (1, 0.3), (2, 0.2)])
-        engine = AIEngine(StubModel(probs), rng=random.Random(2026))
+        engine = SinglePolicyAiEngine(StubModel(probs), rng=random.Random(2026))
 
         for _ in range(100):
             decision = engine.get_move(
@@ -356,7 +356,7 @@ class TestGetMoveSamplingStrategy(unittest.TestCase):
         """用例 19：strategy=sampling, T 极小 → 与 argmax 等价。"""
         board = _empty_board()
         probs = _make_probs([(50, 0.8), (51, 0.15), (52, 0.05)])
-        engine = AIEngine(StubModel(probs), temperature=0.01, rng=random.Random(7))
+        engine = SinglePolicyAiEngine(StubModel(probs), temperature=0.01, rng=random.Random(7))
 
         expected = (50 // 15, 50 % 15)
         for _ in range(50):
@@ -371,7 +371,7 @@ class TestGetMoveSamplingStrategy(unittest.TestCase):
         probs = _make_probs(
             [(0, 0.25), (1, 0.20), (2, 0.20), (3, 0.20), (4, 0.15)]
         )
-        engine = AIEngine(StubModel(probs), temperature=1.2)
+        engine = SinglePolicyAiEngine(StubModel(probs), temperature=1.2)
 
         rng1 = random.Random(2026)
         rng2 = random.Random(2026)
@@ -394,11 +394,11 @@ class TestGetMoveSamplingStrategy(unittest.TestCase):
 
         # temperature=0.0 在构造时是合法的（因为 argmax 分支也使用同一引擎），
         # 但调用 sampling 时会由 temperature_sample 抛出 ValueError。
-        engine = AIEngine(StubModel(probs), temperature=0.0)
+        engine = SinglePolicyAiEngine(StubModel(probs), temperature=0.0)
         with self.assertRaises(ValueError):
             engine.get_move(board, 1, strategy=STRATEGY_SAMPLING)
 
-        engine2 = AIEngine(StubModel(probs), temperature=-1.0)
+        engine2 = SinglePolicyAiEngine(StubModel(probs), temperature=-1.0)
         with self.assertRaises(ValueError):
             engine2.get_move(board, 1, strategy=STRATEGY_SAMPLING)
 
@@ -406,7 +406,7 @@ class TestGetMoveSamplingStrategy(unittest.TestCase):
         """用例 22：strategy=argmax 默认值下，新参数仅影响构造不影响 argmax 行为。"""
         board = _empty_board()
         probs = _make_probs([(100, 0.9), (101, 0.1)])
-        engine = AIEngine(StubModel(probs), temperature=2.0, top_k=3)
+        engine = SinglePolicyAiEngine(StubModel(probs), temperature=2.0, top_k=3)
 
         # 既不传 strategy 也不传新参数
         pos1 = engine.get_move(board, 1).get_position()

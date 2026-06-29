@@ -17,7 +17,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from ai.game_manager import AIGameManager
-from ai.engine import AIEngine
+from ai.engine import AIEngine, SinglePolicyAiEngine
 from ai.models.random.model import RandomModel
 from ai.models.fc_v1.model import FCv1Model
 from ai.models.cnn_v1.model import CNNV1Model
@@ -54,8 +54,8 @@ class TestStartAiVsAiRandom(unittest.TestCase):
 
     def test_returns_correct_number_of_results(self):
         """主流程：返回结果列表长度等于对战局数"""
-        engine1 = AIEngine(RandomModel())
-        engine2 = AIEngine(RandomModel())
+        engine1 = SinglePolicyAiEngine(RandomModel())
+        engine2 = SinglePolicyAiEngine(RandomModel())
         recorder = DataRecorder("test_rnd", self.test_ai_data_dir)
 
         num_games = 3
@@ -65,8 +65,8 @@ class TestStartAiVsAiRandom(unittest.TestCase):
 
     def test_result_contains_required_fields(self):
         """主流程：每个结果包含必要字段"""
-        engine1 = AIEngine(RandomModel())
-        engine2 = AIEngine(RandomModel())
+        engine1 = SinglePolicyAiEngine(RandomModel())
+        engine2 = SinglePolicyAiEngine(RandomModel())
         recorder = DataRecorder("test_rnd", self.test_ai_data_dir)
 
         results = AIGameManager.start_ai_vs_ai_random(engine1, engine2, 1, recorder)
@@ -82,8 +82,8 @@ class TestStartAiVsAiRandom(unittest.TestCase):
 
     def test_game_numbers_are_sequential(self):
         """主流程：局数编号从1开始递增"""
-        engine1 = AIEngine(RandomModel())
-        engine2 = AIEngine(RandomModel())
+        engine1 = SinglePolicyAiEngine(RandomModel())
+        engine2 = SinglePolicyAiEngine(RandomModel())
         recorder = DataRecorder("test_rnd", self.test_ai_data_dir)
 
         results = AIGameManager.start_ai_vs_ai_random(engine1, engine2, 4, recorder)
@@ -93,8 +93,8 @@ class TestStartAiVsAiRandom(unittest.TestCase):
 
     def test_ai1_and_ai2_colors_are_complementary(self):
         """主流程：每局中 ai1_color 和 ai2_color 互为黑白（一黑一白）"""
-        engine1 = AIEngine(RandomModel())
-        engine2 = AIEngine(RandomModel())
+        engine1 = SinglePolicyAiEngine(RandomModel())
+        engine2 = SinglePolicyAiEngine(RandomModel())
         recorder = DataRecorder("test_rnd", self.test_ai_data_dir)
 
         results = AIGameManager.start_ai_vs_ai_random(engine1, engine2, 5, recorder)
@@ -108,8 +108,8 @@ class TestStartAiVsAiRandom(unittest.TestCase):
 
     def test_winner_is_valid(self):
         """主流程：获胜方只能是 1（黑胜）、2（白胜）或 3（平局）"""
-        engine1 = AIEngine(RandomModel())
-        engine2 = AIEngine(RandomModel())
+        engine1 = SinglePolicyAiEngine(RandomModel())
+        engine2 = SinglePolicyAiEngine(RandomModel())
         recorder = DataRecorder("test_rnd", self.test_ai_data_dir)
 
         results = AIGameManager.start_ai_vs_ai_random(engine1, engine2, 3, recorder)
@@ -119,8 +119,8 @@ class TestStartAiVsAiRandom(unittest.TestCase):
 
     def test_ai_won_flags_consistent_with_winner_and_color(self):
         """主流程：ai1_won 和 ai2_won 与 winner/color 一致"""
-        engine1 = AIEngine(RandomModel())
-        engine2 = AIEngine(RandomModel())
+        engine1 = SinglePolicyAiEngine(RandomModel())
+        engine2 = SinglePolicyAiEngine(RandomModel())
         recorder = DataRecorder("test_rnd", self.test_ai_data_dir)
 
         results = AIGameManager.start_ai_vs_ai_random(engine1, engine2, 5, recorder)
@@ -138,8 +138,8 @@ class TestStartAiVsAiRandom(unittest.TestCase):
 
     def test_random_side_assignment(self):
         """主流程：多局后执方分配具有随机性（不是全黑或全白）"""
-        engine1 = AIEngine(RandomModel())
-        engine2 = AIEngine(RandomModel())
+        engine1 = SinglePolicyAiEngine(RandomModel())
+        engine2 = SinglePolicyAiEngine(RandomModel())
         recorder = DataRecorder("test_rnd", self.test_ai_data_dir)
 
         # 运行 8 局验证随机性（全同色概率 ~0.78%）
@@ -155,8 +155,8 @@ class TestStartAiVsAiRandom(unittest.TestCase):
 
     def test_record_files_created(self):
         """主流程：对战后记录文件被正确创建"""
-        engine1 = AIEngine(RandomModel())
-        engine2 = AIEngine(RandomModel())
+        engine1 = SinglePolicyAiEngine(RandomModel())
+        engine2 = SinglePolicyAiEngine(RandomModel())
         recorder = DataRecorder("test_rnd", self.test_ai_data_dir)
 
         num_games = 2
@@ -197,8 +197,8 @@ class TestStartAiVsAiRandomEdge(unittest.TestCase):
 
     def test_single_game(self):
         """边缘：只对战 1 局"""
-        engine1 = AIEngine(RandomModel())
-        engine2 = AIEngine(RandomModel())
+        engine1 = SinglePolicyAiEngine(RandomModel())
+        engine2 = SinglePolicyAiEngine(RandomModel())
         recorder = DataRecorder("test_rnd_edge", self.test_ai_data_dir)
 
         results = AIGameManager.start_ai_vs_ai_random(engine1, engine2, 1, recorder)

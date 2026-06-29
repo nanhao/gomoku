@@ -219,4 +219,5 @@ do the folowing refactor:
 
 # intention_id=34
 since now the terminated leaf tree of the mcts is created. we don't need the calling-side workaround. And what's more, the reset() calling is meaningless because mcts tree is not shared between games right? I think we can simpified the calling-side to only one calling to make_move without checking and reset().
-Having this change, we can go further. We can make AiEngine and mcts/decision_maker.py into one hierarchy sharing the get_move function. we can move the injection point of parameters which cannot share into the constructor and introduce a builder or factory to create different subclasses.
+Having this change, we can go further. We can make AiEngine and mcts/decision_maker.py into one hierarchy sharing the get_move function. The interface of get_move() function is identical now because we refactor them in intention-33.
+For the make_move() calling. We can add a abstract function called after_move() to the engine interface. The SinglePolicyAiEngine can adopt am empty implementation, while the PolicyValueAiEngine can retain the current implementation.

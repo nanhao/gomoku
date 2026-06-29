@@ -273,10 +273,10 @@ class TestMCTSTerminalNodeCreation(unittest.TestCase):
     def test_t32_07_make_move_on_winning_action_no_exception(self):
         """T32-07：必胜落子后 make_move 不抛异常。
 
-        decider.get_move() 返回必胜落子，立即调用 decider.make_move(action)，
+        engine.get_move() 返回必胜落子，立即调用 engine.after_move(action)，
         验证不抛 RuntimeError 且 advance_root 成功。
         """
-        from ai.mcts.decision_maker import MCTSMoveDecider
+        from ai.engine import PolicyValueAiEngine
 
         board_flat = [0] * 225
         for y in range(4):
@@ -291,13 +291,13 @@ class TestMCTSTerminalNodeCreation(unittest.TestCase):
             model, num_simulations=50,
             dirichlet_epsilon=0.0,
         )
-        decider = MCTSMoveDecider(searcher, temperature=0.0)  # 贪婪选择
+        engine = PolicyValueAiEngine(searcher, temperature=0.0)  # 贪婪选择
 
         # 将 flat board 转为 15×15 二维矩阵
         board_2d = [[board_flat[i * 15 + j] for j in range(15)] for i in range(15)]
 
         np.random.seed(42)
-        md = decider.get_move(board_2d, 1)  # current_player=1（黑方）
+        md = engine.get_move(board_2d, 1)  # current_player=1（黑方）
         x, y = md.get_position()
         action = x * 15 + y
 
@@ -305,11 +305,11 @@ class TestMCTSTerminalNodeCreation(unittest.TestCase):
         self.assertEqual(action, win_action,
                          f"Greedy should pick winning action {win_action}, got {action}")
 
-        # 直接调用 make_move 不应抛异常
+        # 直接调用 after_move 不应抛异常
         try:
-            decider.make_move(action)
+            engine.after_move(action)
         except RuntimeError as e:
-            self.fail(f"make_move({action}) should not raise RuntimeError: {e}")
+            self.fail(f"after_move({action}) should not raise RuntimeError: {e}")
 
     # ---------- 6.4 回溯正确性 ----------
 

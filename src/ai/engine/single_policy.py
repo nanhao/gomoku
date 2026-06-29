@@ -1,95 +1,30 @@
-"""AI 引擎模块
+"""单策略 AI 引擎模块
 
-连接 UI 和 AI 模型，处理输入输出，选择落子位置。
+SinglePolicyAiEngine：直接使用模型预测概率分布，按策略（argmax / sampling）
+选择落子位置。不涉及 MCTS 搜索。
 """
 
 import random
-import math
 from typing import List, Optional, Tuple
+
 from ai.base_model import BaseModel
 from ai.constants import STRATEGY_ARGMAX, STRATEGY_SAMPLING, _SUPPORTED_STRATEGIES
+from ai.engine.ai_engine import AIEngine, MoveDecision
 
 
-class MoveDecision:
-    """AI 引擎落子决策结果
-
-    封装 get_move() 的返回值，替代原有的裸 tuple。
-    设计为可扩展：后续可添加概率分布、价值评估等字段。
-
-    Attributes:
-        _position: (x, y) 落子坐标 tuple
-        _probs: 225 维概率分布（模型原始输出），未传入时为 None
-        _mcts_visit_counts: 225 维 MCTS 访问计数，未传入时为 None
-    """
-
-    def __init__(self, x: int, y: int, probs: List[float] = None, mcts_visit_counts: List[int] = None):
-        """
-        Args:
-            x: 落子行坐标 (0-14)
-            y: 落子列坐标 (0-14)
-            probs: 可选的 225 维概率分布
-            mcts_visit_counts: 可选的 225 维 MCTS 访问计数
-        """
-        self._position: Tuple[int, int] = (x, y)
-        self._probs: Optional[List[float]] = probs
-        self._mcts_visit_counts: Optional[List[int]] = mcts_visit_counts
-
-    def get_position(self) -> Tuple[int, int]:
-        """返回落子位置 (x, y) tuple"""
-        return self._position
-
-    def get_probs(self) -> Optional[List[float]]:
-        """返回 225 维概率分布，未传入时返回 None"""
-        return self._probs
-
-    def get_mcts_visit_counts(self) -> Optional[List[int]]:
-        """返回 225 维 MCTS 访问计数，未传入时返回 None"""
-        return self._mcts_visit_counts
-
-    def __repr__(self) -> str:
-        return f"MoveDecision(x={self._position[0]}, y={self._position[1]})"
-
-
-def create_engine(ai_name: str) -> "AIEngine":
-    """
-    根据 AI 名称创建对应的 AIEngine 实例。
-
-    AI 名称到模型的映射由 ai.registry 统一维护，外部调用者无需了解具体模型类。
-
-    异常策略：
-    - 未知模型名称、多代模型未指定代数等场景，直接上抛 ValueError，
-      由 app 层捕获并转换为 ModelLoadError，向 GUI 层传达模型加载失败信息。
-    - 不再回退到 RandomModel，避免静默降级导致用户误以为使用了指定模型。
-
-    Args:
-        ai_name: AI 名称，如 "random"、"fc_v1"、"cnn_v3.1"
-
-    Returns:
-        对应的 AIEngine 实例
-
-    Raises:
-        ValueError: 模型名称未知、多代模型未指定代数等
-    """
-    from ai.registry import get_model
-
-    model = get_model(ai_name)
-    return AIEngine(model)
-
-
-class AIEngine:
-    """AI 引擎 - 连接 UI 和 AI 模型
+class SinglePolicyAiEngine(AIEngine):
+    """单策略 AI 引擎 - 连接 UI 和 AI 模型
 
     负责：
     1. 将棋盘状态转换为模型输入向量
     2. 调用模型获取概率分布
     3. 根据指定策略（默认 argmax）在合法位置中选择落子
 
-    落子策略（参见设计文档 design/engine_move_strategy_design.md、
-    design/move_sampler_design.md）：
+    落子策略：
     - "argmax"（默认）：选择概率最大的合法位置；存在并列最大值时随机打破平局
     - "sampling"：温度加权采样，委托给 ai.move_sampler.temperature_sample 实现
 
-    采样参数在构造时注入（设计文档 design/33/main_docs/main_design.md）：
+    采样参数在构造时注入：
     - temperature / top_k / rng 一局对弈中不变，构造时注入语义更清晰，
       调用方不再每次 get_move 时重复传参。
     """
@@ -102,7 +37,7 @@ class AIEngine:
         rng: Optional[random.Random] = None,
     ):
         """
-        初始化 AI 引擎
+        初始化单策略 AI 引擎
 
         Args:
             model: AI 模型实例，必须继承 BaseModel
@@ -195,6 +130,15 @@ class AIEngine:
             f"未知落子策略: {strategy!r}，支持的策略为 {_SUPPORTED_STRATEGIES}"
         )
 
+    def after_move(self, action: int):
+        """落子后钩子：空实现（无子树管理需求）。
+
+        Args:
+            action: 落子位置索引 0-224（未使用）
+        """
+        # SinglePolicyAiEngine 无搜索树，无需任何操作
+        pass
+
     @staticmethod
     def _pick_argmax(
         valid_positions: List[Tuple[int, int]],
@@ -224,25 +168,3 @@ class AIEngine:
         # 并列时随机挑一个；只有一个候选时 random.choice 等价于直接返回
         x, y = random.choice(candidates)
         return (x, y)
-
-    @staticmethod
-    def board_to_vector(board: List[List[int]], current_player: int) -> List[int]:
-        """
-        将棋盘转换为 226 维向量
-
-        转换规则：
-        - 前 225 位：按行优先展开棋盘，board[0][0], board[0][1], ..., board[14][14]
-        - 第 226 位：当前落子方（1=黑, 2=白）
-
-        Args:
-            board: 15x15 棋盘
-            current_player: 当前落子方
-
-        Returns:
-            226 维向量
-        """
-        vector = []
-        for row in board:
-            vector.extend(row)
-        vector.append(current_player)
-        return vector

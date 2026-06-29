@@ -30,7 +30,7 @@ from tests.ai.integration.test_sample_games_cli import (
 
 @patch('ai.create_samples.DataRecorder')
 @patch('ai.create_samples.AIGameManager')
-@patch('ai.create_samples.AIEngine')
+@patch('ai.create_samples.SinglePolicyAiEngine')
 @patch('ai.create_samples.get_model')
 class TestProgressTiming(unittest.TestCase):
     """E 组: 进度输出时机"""
@@ -123,7 +123,7 @@ class TestProgressTiming(unittest.TestCase):
 
 @patch('ai.create_samples.DataRecorder')
 @patch('ai.create_samples.AIGameManager')
-@patch('ai.create_samples.AIEngine')
+@patch('ai.create_samples.SinglePolicyAiEngine')
 @patch('ai.create_samples.get_model')
 class TestKeyboardInterrupt(unittest.TestCase):
     """F 组: Ctrl+C 中断处理"""
@@ -228,7 +228,7 @@ class TestKeyboardInterrupt(unittest.TestCase):
 
 @patch('ai.create_samples.DataRecorder')
 @patch('ai.create_samples.AIGameManager')
-@patch('ai.create_samples.AIEngine')
+@patch('ai.create_samples.SinglePolicyAiEngine')
 @patch('ai.create_samples.get_model')
 class TestBackwardCompatibility(unittest.TestCase):
     """G 组: 向后兼容"""

@@ -23,8 +23,7 @@ if _proj_root not in sys.path:
 import torch
 
 from ai.models.cnn_v7.model import CNNV7Model
-from ai.mcts.searcher import MCTSSearcher
-from ai.mcts.decision_maker import MCTSMoveDecider
+from ai.engine.builder import AIEngineBuilder
 from ai.constants import STRATEGY_SAMPLING
 from game.game import check_winner, is_board_full
 
@@ -155,17 +154,14 @@ def play_one_game(model, device, hyperparams: dict, game_idx: int, run_id: str) 
     dirichlet_epsilon = hyperparams["dirichlet_epsilon"]
     dirichlet_alpha = hyperparams["dirichlet_alpha"]
 
-    # 创建搜索器和决策器（log_key_prefix 注入构造器，内部自动管理 search_id）
+    # 通过 AIEngineBuilder 创建策略-价值引擎（内部自动创建 MCTSSearcher + PolicyValueAiEngine）
     log_key_prefix = f"run{run_id}_game{game_idx}"
-    searcher = MCTSSearcher(
+    engine = AIEngineBuilder.build_policy_value(
         model=model,
         num_simulations=simulations,
         c_puct=c_puct,
         dirichlet_epsilon=dirichlet_epsilon,
         dirichlet_alpha=dirichlet_alpha,
-    )
-    decider = MCTSMoveDecider(
-        searcher,
         temperature=temperature,
         temp_steps=temp_steps,
         log_key_prefix=log_key_prefix,
@@ -183,8 +179,8 @@ def play_one_game(model, device, hyperparams: dict, game_idx: int, run_id: str) 
         # 将 flat board 转为 15×15 二维矩阵（get_move 新接口要求）
         board_2d = [[board[i * 15 + j] for j in range(15)] for i in range(15)]
 
-        # MCTS 搜索 + 决策（log_key 由决策器内部自动生成，strategy="sampling" 使用温度探索）
-        md = decider.get_move(board_2d, current_player, strategy=STRATEGY_SAMPLING)
+        # MCTS 搜索 + 决策（log_key 由引擎内部自动生成，strategy="sampling" 使用温度探索）
+        md = engine.get_move(board_2d, current_player, strategy=STRATEGY_SAMPLING)
         x, y = md.get_position()
         action = x * 15 + y
         visit_counts = md.get_mcts_visit_counts()
@@ -206,14 +202,13 @@ def play_one_game(model, device, hyperparams: dict, game_idx: int, run_id: str) 
         winner = check_winner(board, action)
         is_terminal = (winner != 0) or is_board_full(board)
 
+        # 子树复用（无条件调用 after_move，终局节点的 advance_root 同样成功）
+        engine.after_move(action)
+
         if is_terminal:
-            decider.reset()  # 终局无需子树复用
             if winner == 0:
                 winner = 0  # 平局
             break
-
-        # 子树复用
-        decider.make_move(action)
 
         # 切换玩家
         current_player = 2 if current_player == 1 else 1
