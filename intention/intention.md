@@ -227,3 +227,8 @@ For the make_move() calling. We can add a abstract function called after_move() 
 2, new feature: add a create_engine function in the engine/builder.py. It should return a appropriate AiEngine instance. The choice logic is based on the ai model. If the model's output contians both policy and value, it should use the PolicyValueEngine, otherwise SinglePolicyEngine
 3, new feature: change AiGameManager and battle.py to adopt create_engine() and after_move()
 4, All the AiEngine instance should not be shared across games
+
+# intention_id=36
+optimze the value head of cnn_v7:
+Add a hidden FC layer with ReLU between flatten and the output:
+Flatten → FC(225→128) → ReLU → FC(128→1) → Tanh

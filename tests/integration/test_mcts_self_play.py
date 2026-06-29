@@ -89,7 +89,7 @@ class TestMCTSSelfPlayIntegration(unittest.TestCase):
             board_flat[action] = current_player
 
             # 子树复用（在终局判定之前无条件调用）
-            engine.after_move(action)
+            engine.after_move(x, y)
 
             # 记录样本
             pi = [c / sum(visit_counts) if sum(visit_counts) > 0 else 0 for c in visit_counts]

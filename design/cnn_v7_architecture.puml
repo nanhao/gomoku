@@ -1,0 +1,149 @@
+@startuml
+!theme plain
+
+skinparam defaultFontName Consolas,Microsoft YaHei,sans-serif
+skinparam componentFontName Consolas,Microsoft YaHei,sans-serif
+
+skinparam rectangleBorderColor #4A90D9
+skinparam rectangleBackgroundColor #F0F5FF
+skinparam arrowColor #333333
+skinparam noteBorderColor #E6A817
+skinparam noteBackgroundColor #FFFDE7
+
+title CNN v7 — Dual-Head Residual CNN Architecture
+
+' ═══════════════════════════════════════════════════════════
+'  INPUT
+' ═══════════════════════════════════════════════════════════
+
+rectangle "**Input**\n(batch, 3, 15, 15)" as input #E8F5E9
+
+' ═══════════════════════════════════════════════════════════
+'  CONV BLOCK 1
+' ═══════════════════════════════════════════════════════════
+
+rectangle "**Conv1**\nConv2d(3→32, k=3, p=1)\n(batch, 32, 15, 15)" as conv1 #D6EAF8
+rectangle "**BN1**\nBatchNorm2d(32)" as bn1 #D6EAF8
+rectangle "**ReLU1**" as relu1 #D6EAF8
+
+input -down-> conv1
+conv1 -down-> bn1
+bn1 -down-> relu1
+
+' ═══════════════════════════════════════════════════════════
+'  RESIDUAL BLOCK 1
+' ═══════════════════════════════════════════════════════════
+
+package "Residual Block 1" as rb1 #FDEBD0 {
+    rectangle "**Conv2**\nConv2d(32→32, k=3, p=1)" as conv2 #FADBD8
+    rectangle "**BN2**\nBatchNorm2d(32)" as bn2 #FADBD8
+    rectangle "**ReLU2**" as relu2 #FADBD8
+    rectangle "**Conv3**\nConv2d(32→32, k=3, p=1)" as conv3 #FADBD8
+    rectangle "**BN3**\nBatchNorm2d(32)" as bn3 #FADBD8
+    
+    conv2 -down-> bn2
+    bn2 -down-> relu2
+    relu2 -down-> conv3
+    conv3 -down-> bn3
+}
+
+relu1 -down-> conv2
+relu1 -down-> bn3 : shortcut\n(identity)
+
+rectangle "**⊕ Add + ReLU3**\n(batch, 32, 15, 15)" as merge1 #D5F5E3
+
+bn3 -down-> merge1
+
+' ═══════════════════════════════════════════════════════════
+'  RESIDUAL BLOCK 2
+' ═══════════════════════════════════════════════════════════
+
+package "Residual Block 2" as rb2 #FDEBD0 {
+    rectangle "**Conv4**\nConv2d(32→32, k=3, p=1)" as conv4 #FADBD8
+    rectangle "**BN4**\nBatchNorm2d(32)" as bn4 #FADBD8
+    rectangle "**ReLU4**" as relu4 #FADBD8
+    rectangle "**Conv5**\nConv2d(32→32, k=3, p=1)" as conv5 #FADBD8
+    rectangle "**BN5**\nBatchNorm2d(32)" as bn5 #FADBD8
+    
+    conv4 -down-> bn4
+    bn4 -down-> relu4
+    relu4 -down-> conv5
+    conv5 -down-> bn5
+}
+
+merge1 -down-> conv4
+merge1 -down-> bn5 : shortcut\n(identity)
+
+rectangle "**⊕ Add + ReLU5**\n(batch, 32, 15, 15)" as merge2 #D5F5E3
+
+bn5 -down-> merge2
+
+' ═══════════════════════════════════════════════════════════
+'  OUTPUT CONV + FLATTEN
+' ═══════════════════════════════════════════════════════════
+
+rectangle "**Conv_out**\nConv2d(32→1, k=1)\n(batch, 1, 15, 15)" as conv_out #D6EAF8
+rectangle "**Flatten**\n(batch, 225)" as flatten #D6EAF8
+
+merge2 -down-> conv_out
+conv_out -down-> flatten
+
+' ═══════════════════════════════════════════════════════════
+'  DUAL HEADS
+' ═══════════════════════════════════════════════════════════
+
+package "Dual Heads" as heads #EBDEF0 {
+    rectangle "**Policy Head**" as policy_header #D2B4DE
+    rectangle "**LogSoftmax**(dim=1)\n(batch, 225)" as logsoftmax #D2B4DE
+    
+    rectangle "**Value Head**" as value_header #A9CCE3
+    rectangle "**FC1**\nLinear(225→128)" as fc1 #A9CCE3
+    rectangle "**ReLU**" as vrelu #A9CCE3
+    rectangle "**FC2**\nLinear(128→1)" as fc2 #A9CCE3
+    rectangle "**Tanh**\n(batch, 1) ∈ [-1, 1]" as tanh #A9CCE3
+    
+    policy_header -down-> logsoftmax
+    value_header -down-> fc1
+    fc1 -down-> vrelu
+    vrelu -down-> fc2
+    fc2 -down-> tanh
+}
+
+flatten -down-> policy_header
+flatten -down-> value_header
+
+' ═══════════════════════════════════════════════════════════
+'  OUTPUT
+' ═══════════════════════════════════════════════════════════
+
+rectangle "**Output: (policy, value)**\npolicy: 225-dim move probabilities\nvalue: scalar win-rate ∈ [-1, 1]" as output #E8F5E9
+
+logsoftmax -down-> output
+tanh -down-> output
+
+' ═══════════════════════════════════════════════════════════
+'  NOTES
+' ═══════════════════════════════════════════════════════════
+
+note right of rb1
+  Residual connection:
+  output = ReLU(Conv3(…)+input)
+  Preserves gradient flow through
+  identity shortcut path.
+end note
+
+note right of rb2
+  Stacks two residual blocks
+  for deeper feature extraction
+  without degradation.
+end note
+
+note right of heads
+  Dual-head output:
+  • Policy: log-probabilities
+    over 225 board positions
+  • Value: win-rate estimation
+    for the current player
+end note
+
+@enduml

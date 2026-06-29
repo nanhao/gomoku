@@ -311,15 +311,18 @@ class TestCNNV7Network(CNNNetworkSharedMixin, unittest.TestCase):
             )
 
     def test_network_fc_only_value_head(self):
-        """网络中有且仅有 value_fc 一个 Linear 层"""
+        """价值头包含 value_fc1(225→128) 和 value_fc2(128→1) 两个 Linear 层"""
         network = self.NETWORK_CLS()
         linear_modules = [m for m in network.modules()
                           if isinstance(m, nn.Linear)]
-        self.assertEqual(len(linear_modules), 1,
-                         f"应有且仅有 value_fc 一个 Linear 层，实际 {len(linear_modules)} 个")
-        self.assertTrue(hasattr(network, 'value_fc'), "网络应有 value_fc 属性")
-        self.assertEqual(network.value_fc.in_features, 225)
-        self.assertEqual(network.value_fc.out_features, 1)
+        self.assertEqual(len(linear_modules), 2,
+                         f"价值头应有 value_fc1 和 value_fc2 两个 Linear 层，实际 {len(linear_modules)} 个")
+        self.assertTrue(hasattr(network, 'value_fc1'), "网络应有 value_fc1 属性")
+        self.assertTrue(hasattr(network, 'value_fc2'), "网络应有 value_fc2 属性")
+        self.assertEqual(network.value_fc1.in_features, 225)
+        self.assertEqual(network.value_fc1.out_features, 128)
+        self.assertEqual(network.value_fc2.in_features, 128)
+        self.assertEqual(network.value_fc2.out_features, 1)
 
     def test_network_bn_count(self):
         """BatchNorm2d 层数量精确为 5"""
@@ -343,10 +346,10 @@ class TestCNNV7Network(CNNNetworkSharedMixin, unittest.TestCase):
         self.assertEqual(network.conv_out.kernel_size, (1, 1))
 
     def test_network_param_count(self):
-        """参数量在 38,000～39,000 之间（含价值头，精确值 38,467）"""
+        """参数量在 67,000～68,000 之间（含双 FC 价值头，精确值 67,298）"""
         total = sum(p.numel() for p in self.NETWORK_CLS().parameters())
-        self.assertGreaterEqual(total, 38_000, f"参数量 {total} 应 >= 38,000")
-        self.assertLessEqual(total, 39_000, f"参数量 {total} 应 <= 39,000")
+        self.assertGreaterEqual(total, 67_000, f"参数量 {total} 应 >= 67,000")
+        self.assertLessEqual(total, 68_000, f"参数量 {total} 应 <= 68,000")
 
 
 class TestCNNV7Model(CNNModelSharedMixin, unittest.TestCase):

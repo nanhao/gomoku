@@ -4,7 +4,7 @@ CNN v7 在 cnn_v6 残差网络基础上增加价值头，形成双头输出：
 1. BatchNorm：每层 Conv 后添加 BN（Conv→BN→ReLU）
 2. 残差连接：Conv2+Conv3 组成残差块1，Conv4+Conv5 组成残差块2
 3. 策略头：Flatten 后 LogSoftmax 输出 225 维落子概率
-4. 价值头：Flatten 后并行分支，FC(225→1)→Tanh，输出 [-1,1] 胜率
+4. 价值头：Flatten 后并行分支，FC(225→128)→ReLU→FC(128→1)→Tanh，输出 [-1,1] 胜率
 
 网络结构：
   输入 (batch, 3, 15, 15)
@@ -13,7 +13,7 @@ CNN v7 在 cnn_v6 残差网络基础上增加价值头，形成双头输出：
   → [残差块2] Conv4→BN4→ReLU4→Conv5→BN5→[+shortcut]→ReLU5
   → Conv_out(32→1, 1×1) → Flatten→225
       ├─ LogSoftmax → 策略 (batch, 225)
-      └─ FC(225→1) → Tanh → 价值 (batch, 1)
+      └─ FC(225→128)→ReLU→FC(128→1)→Tanh → 价值 (batch, 1)
 
 forward 返回 (policy, value) 元组。
 predict 返回 (List[float], float) 元组。
@@ -70,8 +70,10 @@ class CNNV7Network(nn.Module):
         # ---- 策略头：LogSoftmax ----
         self.log_softmax = nn.LogSoftmax(dim=1)
 
-        # ---- 价值头：FC(225→1) + Tanh ----
-        self.value_fc = nn.Linear(225, 1)
+        # ---- 价值头：FC(225→128) + ReLU + FC(128→1) + Tanh ----
+        self.value_fc1 = nn.Linear(225, 128)
+        self.value_relu = nn.ReLU()
+        self.value_fc2 = nn.Linear(128, 1)
         self.value_tanh = nn.Tanh()
 
     def forward(self, x: torch.Tensor):
@@ -109,8 +111,8 @@ class CNNV7Network(nn.Module):
         # ---- 策略头：LogSoftmax ----
         policy = self.log_softmax(x)        # (batch, 225)
 
-        # ---- 价值头：FC + Tanh ----
-        value = self.value_tanh(self.value_fc(x))  # (batch, 1)
+        # ---- 价值头：FC1 + ReLU + FC2 + Tanh ----
+        value = self.value_tanh(self.value_fc2(self.value_relu(self.value_fc1(x))))  # (batch, 1)
 
         return policy, value
 
