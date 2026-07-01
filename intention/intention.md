@@ -235,3 +235,8 @@ Flatten → FC(225→128) → ReLU → FC(128→1) → Tanh
 
 # intention_id=37
 I think the fc layers of the value head takes two many parameters. I prefer to add remove the fc solution and make the value head branches from before the cnnv_out. So it uses another cnnv_out, than it goes into a relu, then fc(225->1). What do you think?
+
+# intention_id=38
+optimize src/ai/scripts/mcts_self_play.py. Currently the script save the sample.json to disk after all games are done. We need to change this behavior. 
+1, When the user press Ctrl+c during the game, the script needs to append the memoroy data to the sample.json file so that there is no data lost
+2, Automatically append the memory data to the sample.json file for each 50 games so that reduce the risk of losing data
