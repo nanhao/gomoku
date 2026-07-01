@@ -11,6 +11,7 @@
 import argparse
 import json
 import os
+import signal
 import sys
 import time
 from typing import List, Tuple
@@ -26,6 +27,96 @@ from ai.models.cnn_v7.model import CNNV7Model
 from ai.engine.builder import AIEngineBuilder
 from ai.constants import STRATEGY_SAMPLING
 from game.game import check_winner, is_board_full
+
+
+# ---------- 常量 ----------
+
+# 周期保存间隔（局数），不可通过 CLI 配置
+_SAVE_INTERVAL = 50
+
+# 中断标志位，由信号处理器设置，主循环检查
+_interrupted = False
+
+
+def _signal_handler(signum, frame):
+    """SIGINT 信号处理器 — 设置中断标志，主循环检测后触发保存"""
+    global _interrupted
+    _interrupted = True
+    print("\n[中断] 收到 Ctrl+C，正在保存数据...")
+
+
+def _load_existing_samples(output_root: str) -> List[dict]:
+    """加载输出目录下已有的 sample.json
+
+    若文件存在且格式正确，返回其 JSON 数组内容；
+    若文件不存在或格式损坏，返回空列表。
+
+    Args:
+        output_root: 输出根目录路径
+
+    Returns:
+        已有样本列表（可能为空）
+    """
+    sample_path = os.path.join(output_root, "sample.json")
+    if not os.path.exists(sample_path):
+        return []
+    try:
+        with open(sample_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        if isinstance(data, list):
+            return data
+        print(f"[警告] sample.json 格式异常（非数组），将从头开始")
+        return []
+    except (json.JSONDecodeError, IOError) as e:
+        print(f"[警告] 无法读取已有 sample.json: {e}，将从头开始")
+        return []
+
+
+def _save_progress(all_samples: List[dict], output_root: str,
+                   args, completed_games: int) -> None:
+    """原子保存当前累积样本到磁盘
+
+    同时写入 sample.json 和 summary.json。
+    采用"先写 .tmp 再 rename"原子写入策略，防止写入过程中崩溃导致文件损坏。
+
+    Args:
+        all_samples: 当前累积的全部样本
+        output_root: 输出根目录路径
+        args: argparse.Namespace（用于获取 model、games、hyperparams）
+        completed_games: 当前已完成局数
+    """
+    # 超参数（与 run_self_play 中定义一致）
+    hyperparams = {
+        "simulations": args.simulations,
+        "c_puct": args.c_puct,
+        "temp_steps": args.temp_steps,
+        "temperature": args.temperature,
+        "dirichlet_epsilon": args.dirichlet_epsilon,
+        "dirichlet_alpha": args.dirichlet_alpha,
+    }
+
+    # 原子写入 sample.json
+    sample_path = os.path.join(output_root, "sample.json")
+    tmp_sample = sample_path + ".tmp"
+    with open(tmp_sample, 'w', encoding='utf-8') as f:
+        json.dump(all_samples, f, ensure_ascii=False)
+    os.replace(tmp_sample, sample_path)
+
+    # 原子写入 summary.json（新增 completed_games 字段）
+    summary_path = os.path.join(output_root, "summary.json")
+    tmp_summary = summary_path + ".tmp"
+    summary = {
+        "model": args.model,
+        "games": args.games,
+        "total_samples": len(all_samples),
+        "completed_games": completed_games,
+        "hyperparams": hyperparams,
+    }
+    with open(tmp_summary, 'w', encoding='utf-8') as f:
+        json.dump(summary, f, ensure_ascii=False, indent=2)
+    os.replace(tmp_summary, summary_path)
+
+    print(f"[保存] {completed_games} 局, {len(all_samples)} 条样本已写入磁盘")
 
 
 # ---------- 参数解析 ----------
@@ -100,38 +191,52 @@ def run_self_play(args):
     # 使用时间戳后 6 位替代 UUID，简洁且有序。
     run_id = f"{int(time.time() * 1000) % 1000000:06d}"
 
-    all_samples = []
-    total_moves = 0
+    # 加载已有样本（复用同一输出目录时合并旧数据）
+    all_samples = _load_existing_samples(output_root)
+    if all_samples:
+        print(f"[加载] 已有 {len(all_samples)} 条样本")
 
-    for game_idx in range(args.games):
-        print(f"\n{'='*50}")
-        print(f"[局 {game_idx + 1}/{args.games}] 开始")
-        t_start = time.time()
+    # 注册 SIGINT 信号处理器，支持 Ctrl+C 优雅退出
+    global _interrupted
+    _interrupted = False
+    original_handler = signal.signal(signal.SIGINT, _signal_handler)
 
-        samples = play_one_game(model, device, hyperparams, game_idx, run_id)
-        all_samples.extend(samples)
-        total_moves += len(samples)
+    try:
+        completed_games = 0
+        total_moves = 0
 
-        elapsed = time.time() - t_start
-        print(f"[局 {game_idx + 1}/{args.games}] 完成 — {len(samples)} 步, "
-              f"结果: {_describe_result(samples)}, 耗时: {elapsed:.1f}s")
+        for game_idx in range(args.games):
+            # 检测中断标志（由 _signal_handler 设置）
+            if _interrupted:
+                print(f"\n[中断] 已停止，共完成 {completed_games} 局")
+                break
 
-    # 写入单一样本文件
-    sample_path = os.path.join(output_root, "sample.json")
-    with open(sample_path, 'w', encoding='utf-8') as f:
-        json.dump(all_samples, f, ensure_ascii=False)
+            print(f"\n{'='*50}")
+            print(f"[局 {game_idx + 1}/{args.games}] 开始")
+            t_start = time.time()
 
-    # 写入汇总信息
-    summary_path = os.path.join(output_root, "summary.json")
-    with open(summary_path, 'w', encoding='utf-8') as f:
-        json.dump({
-            "model": args.model,
-            "games": args.games,
-            "total_samples": len(all_samples),
-            "hyperparams": hyperparams,
-        }, f, ensure_ascii=False, indent=2)
+            samples = play_one_game(model, device, hyperparams, game_idx, run_id)
+            all_samples.extend(samples)
+            total_moves += len(samples)
+            completed_games += 1
 
-    print(f"\n[完成] 共 {args.games} 局，{len(all_samples)} 条样本，输出: {output_root}")
+            elapsed = time.time() - t_start
+            print(f"[局 {game_idx + 1}/{args.games}] 完成 — {len(samples)} 步, "
+                  f"结果: {_describe_result(samples)}, 耗时: {elapsed:.1f}s")
+
+            # 周期保存：每 _SAVE_INTERVAL 局自动写入一次，降低数据丢失风险
+            if completed_games % _SAVE_INTERVAL == 0:
+                _save_progress(all_samples, output_root, args, completed_games)
+
+        # 最终保存（覆盖周期保存未触发的剩余局）
+        if completed_games > 0:
+            _save_progress(all_samples, output_root, args, completed_games)
+
+        print(f"\n[完成] 共 {completed_games} 局，{len(all_samples)} 条样本，输出: {output_root}")
+
+    finally:
+        # 恢复原始信号处理器，避免影响后续代码
+        signal.signal(signal.SIGINT, original_handler)
 
 
 def play_one_game(model, device, hyperparams: dict, game_idx: int, run_id: str) -> List[dict]:

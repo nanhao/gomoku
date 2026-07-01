@@ -1,0 +1,54 @@
+@startuml
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,sans-serif
+title MCTS Self-Play: Interrupt-Safe Periodic Save Flow
+
+actor User
+
+participant "run_self_play()" as Main
+participant "SignalHandler" as Sig
+participant "FileSystem" as FS
+participant "play_one_game()" as Game
+
+== Startup ==
+Main -> FS: load sample.json if exists
+FS --> Main: existing samples (or empty)
+
+Main -> Main: register SIGINT handler
+
+== Game Loop ==
+loop for each game
+    Main -> Game: play_one_game()
+    Game --> Main: samples[]
+    Main -> Main: extend all_samples
+    Main -> Main: completed_games++
+
+    alt completed_games % 50 == 0
+        Main -> FS: atomic write sample.json
+        Main -> FS: atomic write summary.json
+        FS --> Main: ok
+    end
+end
+
+== Normal Exit ==
+Main -> FS: final atomic write sample.json
+Main -> FS: final atomic write summary.json
+Main --> User: "完成 — N 局, M 条样本"
+
+== Interrupt Flow (Ctrl+C) ==
+User -> Sig: SIGINT
+
+group Signal Handler
+    Sig -> Main: set flag & trigger save
+
+    alt completed_games > 0
+        Main -> FS: atomic write sample.json
+        Main -> FS: atomic write summary.json
+    end
+
+    Main --> User: "已中断，X 局数据已保存"
+    Main -> Main: sys.exit(0)
+end
+
+@enduml
