@@ -163,7 +163,7 @@ class PolicyValueAiEngine(AIEngine):
         """
         if self._step_count < self.temp_steps:
             return self.temperature
-        return 0.0  # 探索步数之后纯贪婪
+        return -0.5  # 探索步数之后纯贪婪
 
     @staticmethod
     def _select_greedy(visit_counts: List[int], board: List[int]) -> int:

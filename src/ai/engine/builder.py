@@ -54,7 +54,7 @@ class AIEngineBuilder:
     @staticmethod
     def build_policy_value(
         model,
-        num_simulations: int = 800,
+        num_simulations: int = 200,
         c_puct: float = 2.0,
         dirichlet_epsilon: float = 0.25,
         dirichlet_alpha: float = 0.03,
@@ -70,7 +70,7 @@ class AIEngineBuilder:
 
         Args:
             model: BaseModel 实例
-            num_simulations: 每次搜索的模拟次数，默认 800
+            num_simulations: 每次搜索的模拟次数，默认 200
             c_puct: PUCT 探索系数，默认 2.0
             dirichlet_epsilon: 狄利克雷噪声比例，默认 0.25
             dirichlet_alpha: 狄利克雷分布参数，默认 0.03
