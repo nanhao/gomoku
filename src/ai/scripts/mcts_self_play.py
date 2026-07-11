@@ -26,6 +26,7 @@ import torch
 from ai.models.cnn_v7.model import CNNV7Model
 from ai.engine.builder import AIEngineBuilder
 from ai.constants import STRATEGY_SAMPLING
+from config.mcts import MCTS_BATCH_SIZE, MCTS_VIRTUAL_LOSS
 from game.game import check_winner, is_board_full
 
 
@@ -93,8 +94,8 @@ def _save_progress(all_samples: List[dict], output_root: str,
         "temperature": args.temperature,
         "dirichlet_epsilon": args.dirichlet_epsilon,
         "dirichlet_alpha": args.dirichlet_alpha,
-        "batch_size": args.batch_size,
-        "virtual_loss": args.virtual_loss,
+        "batch_size": args.batch_size if args.batch_size is not None else MCTS_BATCH_SIZE,
+        "virtual_loss": args.virtual_loss if args.virtual_loss is not None else MCTS_VIRTUAL_LOSS,
     }
 
     # 原子写入 sample.json
@@ -145,10 +146,10 @@ def parse_args():
                    help="狄利克雷噪声比例（默认 0.25）")
     p.add_argument("--dirichlet-alpha", type=float, default=0.03,
                    help="狄利克雷分布参数（默认 0.03）")
-    p.add_argument("--batch-size", type=int, default=16,
-                   help="每批 simulation 数（默认 16）")
-    p.add_argument("--virtual-loss", type=float, default=3.0,
-                   help="virtual loss 值（默认 3.0）")
+    p.add_argument("--batch-size", type=int, default=None,
+                   help="每批 simulation 数（默认读取 MCTS_BATCH_SIZE 配置）")
+    p.add_argument("--virtual-loss", type=float, default=None,
+                   help="virtual loss 值（默认读取 MCTS_VIRTUAL_LOSS 配置）")
     p.add_argument("--output", default=None,
                    help="输出目录名（默认 {model}_mcts_{timestamp}）")
     p.add_argument("--device", default="cuda",
@@ -182,7 +183,7 @@ def run_self_play(args):
     model = CNNV7Model(model_path=args.model, fresh=False)
     model.move_to_device(device)
 
-    # 超参数汇总
+    # 超参数汇总（None 时回退到配置默认值）
     hyperparams = {
         "simulations": args.simulations,
         "c_puct": args.c_puct,
@@ -190,8 +191,8 @@ def run_self_play(args):
         "temperature": args.temperature,
         "dirichlet_epsilon": args.dirichlet_epsilon,
         "dirichlet_alpha": args.dirichlet_alpha,
-        "batch_size": args.batch_size,
-        "virtual_loss": args.virtual_loss,
+        "batch_size": args.batch_size if args.batch_size is not None else MCTS_BATCH_SIZE,
+        "virtual_loss": args.virtual_loss if args.virtual_loss is not None else MCTS_VIRTUAL_LOSS,
     }
     print(f"[超参数] {hyperparams}")
 
@@ -266,8 +267,8 @@ def play_one_game(model, device, hyperparams: dict, game_idx: int, run_id: str) 
     temperature = hyperparams["temperature"]
     dirichlet_epsilon = hyperparams["dirichlet_epsilon"]
     dirichlet_alpha = hyperparams["dirichlet_alpha"]
-    batch_size = hyperparams.get("batch_size", 16)
-    virtual_loss = hyperparams.get("virtual_loss", 3.0)
+    batch_size = hyperparams["batch_size"]
+    virtual_loss = hyperparams["virtual_loss"]
 
     # 通过 AIEngineBuilder 创建策略-价值引擎（内部自动创建 MCTSSearcher + PolicyValueAiEngine）
     log_key_prefix = f"run{run_id}_game{game_idx}"
