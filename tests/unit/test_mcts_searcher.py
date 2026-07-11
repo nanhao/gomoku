@@ -39,6 +39,7 @@ class MockModel:
         self._fixed_value = fixed_value
         self._device = device
         self.policy_calls = []  # 记录每次 predict 调用的 board 状态
+        self.batch_calls = []   # 记录每次 predict_batch 调用的输入大小
         self.network = MagicMock()
         # 模拟 network.parameters() 返回空迭代器
         self.network.parameters.return_value = iter([])
@@ -53,8 +54,16 @@ class MockModel:
         return ModelPredict(policy=policy, value=self._fixed_value)
 
     def predict_batch(self, board_vectors):
-        """批量预测：对每个向量分别调用 predict，模拟 batch 行为"""
-        return [self.predict(bv) for bv in board_vectors]
+        """批量预测：记录调用并返回固定策略/价值"""
+        self.batch_calls.append(len(board_vectors))
+        results = []
+        for bv in board_vectors:
+            self.policy_calls.append(list(bv))
+            policy = self._fixed_policy
+            if policy is None:
+                policy = [1.0 / 225] * 225
+            results.append(ModelPredict(policy=policy, value=self._fixed_value))
+        return results
 
     def set_policy(self, policy):
         """设置固定策略"""
@@ -508,14 +517,18 @@ class TestMCTSSearcherBatchAndVL(unittest.TestCase):
         )
         state = _make_empty_state()
         searcher.search(state)
-        # predict_batch 在 MockModel 中对每个向量调用 predict
-        # root_init 1 次 + 100 simulation 叶节点 = 101 次 predict
+        # 验证 predict_batch 调用 7 次，最后一次 batch size=4
+        self.assertEqual(len(model.batch_calls), 7,
+                         f"Expected 7 batch calls, got {len(model.batch_calls)}")
+        self.assertEqual(model.batch_calls[-1], 4,
+                        f"Last batch should have 4 leaves, got {model.batch_calls[-1]}")
+        # 验证总 predict 调用 = root_init(1) + 所有 batch 的向量数(100)
         self.assertEqual(len(model.policy_calls), 101)
 
     # ---- T2.2: batch_size=1 退化 ----
 
     def test_batch_size_one_equivalent_to_single_sim(self):
-        """batch_size=1, VL=0 等价于原逐 sim 模式"""
+        """batch_size=1, VL=0 产生合法搜索结果"""
         model1 = MockModel(fixed_value=0.3)
         model2 = MockModel(fixed_value=0.3)
         searcher1 = self.MCTSSearcher(
@@ -525,10 +538,11 @@ class TestMCTSSearcherBatchAndVL(unittest.TestCase):
             model2, num_simulations=20, batch_size=16, virtual_loss=0.0
         )
         state = _make_empty_state()
-        vc1, _, _ = searcher1.search(state)
-        vc2, _, _ = searcher2.search(state)
-        # 相同模型、无 VL 时，不同 batch_size 结果应一致
+        vc1, rv1, _ = searcher1.search(state)
+        vc2, rv2, _ = searcher2.search(state)
+        # 总访问数相同
         self.assertEqual(sum(vc1), sum(vc2))
+        self.assertEqual(rv1, rv2)
 
     # ---- T3.1: VL 阻止路径收敛 ----
 
@@ -615,6 +629,137 @@ class TestMCTSSearcherBatchAndVL(unittest.TestCase):
         searcher = self.MCTSSearcher(model, batch_size=32, virtual_loss=5.0)
         self.assertEqual(searcher.batch_size, 32)
         self.assertEqual(searcher.virtual_loss, 5.0)
+
+    # ---- T1.2: VL 撤销 ----
+
+    def test_vl_revert_restores_original_values(self):
+        """VL 撤销后边 N/W 恢复为施加前原始值"""
+        model = MockModel(fixed_value=0.5)
+        searcher = self.MCTSSearcher(
+            model, num_simulations=2, batch_size=2, virtual_loss=3.0
+        )
+        state = _make_empty_state()
+        searcher._init_search(state)
+        # 记录施加 VL 前的边统计
+        root = searcher.tree[searcher._root_hash]
+        before_N = {a: root["edges"][a]["N"] for a in root["edges"]}
+        before_W = {a: root["edges"][a]["W"] for a in root["edges"]}
+        # 选择 2 个叶节点（VL 已施加）
+        leaves = [searcher._select_one() for _ in range(2)]
+        # 撤销 VL
+        for leaf in leaves:
+            searcher._revert_vl(leaf.get("path", []))
+        # 验证恢复到施加前
+        root = searcher.tree[searcher._root_hash]
+        for a in root["edges"]:
+            self.assertEqual(root["edges"][a]["N"], before_N[a],
+                           f"Edge {a} N should revert to {before_N[a]}")
+            self.assertEqual(root["edges"][a]["W"], before_W[a],
+                           f"Edge {a} W should revert to {before_W[a]}")
+
+    # ---- T2.3: 全终局批次 ----
+
+    def test_all_terminal_batch_skips_model(self):
+        """棋盘接近填满时终局叶节点走规则分支，不调模型"""
+        board = [1 if i % 2 == 0 else 2 for i in range(224)]
+        board.append(0)  # 最后一个位置留空
+        board.append(1)   # current_player
+        model = MockModel(fixed_value=0.5)
+        searcher = self.MCTSSearcher(
+            model, num_simulations=10, batch_size=8, virtual_loss=3.0
+        )
+        visit_counts, root_value, root_policy = searcher.search(board)
+        self.assertEqual(len(visit_counts), 225)
+        # 终局叶节点不调用 predict_batch（batch_leaves 为空时跳过）
+        self.assertEqual(len(model.batch_calls), 0,
+                        "All-terminal batch should not call predict_batch")
+
+    # ---- T5.4: 平局 ----
+
+    def test_draw_board_with_batch(self):
+        """棋盘满且无胜者：root_value=0，visit_counts 全 0"""
+        board = [1 if i % 2 == 0 else 2 for i in range(225)]
+        board.append(1)
+        model = MockModel(fixed_value=0.5)
+        searcher = self.MCTSSearcher(
+            model, num_simulations=10, batch_size=4, virtual_loss=0.0
+        )
+        visit_counts, root_value, root_policy = searcher.search(board)
+        self.assertEqual(sum(visit_counts), 0, "满棋盘无胜者访问计数应为 0")
+        self.assertEqual(root_value, 0.0, "满棋盘无胜者 root_value 应为 0")
+
+
+class TestModelPredictBatch(unittest.TestCase):
+    """CNNV7Model.predict_batch 单元测试"""
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            from ai.models.cnn_v7.model import CNNV7Model
+            cls.CNNV7Model = CNNV7Model
+        except ImportError:
+            cls.CNNV7Model = None
+
+    def setUp(self):
+        if self.CNNV7Model is None:
+            self.skipTest("CNNV7Model 尚未实现")
+        self.model = self.CNNV7Model(fresh=True)
+        self.model.move_to_device()
+
+    # ---- T6.1: 单条等价性 ----
+
+    def test_predict_batch_single_equals_predict(self):
+        """predict_batch([v]) 与 predict(v) 结果一致"""
+        v = [0] * 225 + [1]
+        r1 = self.model.predict(v)
+        r2_list = self.model.predict_batch([v])
+        self.assertEqual(len(r2_list), 1)
+        r2 = r2_list[0]
+        # policy 逐元素比较
+        for i in range(225):
+            self.assertAlmostEqual(r1.policy[i], r2.policy[i], places=5,
+                                  msg=f"Policy differs at index {i}")
+        self.assertAlmostEqual(r1.value, r2.value, places=5)
+
+    # ---- T6.2: batch 多输入 ----
+
+    def test_predict_batch_multi_input(self):
+        """predict_batch 返回多个正确格式的 ModelPredict"""
+        vectors = [[0] * 225 + [1 + (i % 2)] for i in range(4)]
+        results = self.model.predict_batch(vectors)
+        self.assertEqual(len(results), 4)
+        for r in results:
+            self.assertEqual(len(r.policy), 225)
+            self.assertAlmostEqual(sum(r.policy), 1.0, places=3,
+                                  msg="Policy should sum to ~1")
+            self.assertGreaterEqual(r.value, -1.0)
+            self.assertLessEqual(r.value, 1.0)
+
+    # ---- T6.3: 空输入 ----
+
+    def test_predict_batch_empty_returns_empty(self):
+        """predict_batch([]) 返回空列表"""
+        results = self.model.predict_batch([])
+        self.assertEqual(results, [])
+
+    # ---- T6.4: batch 性能 ----
+
+    def test_predict_batch_faster_than_individual(self):
+        """predict_batch 耗时小于 N 次单独 predict"""
+        import time
+        vectors = [[0] * 225 + [i % 2 + 1] for i in range(8)]
+
+        t0 = time.perf_counter()
+        individual = [self.model.predict(v) for v in vectors]
+        t_individual = time.perf_counter() - t0
+
+        t0 = time.perf_counter()
+        batch = self.model.predict_batch(vectors)
+        t_batch = time.perf_counter() - t0
+
+        self.assertEqual(len(individual), len(batch))
+        self.assertLess(t_batch, t_individual,
+                       f"Batch {t_batch:.4f}s should be faster than individual {t_individual:.4f}s")
 
 
 if __name__ == "__main__":

@@ -2,8 +2,9 @@
 
 实现 AlphaGo Zero 风格的蒙特卡洛树搜索：
 - PUCT 选择
-- 单步 simulation 循环（selection → evaluation → backup）
+- Batch MCTS 循环（collect B leaves → batch eval → revert VL → backup）
 - 回传取反（每层切换玩家视角）
+- Virtual Loss 临时惩罚（批次内路径多样化）
 - 狄利克雷噪声
 - 子树复用（advance_root）
 
@@ -247,6 +248,7 @@ class MCTSSearcher:
         """初始化搜索：创建根节点 + 狄利克雷噪声
         
         若根节点已存在于树中（子树复用场景），仍重新施加新鲜噪声。
+        若根状态已终局（有人胜或满棋盘），跳过模型预测。
         """
         board = state[:225]
         player = state[225]
@@ -259,10 +261,17 @@ class MCTSSearcher:
             self.tree.clear()
             self._root_hash = root_hash
 
-            # 模型预测
-            predict_result = self.model.predict(state)
-            policy = predict_result.policy
-            value = predict_result.value
+            # 检测根状态是否已终局
+            root_winner = self._check_board_winner(board)
+            root_full = is_board_full(board)
+            if root_winner != 0 or root_full:
+                # 终局状态：跳过模型预测，使用均匀分布策略
+                policy = [1.0 / 225] * 225
+                value = -1.0 if root_winner != 0 else 0.0
+            else:
+                predict_result = self.model.predict(state)
+                policy = predict_result.policy
+                value = predict_result.value
 
             # 创建根节点
             self.tree[root_hash] = {
@@ -276,7 +285,7 @@ class MCTSSearcher:
             }
             root = self.tree[root_hash]
 
-            # 为所有空位创建边
+            # 为所有空位创建边（终局时 board 可能有空位但无合法动作）
             for action in range(225):
                 if board[action] == 0:
                     root["edges"][action] = {

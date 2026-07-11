@@ -103,6 +103,7 @@ search(state, num_simulations):
 
         # 阶段 3：撤销 VL + 真实回传
         for leaf in terminal_leaves:
+            _create_terminal_node(leaf)
             _backup(leaf)
         for leaf, result in zip(batch_leaves, results):
             _revert_vl_on_path(leaf.path)
