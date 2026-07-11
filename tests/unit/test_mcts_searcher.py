@@ -391,10 +391,10 @@ class TestMCTSSearcherLogging(unittest.TestCase):
         self.assertIn("hyperparams", log_data)
         self.assertIn("result", log_data)
 
-        # 验证 hyperparams 不包含 virtual_loss（已移除）
+        # 验证 hyperparams 包含 batch_size 和 virtual_loss
         hyperparams = log_data["hyperparams"]
-        self.assertNotIn("virtual_loss", hyperparams,
-                         "virtual_loss 应已从日志中移除")
+        self.assertIn("virtual_loss", hyperparams)
+        self.assertIn("batch_size", hyperparams)
         self.assertIn("c_puct", hyperparams)
         self.assertIn("dirichlet_epsilon", hyperparams)
         self.assertIn("dirichlet_alpha", hyperparams)

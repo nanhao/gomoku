@@ -118,6 +118,8 @@ class MCTSSearcher:
                 dirichlet_epsilon=self.dirichlet_epsilon,
                 dirichlet_alpha=self.dirichlet_alpha,
                 root_noise=self._get_root_noise(),
+                batch_size=self.batch_size,
+                virtual_loss=self.virtual_loss,
             )
 
         # 主搜索循环：batch MCTS（collect → batch eval → revert VL → backup）

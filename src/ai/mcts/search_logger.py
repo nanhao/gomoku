@@ -34,6 +34,8 @@ class MCTSSearchLogger:
         dirichlet_epsilon: float,
         dirichlet_alpha: float,
         root_noise: List[float],
+        batch_size: int = 16,
+        virtual_loss: float = 3.0,
     ) -> dict:
         """初始化日志顶层结构
 
@@ -48,6 +50,8 @@ class MCTSSearchLogger:
                 "c_puct": self.c_puct,
                 "dirichlet_epsilon": dirichlet_epsilon,
                 "dirichlet_alpha": dirichlet_alpha,
+                "batch_size": batch_size,
+                "virtual_loss": virtual_loss,
             },
             "root_noise": root_noise,
             "simulation_logs": [],
