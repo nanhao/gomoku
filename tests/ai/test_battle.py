@@ -128,8 +128,8 @@ class TestStartAiVsAiRandom(unittest.TestCase):
         """主流程：多局后执方分配具有随机性（不是全黑或全白）"""
         recorder = DataRecorder("test_rnd", self.test_ai_data_dir)
 
-        # 运行 8 局验证随机性（全同色概率 ~0.78%）
-        num_games = 8
+        # 运行 20 局验证随机性（全同色概率 ~1.9×10⁻⁶）
+        num_games = 20
         results = AIGameManager.start_ai_vs_ai_random("random", "random", num_games, recorder)
 
         ai1_as_black = sum(1 for r in results if r["ai1_color"] == 1)
