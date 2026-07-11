@@ -6,6 +6,9 @@ create_engine 提供智能路由：根据模型预测输出类型自动选择对
 
 from typing import Optional
 
+# 哨兵值：与 MCTSSearcher._LOG_UNSET 等价，用于区分"未传参"和"显式传 None"
+_LOG_UNSET = object()
+
 
 class AIEngineBuilder:
     """AI 引擎工厂类
@@ -63,7 +66,7 @@ class AIEngineBuilder:
         temperature: float = 1.0,
         temp_steps: int = 8,
         log_key_prefix: Optional[str] = None,
-        log_dir=None,
+        log_dir=_LOG_UNSET,
     ):
         """创建策略-价值引擎
 
@@ -81,7 +84,7 @@ class AIEngineBuilder:
             temperature: 温度参数，默认 1.0
             temp_steps: 温度探索步数，默认 8
             log_key_prefix: 日志键前缀
-            log_dir: 搜索日志输出目录
+            log_dir: 搜索日志输出目录。未传参时读取 config/mcts.py 配置；显式传 None 禁用日志
 
         Returns:
             PolicyValueAiEngine 实例
