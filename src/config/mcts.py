@@ -5,7 +5,7 @@
 """
 
 # 是否启用 MCTS 搜索日志（默认关闭，自对弈时可按需开启）
-MCTS_LOG_ENABLED: bool = True
+MCTS_LOG_ENABLED: bool = True  # 自对弈时开启，用于验证 MCTS 正确性
 
 # MCTS 搜索日志输出目录（相对于项目根目录或绝对路径）
 MCTS_LOG_DIR: str = "mcts_log"
