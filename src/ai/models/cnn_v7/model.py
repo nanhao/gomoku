@@ -201,3 +201,34 @@ class CNNV7Model(NeuralNetworkModel):
         value_result = float(value_tensor.squeeze().item())
 
         return ModelPredict(policy=policy_result, value=value_result)
+
+    def predict_batch(self, board_vectors: List[List[int]]) -> List["ModelPredict"]:
+        """批量预测落子概率和局面价值
+
+        利用 CNNV7Network.forward 的 batch 输入能力，一次前向传播处理多个状态。
+
+        Args:
+            board_vectors: 多个 226 维向量列表
+
+        Returns:
+            等长 ModelPredict 列表
+        """
+        if not board_vectors:
+            return []
+
+        device = next(self.network.parameters()).device
+        # 将多个向量拼接为 batch 张量 (B, 3, 15, 15)
+        batch_tensors = [self._prepare_input(bv, device) for bv in board_vectors]
+        input_tensor = torch.cat(batch_tensors, dim=0)
+
+        self.network.eval()
+        with torch.no_grad():
+            policy_tensor, value_tensor = self.network(input_tensor)
+
+        # 解析结果：LogSoftmax → exp 还原，逐个构建 ModelPredict
+        results: List[ModelPredict] = []
+        for i in range(len(board_vectors)):
+            policy = [float(p) for p in policy_tensor[i].exp().tolist()]
+            value = float(value_tensor[i].item())
+            results.append(ModelPredict(policy=policy, value=value))
+        return results

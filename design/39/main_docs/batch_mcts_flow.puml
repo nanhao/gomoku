@@ -1,0 +1,82 @@
+@startuml batch_mcts_flow
+title Batch MCTS 关键流程（batch_size=16, virtual_loss=3.0）
+
+|MCTSSearcher|
+start
+:init_search(state);
+note right: 创建根节点 + Dirichlet 噪声
+
+:剩余 sims = num_simulations;
+
+while (剩余 sims > 0?) is (是)
+    :B = min(batch_size, 剩余 sims);
+    note right: batch_leaves = [], terminal_leaves = []
+
+    |#LightBlue|阶段1: 收集B个叶节点（带VL）|
+    repeat
+        :_select_with_virtual_loss();
+        note right
+            遍历边时施加 VL:
+            N += 3.0, W -= 3.0
+            → Q' = (W-VL)/(N+VL)
+            → PUCT 中 Q 降低
+            → 后续 selection 避免同一路径
+        end note
+
+        if (leaf is terminal?) then (是)
+            :_revert_vl_on_path(leaf.path);
+            note right: 撤销 VL: N -= 3.0, W += 3.0
+            :terminal_leaves.append(leaf);
+        else (否)
+            :batch_leaves.append(leaf);
+        endif
+    repeat while (收集到 B 个?) is (否)
+    ->是;
+
+    |#LightGreen|阶段2: Batch 模型评估|
+    if (batch_leaves 非空?) then (是)
+        :results = model.predict_batch(
+            [l.board_vector for l in batch_leaves]
+        );
+        note right
+            CNNV7Network.forward(batch, 3, 15, 15)
+            一次前向传播得到 B 个 (policy, value)
+        end note
+    else (否)
+        note right: 全为终局，跳过模型调用
+    endif
+
+    |#LightYellow|阶段3: 撤销VL + 真实回传|
+    :处理 terminal_leaves;
+    note right: 直接 _backup(leaf)
+
+    :处理 batch_leaves;
+    repeat :取下一个 (leaf, result);
+        :_revert_vl_on_path(leaf.path);
+        note right: N -= 3.0, W += 3.0
+        :leaf.value = result.value;
+        :leaf.policy = result.policy;
+        :_expand_leaf(leaf);
+        note right: 为叶节点创建树节点和边
+        :_backup(leaf);
+        note right
+            沿路径回传:
+            v = -v（翻转为当前视角）
+            edge.N += 1, edge.W += v
+            edge.Q = W/N
+        end note
+    repeat while (还有未处理?) is (是)
+    ->否;
+
+    :剩余 sims -= B;
+
+endwhile (否)
+
+:_get_result();
+note right: 提取 visit_counts, root_value, root_policy
+
+:写入 search_log（如有）;
+
+stop
+
+@enduml

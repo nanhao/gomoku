@@ -1,0 +1,59 @@
+@startuml dependency_diagram
+title 模块依赖关系 —— Batch MCTS 涉及的文件
+
+package "src/ai/scripts/" as scripts {
+    [mcts_self_play.py] as self_play
+}
+
+package "src/ai/engine/" as engine {
+    [builder.py\nAIEngineBuilder] as builder
+    [policy_value.py\nPolicyValueAiEngine] as pv_engine
+}
+
+package "src/ai/mcts/" as mcts {
+    [searcher.py\nMCTSSearcher] as searcher
+    [search_logger.py\nMCTSSearchLogger] as logger
+}
+
+package "src/ai/models/cnn_v7/" as cnn_v7 {
+    [model.py\nCNNV7Model] as model
+}
+
+package "src/config/" as config {
+    [mcts.py\nMCTS_BATCH_SIZE\nMCTS_VIRTUAL_LOSS] as config_mcts
+}
+
+self_play --> builder : calls build_policy_value()
+self_play --> model : imports CNNV7Model
+builder --> pv_engine : creates
+builder --> searcher : creates
+pv_engine --> searcher : holds + calls
+
+searcher --> model : calls predict_batch()
+searcher --> logger : uses (optional)
+searcher --> config_mcts : reads defaults
+
+note right of searcher
+  新增参数:
+  batch_size=16
+  virtual_loss=3.0
+end note
+
+note right of model
+  新增方法:
+  predict_batch()
+end note
+
+note right of builder
+  新增透传参数:
+  batch_size
+  virtual_loss
+end note
+
+note right of self_play
+  新增CLI参数:
+  --batch-size
+  --virtual-loss
+end note
+
+@enduml

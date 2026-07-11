@@ -93,6 +93,8 @@ def _save_progress(all_samples: List[dict], output_root: str,
         "temperature": args.temperature,
         "dirichlet_epsilon": args.dirichlet_epsilon,
         "dirichlet_alpha": args.dirichlet_alpha,
+        "batch_size": args.batch_size,
+        "virtual_loss": args.virtual_loss,
     }
 
     # 原子写入 sample.json
@@ -143,6 +145,10 @@ def parse_args():
                    help="狄利克雷噪声比例（默认 0.25）")
     p.add_argument("--dirichlet-alpha", type=float, default=0.03,
                    help="狄利克雷分布参数（默认 0.03）")
+    p.add_argument("--batch-size", type=int, default=16,
+                   help="每批 simulation 数（默认 16）")
+    p.add_argument("--virtual-loss", type=float, default=3.0,
+                   help="virtual loss 值（默认 3.0）")
     p.add_argument("--output", default=None,
                    help="输出目录名（默认 {model}_mcts_{timestamp}）")
     p.add_argument("--device", default="cuda",
@@ -184,6 +190,8 @@ def run_self_play(args):
         "temperature": args.temperature,
         "dirichlet_epsilon": args.dirichlet_epsilon,
         "dirichlet_alpha": args.dirichlet_alpha,
+        "batch_size": args.batch_size,
+        "virtual_loss": args.virtual_loss,
     }
     print(f"[超参数] {hyperparams}")
 
@@ -258,6 +266,8 @@ def play_one_game(model, device, hyperparams: dict, game_idx: int, run_id: str) 
     temperature = hyperparams["temperature"]
     dirichlet_epsilon = hyperparams["dirichlet_epsilon"]
     dirichlet_alpha = hyperparams["dirichlet_alpha"]
+    batch_size = hyperparams.get("batch_size", 16)
+    virtual_loss = hyperparams.get("virtual_loss", 3.0)
 
     # 通过 AIEngineBuilder 创建策略-价值引擎（内部自动创建 MCTSSearcher + PolicyValueAiEngine）
     log_key_prefix = f"run{run_id}_game{game_idx}"
@@ -267,6 +277,8 @@ def play_one_game(model, device, hyperparams: dict, game_idx: int, run_id: str) 
         c_puct=c_puct,
         dirichlet_epsilon=dirichlet_epsilon,
         dirichlet_alpha=dirichlet_alpha,
+        batch_size=batch_size,
+        virtual_loss=virtual_loss,
         temperature=temperature,
         temp_steps=temp_steps,
         log_key_prefix=log_key_prefix,

@@ -58,6 +58,8 @@ class AIEngineBuilder:
         c_puct: float = 2.0,
         dirichlet_epsilon: float = 0.25,
         dirichlet_alpha: float = 0.03,
+        batch_size: Optional[int] = None,
+        virtual_loss: Optional[float] = None,
         temperature: float = 1.0,
         temp_steps: int = 8,
         log_key_prefix: Optional[str] = None,
@@ -74,6 +76,8 @@ class AIEngineBuilder:
             c_puct: PUCT 探索系数，默认 2.0
             dirichlet_epsilon: 狄利克雷噪声比例，默认 0.25
             dirichlet_alpha: 狄利克雷分布参数，默认 0.03
+            batch_size: 每批 simulation 数，None 时读配置默认 16
+            virtual_loss: virtual loss 值，None 时读配置默认 3.0
             temperature: 温度参数，默认 1.0
             temp_steps: 温度探索步数，默认 8
             log_key_prefix: 日志键前缀
@@ -91,6 +95,8 @@ class AIEngineBuilder:
             c_puct=c_puct,
             dirichlet_epsilon=dirichlet_epsilon,
             dirichlet_alpha=dirichlet_alpha,
+            batch_size=batch_size,
+            virtual_loss=virtual_loss,
             log_dir=log_dir,
         )
         return PolicyValueAiEngine(

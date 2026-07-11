@@ -1,0 +1,78 @@
+@startuml class_diagram
+title MCTSSearcher 与相关类 —— Batch MCTS 涉及的类
+
+class MCTSSearcher {
+    - model : CNNV7Model
+    + num_simulations : int
+    + c_puct : float
+    + dirichlet_epsilon : float
+    + dirichlet_alpha : float
+    + batch_size : int
+    + virtual_loss : float
+    + log_dir : Optional[str]
+    + tree : Dict[str, dict]
+    --
+    + __init__(model, num_simulations, c_puct, dirichlet_epsilon, dirichlet_alpha, batch_size, virtual_loss, log_dir)
+    + search(state, num_simulations, log_key) : Tuple[List[int], float, List[float]]
+    + advance_root(action) : bool
+}
+
+class MCTSSearchLogger {
+    - log_dir : str
+    - c_puct : float
+    --
+    + __init__(log_dir, c_puct)
+    + init_log_data(board, current_player, simulations, dirichlet_epsilon, dirichlet_alpha, root_noise) : dict
+    + build_simulation_log(sim_id, path_info, leaf_info, tree) : dict
+    + write_log(log_key, log_data)
+}
+
+class CNNV7Model {
+    - network : CNNV7Network
+    + name : str
+    --
+    + predict(board_vector) : ModelPredict
+    + predict_batch(board_vectors) : List[ModelPredict]
+    + move_to_device(device)
+}
+
+class ModelPredict {
+    + policy : List[float]
+    + value : float
+    + type : str
+}
+
+class PolicyValueAiEngine {
+    - searcher : MCTSSearcher
+    - temperature : float
+    - temp_steps : int
+    - log_key_prefix : Optional[str]
+    --
+    + __init__(searcher, temperature, temp_steps, log_key_prefix)
+    + get_move(board, current_player, strategy) : MoveDecision
+    + after_move(x, y)
+}
+
+class AIEngineBuilder {
+    + {static} build_policy_value(model, num_simulations, c_puct, dirichlet_epsilon, dirichlet_alpha, batch_size, virtual_loss, temperature, temp_steps, log_key_prefix, log_dir) : PolicyValueAiEngine
+    + {static} build_single_policy(ai_name, temperature, top_k, rng) : SinglePolicyAiEngine
+}
+
+class MoveDecision {
+    + x : int
+    + y : int
+    + mcts_visit_counts : Optional[List[int]]
+    --
+    + get_position() : Tuple[int, int]
+    + get_mcts_visit_counts() : Optional[List[int]]
+}
+
+MCTSSearcher --> MCTSSearchLogger : uses
+MCTSSearcher --> CNNV7Model : calls predict_batch()
+MCTSSearcher --> ModelPredict : receives
+PolicyValueAiEngine --> MCTSSearcher : holds
+AIEngineBuilder ..> MCTSSearcher : creates
+AIEngineBuilder ..> PolicyValueAiEngine : creates
+PolicyValueAiEngine --> MoveDecision : returns
+
+@enduml

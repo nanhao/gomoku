@@ -12,3 +12,9 @@ MCTS_LOG_DIR: str = "mcts_log"
 
 # MCTS 训练损失曲线图输出目录（相对于项目根目录或绝对路径）
 MCTS_LOSS_LOG_DIR: str = "mcts_loss_logs"
+
+# Batch MCTS 每批收集的 simulation 数
+MCTS_BATCH_SIZE: int = 16
+
+# Virtual Loss 值（用于批次内路径多样化）
+MCTS_VIRTUAL_LOSS: float = 3.0

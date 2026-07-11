@@ -240,3 +240,6 @@ I think the fc layers of the value head takes two many parameters. I prefer to a
 optimize src/ai/scripts/mcts_self_play.py. Currently the script save the sample.json to disk after all games are done. We need to change this behavior. 
 1, When the user press Ctrl+c during the game, the script needs to append the memoroy data to the sample.json file so that there is no data lost
 2, Automatically append the memory data to the sample.json file for each 50 games so that reduce the risk of losing data
+
+# intentino_id=39
+introduce batch mcts and virtual loss in mcts. But don't use multi thread.

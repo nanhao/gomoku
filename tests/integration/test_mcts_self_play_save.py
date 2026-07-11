@@ -40,6 +40,8 @@ def _make_fake_args(output_dir: str, model_path: str = "fake_model.pth",
     args.temperature = 1.0
     args.dirichlet_epsilon = 0.25
     args.dirichlet_alpha = 0.03
+    args.batch_size = 16
+    args.virtual_loss = 3.0
     args.output = output_dir
     args.device = "cpu"
     return args
@@ -294,6 +296,8 @@ class TestRunSelfPlayIntegration(unittest.TestCase):
         parser.add_argument("--temperature", type=float, default=1.0)
         parser.add_argument("--dirichlet-epsilon", type=float, default=0.25)
         parser.add_argument("--dirichlet-alpha", type=float, default=0.03)
+        parser.add_argument("--batch-size", type=int, default=16)
+        parser.add_argument("--virtual-loss", type=float, default=3.0)
         parser.add_argument("--output", default=None)
         parser.add_argument("--device", default="cpu")
         args = parser.parse_args([])
@@ -451,6 +455,8 @@ class TestPeriodicSaveOrchestration(unittest.TestCase):
         parser.add_argument("--temperature", type=float, default=1.0)
         parser.add_argument("--dirichlet-epsilon", type=float, default=0.25)
         parser.add_argument("--dirichlet-alpha", type=float, default=0.03)
+        parser.add_argument("--batch-size", type=int, default=16)
+        parser.add_argument("--virtual-loss", type=float, default=3.0)
         parser.add_argument("--output", default=None)
         parser.add_argument("--device", default="cpu")
         args = parser.parse_args([])

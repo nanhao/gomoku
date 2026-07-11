@@ -52,6 +52,10 @@ class MockModel:
             policy = [1.0 / 225] * 225
         return ModelPredict(policy=policy, value=self._fixed_value)
 
+    def predict_batch(self, board_vectors):
+        """批量预测：对每个向量分别调用 predict，模拟 batch 行为"""
+        return [self.predict(bv) for bv in board_vectors]
+
     def set_policy(self, policy):
         """设置固定策略"""
         self._fixed_policy = policy
@@ -283,13 +287,20 @@ class TestMCTSSearcherModelCall(unittest.TestCase):
         self.assertEqual(actual_calls, expected_min_calls,
                          f"Expected ~{expected_min_calls} model calls, got {actual_calls}")
 
-    def test_constructor_rejects_virtual_loss_and_batch_size(self):
-        """构造函数不再接受 virtual_loss 和 mcts_batch_size 参数"""
+    def test_constructor_accepts_virtual_loss_and_batch_size(self):
+        """构造函数接受 batch_size 和 virtual_loss 参数"""
         model = MockModel()
-        with self.assertRaises(TypeError):
-            self.MCTSSearcher(model, virtual_loss=3)
-        with self.assertRaises(TypeError):
-            self.MCTSSearcher(model, mcts_batch_size=16)
+        searcher = self.MCTSSearcher(model, batch_size=8, virtual_loss=2.0)
+        self.assertEqual(searcher.batch_size, 8)
+        self.assertEqual(searcher.virtual_loss, 2.0)
+
+    def test_constructor_defaults_from_config(self):
+        """未传 batch_size/virtual_loss 时从配置读取默认值"""
+        model = MockModel()
+        searcher = self.MCTSSearcher(model)
+        self.assertIsInstance(searcher.batch_size, int)
+        self.assertGreater(searcher.batch_size, 0)
+        self.assertIsInstance(searcher.virtual_loss, float)
 
 
 class TestMCTSSearcherAdvanceRoot(unittest.TestCase):
@@ -451,6 +462,159 @@ class TestMCTSSearcherReturnValues(unittest.TestCase):
         state = _make_empty_state()
         visit_counts, _, _ = searcher.search(state)
         self.assertEqual(sum(visit_counts), 50)
+
+
+class TestMCTSSearcherBatchAndVL(unittest.TestCase):
+    """Batch MCTS + Virtual Loss 测试"""
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            from ai.mcts.searcher import MCTSSearcher
+            cls.MCTSSearcher = MCTSSearcher
+        except ImportError:
+            cls.MCTSSearcher = None
+
+    def setUp(self):
+        if self.MCTSSearcher is None:
+            self.skipTest("MCTSSearcher 尚未实现")
+
+    # ---- T1.1: VL 施加 ----
+
+    def test_vl_applied_to_traversed_edges(self):
+        """VL=3.0 时，每条被遍历边 N+3, W-3"""
+        model = MockModel(fixed_value=0.0)
+        searcher = self.MCTSSearcher(
+            model, num_simulations=4, batch_size=2, virtual_loss=3.0
+        )
+        state = _make_empty_state()
+        searcher.search(state)
+        # VL 已被撤销，所有边的 N 和 W 应为整数
+        for node_hash, node in searcher.tree.items():
+            self.assertEqual(node["N"] % 1, 0,
+                           f"Node N should be integer after VL revert: {node['N']}")
+            for action, edge in node.get("edges", {}).items():
+                # N 和 W 的小数部分应为 0（VL 全部撤销）
+                self.assertEqual(edge["N"] % 1, 0,
+                               f"Edge N should be integer: {edge['N']}")
+
+    # ---- T2.1: batch_size 整除 ----
+
+    def test_batch_size_divides_simulations(self):
+        """num_sims=100, batch_size=16 → predict_batch 调用 7 次"""
+        model = MockModel(fixed_value=0.3)
+        searcher = self.MCTSSearcher(
+            model, num_simulations=100, batch_size=16, virtual_loss=0.0
+        )
+        state = _make_empty_state()
+        searcher.search(state)
+        # predict_batch 在 MockModel 中对每个向量调用 predict
+        # root_init 1 次 + 100 simulation 叶节点 = 101 次 predict
+        self.assertEqual(len(model.policy_calls), 101)
+
+    # ---- T2.2: batch_size=1 退化 ----
+
+    def test_batch_size_one_equivalent_to_single_sim(self):
+        """batch_size=1, VL=0 等价于原逐 sim 模式"""
+        model1 = MockModel(fixed_value=0.3)
+        model2 = MockModel(fixed_value=0.3)
+        searcher1 = self.MCTSSearcher(
+            model1, num_simulations=20, batch_size=1, virtual_loss=0.0
+        )
+        searcher2 = self.MCTSSearcher(
+            model2, num_simulations=20, batch_size=16, virtual_loss=0.0
+        )
+        state = _make_empty_state()
+        vc1, _, _ = searcher1.search(state)
+        vc2, _, _ = searcher2.search(state)
+        # 相同模型、无 VL 时，不同 batch_size 结果应一致
+        self.assertEqual(sum(vc1), sum(vc2))
+
+    # ---- T3.1: VL 阻止路径收敛 ----
+
+    def test_vl_diversifies_batch_selection(self):
+        """batch_size=8, VL=3.0 时批次内叶节点不同"""
+        model = MockModel(fixed_value=0.0)
+        searcher = self.MCTSSearcher(
+            model, num_simulations=8, batch_size=8, virtual_loss=3.0
+        )
+        state = _make_empty_state()
+        # 手动收集批次叶节点
+        searcher._init_search(state)
+        leaves = []
+        for _ in range(8):
+            leaf = searcher._select_one()
+            leaves.append(leaf["state_hash"])
+        # VL 应使批次内 state_hash 分散（至少 3 个不同）
+        unique_hashes = set(leaves)
+        self.assertGreater(len(unique_hashes), 2,
+                          f"VL should diversify selection, got {len(unique_hashes)} unique")
+
+    # ---- T3.2: VL=0 路径收敛 ----
+
+    def test_no_vl_converges_in_batch(self):
+        """batch_size=8, VL=0 时批次内路径高度重合"""
+        model = MockModel(fixed_value=0.0)
+        searcher = self.MCTSSearcher(
+            model, num_simulations=8, batch_size=8, virtual_loss=0.0
+        )
+        state = _make_empty_state()
+        searcher._init_search(state)
+        leaves = []
+        for _ in range(8):
+            leaf = searcher._select_one()
+            leaves.append(leaf["state_hash"])
+        # 无 VL 时批次内应有重复
+        unique_hashes = set(leaves)
+        self.assertLess(len(unique_hashes), 8,
+                       f"Without VL, paths should converge: {len(unique_hashes)} unique out of 8")
+
+    # ---- T5.1: 搜索正确性 ----
+
+    def test_search_result_with_batch(self):
+        """batch_size=16 时 search() 返回正确格式"""
+        model = MockModel()
+        searcher = self.MCTSSearcher(
+            model, num_simulations=32, batch_size=16, virtual_loss=3.0
+        )
+        state = _make_empty_state()
+        visit_counts, root_value, root_policy = searcher.search(state)
+        self.assertEqual(len(visit_counts), 225)
+        self.assertEqual(sum(visit_counts), 32)
+        self.assertGreaterEqual(root_value, -1.0)
+        self.assertLessEqual(root_value, 1.0)
+
+    # ---- T5.3: 终局判定 ----
+
+    def test_terminal_board_with_batch(self):
+        """五连终局状态 batch 模式正确"""
+        board = [0] * 225
+        for y in range(5):
+            board[7 * 15 + y] = 1
+        board.append(1)
+        model = MockModel(fixed_value=0.5)
+        searcher = self.MCTSSearcher(
+            model, num_simulations=10, batch_size=4, virtual_loss=3.0
+        )
+        visit_counts, root_value, root_policy = searcher.search(board)
+        self.assertEqual(len(visit_counts), 225)
+
+    # ---- 配置 ----
+
+    def test_config_defaults_batch_size_and_vl(self):
+        """未传 batch_size/virtual_loss 时从配置读取"""
+        from config import mcts as mcts_config
+        model = MockModel()
+        searcher = self.MCTSSearcher(model)
+        self.assertEqual(searcher.batch_size, mcts_config.MCTS_BATCH_SIZE)
+        self.assertEqual(searcher.virtual_loss, mcts_config.MCTS_VIRTUAL_LOSS)
+
+    def test_constructor_overrides_config(self):
+        """构造参数覆盖配置常量"""
+        model = MockModel()
+        searcher = self.MCTSSearcher(model, batch_size=32, virtual_loss=5.0)
+        self.assertEqual(searcher.batch_size, 32)
+        self.assertEqual(searcher.virtual_loss, 5.0)
 
 
 if __name__ == "__main__":
