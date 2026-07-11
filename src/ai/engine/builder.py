@@ -6,8 +6,7 @@ create_engine 提供智能路由：根据模型预测输出类型自动选择对
 
 from typing import Optional
 
-# 哨兵值：与 MCTSSearcher._LOG_UNSET 等价，用于区分"未传参"和"显式传 None"
-_LOG_UNSET = object()
+from ai.mcts.searcher import _LOG_UNSET  # 哨兵：与 MCTSSearcher 共用同一对象实例
 
 
 class AIEngineBuilder:
