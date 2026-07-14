@@ -10,6 +10,7 @@
 - cnn_v5: CNN v5 卷积神经网络 AI（cnn_v4 + 额外隐藏层）
 - cnn_v6: CNN v6 残差卷积神经网络 AI（策略网络）
 - cnn_v7: CNN v7 双头残差卷积神经网络 AI（策略 + 价值）
+- cnn_v8: CNN v8 双头残差卷积神经网络 AI（cnn_v7 + FC 隐藏层）
 """
 
 from .random import RandomModel
@@ -21,6 +22,7 @@ from .cnn_v4 import CNNV4Model, CNNV4Trainer
 from .cnn_v5 import CNNV5Model, CNNV5Trainer
 from .cnn_v6 import CNNV6Model, CNNV6Trainer
 from .cnn_v7 import CNNV7Model, CNNV7Trainer
+from .cnn_v8 import CNNV8Model, CNNV8Trainer
 
 __all__ = [
     "RandomModel",
@@ -40,4 +42,6 @@ __all__ = [
     "CNNV6Trainer",
     "CNNV7Model",
     "CNNV7Trainer",
+    "CNNV8Model",
+    "CNNV8Trainer",
 ]

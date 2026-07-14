@@ -245,4 +245,5 @@ optimize src/ai/scripts/mcts_self_play.py. Currently the script save the sample.
 introduce batch mcts and virtual loss in mcts. But don't use multi thread.
 
 # intention_id=40
-屏蔽了 policy 网络
+测试了屏蔽 value 网络、屏蔽 policy 网络、调大 mcts 评估次数和 batch，感觉还是网络太小支持不了。因为 agz 的方法是从零开始训练，会有很多噪音，模型太小无法从噪音里面去识别出有效信息，训练就停滞。所以决定还是要扩展模型规模和调整训练节奏。
+所以新加一个模型 cnn_v8。网络结构和 cnn_v7 的唯一区别就是，在 flatten 后面加一个 fc-linear 层，这样就多了好几万参数了
