@@ -296,14 +296,26 @@ class ReplayViewer:
     
     def _draw_heatmaps(self, step, move):
         """绘制热力图
-        
+
         output 格式：225 维列表，每个元素按行优先顺序（索引 0~224）
-        对应棋盘位置的 reward 值
+        对应棋盘位置的 reward 值。
+        MCTS 对局时优先使用 mcts_probs 并归一化为概率。
         """
-        # AI 热力图
-        output_vector = move.get("output", [])
-        if len(output_vector) >= 225:
-            ai_rewards = list(output_vector[:225])
+        # AI 热力图 — 有 MCTS 数据时归一化访问计数为概率分布
+        mcts_probs = move.get("mcts_probs", [])
+        if len(mcts_probs) >= 225:
+            total = sum(mcts_probs)
+            if total > 0:
+                ai_rewards = [c / total for c in mcts_probs[:225]]
+            else:
+                ai_rewards = [1.0 / 225] * 225
+        else:
+            output_vector = move.get("output", [])
+            if len(output_vector) >= 225:
+                ai_rewards = list(output_vector[:225])
+            else:
+                ai_rewards = []
+        if ai_rewards:
             self.ai_heatmap.draw_heatmap(ai_rewards, self._on_cell_hover)
         
         # Sample 热力图
@@ -386,7 +398,25 @@ class ReplayViewer:
         player = "黑" if step % 2 == 1 else "白"
         self.info_text.insert(tk.END, f"\n落子方: {player}\n")
         self.info_text.insert(tk.END, f"落子位置: ({pos[0]}, {pos[1]})\n")
-        
+
+        # MCTS 信息
+        mcts_probs = move.get("mcts_probs", [])
+        if len(mcts_probs) >= 225:
+            total = sum(mcts_probs)
+            mcts_value = move.get("mcts_value")
+            self.info_text.insert(tk.END, f"\n--- MCTS 搜索结果 ---\n")
+            if mcts_value is not None:
+                self.info_text.insert(tk.END, f"根节点价值: {mcts_value:+.4f}\n")
+            # Top-5 着法
+            indexed = [(i, mcts_probs[i]) for i in range(225)]
+            indexed.sort(key=lambda x: -x[1])
+            self.info_text.insert(tk.END, f"Top-5 着法 (访问占比):\n")
+            for idx, count in indexed[:5]:
+                r, c = idx // 15, idx % 15
+                pct = count / total * 100 if total > 0 else 0
+                marker = " ◀ 实际落子" if [r, c] == pos else ""
+                self.info_text.insert(tk.END, f"  ({r:2d},{c:2d}): {pct:5.1f}% (访问 {count} 次){marker}\n")
+
         # 温度采样信息（第四十一次追加：展示落子策略和采样参数）
         strategy = move.get("strategy", "argmax")
         self.info_text.insert(tk.END, f"\n--- 温度采样 ---\n")

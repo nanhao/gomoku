@@ -245,3 +245,4 @@ optimize src/ai/scripts/mcts_self_play.py. Currently the script save the sample.
 introduce batch mcts and virtual loss in mcts. But don't use multi thread.
 
 # intention_id=40
+屏蔽了 policy 网络

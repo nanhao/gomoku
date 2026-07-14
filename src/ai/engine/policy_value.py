@@ -125,7 +125,7 @@ class PolicyValueAiEngine(AIEngine):
         # 转换 flat index 为 (x, y) 坐标
         x, y = action // 15, action % 15
 
-        return MoveDecision(x, y, mcts_visit_counts=visit_counts)
+        return MoveDecision(x, y, mcts_visit_counts=visit_counts, mcts_root_value=root_value)
 
     def after_move(self, x: int, y: int):
         """落子后钩子：推进搜索树根节点

@@ -239,6 +239,7 @@ class AIGameManager:
             # 对于 PolicyValueAiEngine（MCTS），get_probs() 返回 None，
             # 此时回退到 mcts_visit_counts 作为概率分布的近似
             mcts_counts = decision.get_mcts_visit_counts()
+            mcts_value = decision.get_mcts_root_value()
             if probs is None and mcts_counts is not None:
                 probs = mcts_counts
             # 第四十一次追加：按策略传递温度采样信息
@@ -261,12 +262,14 @@ class AIGameManager:
                     top_k=temp_config.top_k,
                     sampling_probs=sampling_probs,
                     mcts_probs=mcts_counts,
+                    mcts_value=mcts_value,
                 )
             else:
                 recorder.record_move(
                     current_game_id, board_vector, probs, (x, y),
                     strategy=STRATEGY_ARGMAX,
                     mcts_probs=mcts_counts,
+                    mcts_value=mcts_value,
                 )
 
             # 执行落子

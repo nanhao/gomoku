@@ -18,19 +18,22 @@ class MoveDecision:
         _position: (x, y) 落子坐标 tuple
         _probs: 225 维概率分布（模型原始输出），未传入时为 None
         _mcts_visit_counts: 225 维 MCTS 访问计数，未传入时为 None
+        _mcts_root_value: MCTS 根节点价值评估（从当前玩家视角），未传入时为 None
     """
 
-    def __init__(self, x: int, y: int, probs: List[float] = None, mcts_visit_counts: List[int] = None):
+    def __init__(self, x: int, y: int, probs: List[float] = None, mcts_visit_counts: List[int] = None, mcts_root_value: float = None):
         """
         Args:
             x: 落子行坐标 (0-14)
             y: 落子列坐标 (0-14)
             probs: 可选的 225 维概率分布
             mcts_visit_counts: 可选的 225 维 MCTS 访问计数
+            mcts_root_value: 可选的 MCTS 根节点价值，值域 [-1, 1]
         """
         self._position: Tuple[int, int] = (x, y)
         self._probs: Optional[List[float]] = probs
         self._mcts_visit_counts: Optional[List[int]] = mcts_visit_counts
+        self._mcts_root_value: Optional[float] = mcts_root_value
 
     def get_position(self) -> Tuple[int, int]:
         """返回落子位置 (x, y) tuple"""
@@ -43,6 +46,10 @@ class MoveDecision:
     def get_mcts_visit_counts(self) -> Optional[List[int]]:
         """返回 225 维 MCTS 访问计数，未传入时返回 None"""
         return self._mcts_visit_counts
+
+    def get_mcts_root_value(self) -> Optional[float]:
+        """返回 MCTS 根节点价值，未传入时返回 None"""
+        return self._mcts_root_value
 
     def __repr__(self) -> str:
         return f"MoveDecision(x={self._position[0]}, y={self._position[1]})"
