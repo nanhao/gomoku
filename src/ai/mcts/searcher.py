@@ -46,6 +46,7 @@ class MCTSSearcher:
         batch_size: Optional[int] = None,
         virtual_loss: Optional[float] = None,
         log_dir: Optional[str] = _LOG_UNSET,
+        use_prior: bool = True,
     ):
         """初始化 MCTS 搜索器
 
@@ -59,6 +60,8 @@ class MCTSSearcher:
             virtual_loss: 虚拟损失值。None 时读取 MCTS_VIRTUAL_LOSS 配置（默认 3.0）
             log_dir: 搜索日志输出目录。未传参时读取 config/mcts.py 配置；
                     显式传 None 禁用日志
+            use_prior: 是否使用模型先验概率。False 时所有合法着法 P 均设为均匀分布，
+                      PUCT 选择仅依赖 Q 值，适用于仅训练价值头的消融实验
         """
         self.model = model
         self.num_simulations = num_simulations
@@ -67,6 +70,7 @@ class MCTSSearcher:
         self.dirichlet_alpha = dirichlet_alpha
         self.batch_size = batch_size if batch_size is not None else MCTS_BATCH_SIZE
         self.virtual_loss = virtual_loss if virtual_loss is not None else MCTS_VIRTUAL_LOSS
+        self.use_prior = use_prior
         self.log_dir: Optional[str] = None
         if log_dir is _LOG_UNSET:
             # 未传参：读取全局配置
@@ -288,11 +292,13 @@ class MCTSSearcher:
             root = self.tree[root_hash]
 
             # 为所有空位创建边（终局时 board 可能有空位但无合法动作）
+            n_empty = sum(1 for a in range(225) if board[a] == 0)
             for action in range(225):
                 if board[action] == 0:
+                    P_val = 1.0 / n_empty if (not self.use_prior or n_empty == 0) else policy[action]
                     root["edges"][action] = {
                         "N": 0, "W": 0.0, "Q": 0.0,
-                        "P": policy[action], "child_hash": None,
+                        "P": P_val, "child_hash": None,
                     }
             # 全新树：所有边初始 N=0，快照均为 0
             self._root_edge_N_snapshot = {a: 0 for a in range(225) if board[a] == 0}
@@ -304,7 +310,9 @@ class MCTSSearcher:
                 self._root_edge_N_snapshot[action] = edge["N"]
 
         # 始终施加狄利克雷噪声（包括子树复用场景）
-        self._add_dirichlet_noise(root_hash)
+        # 若禁用先验概率，跳过噪声（均匀分布加噪声无意义）
+        if self.use_prior:
+            self._add_dirichlet_noise(root_hash)
 
     def _add_dirichlet_noise(self, node_hash: str):
         """对根节点的合法动作施加狄利克雷噪声
@@ -521,11 +529,13 @@ class MCTSSearcher:
                 "_root_policy": list(policy),
             }
             child_node = self.tree[child_hash]
+            n_empty = sum(1 for a in range(225) if leaf["board"][a] == 0)
             for action in range(225):
                 if leaf["board"][action] == 0:
+                    P_val = 1.0 / n_empty if (not self.use_prior or n_empty == 0) else policy[action]
                     child_node["edges"][action] = {
                         "N": 0, "W": 0.0, "Q": 0.0,
-                        "P": policy[action], "child_hash": None,
+                        "P": P_val, "child_hash": None,
                     }
 
         leaf["child_hash"] = child_hash

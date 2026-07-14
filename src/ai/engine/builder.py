@@ -66,6 +66,7 @@ class AIEngineBuilder:
         temp_steps: int = 8,
         log_key_prefix: Optional[str] = None,
         log_dir=_LOG_UNSET,
+        use_prior: bool = True,
     ):
         """创建策略-价值引擎
 
@@ -84,6 +85,7 @@ class AIEngineBuilder:
             temp_steps: 温度探索步数，默认 8
             log_key_prefix: 日志键前缀
             log_dir: 搜索日志输出目录。未传参时读取 config/mcts.py 配置；显式传 None 禁用日志
+            use_prior: 是否使用模型先验概率，默认 True
 
         Returns:
             PolicyValueAiEngine 实例
@@ -100,6 +102,7 @@ class AIEngineBuilder:
             batch_size=batch_size,
             virtual_loss=virtual_loss,
             log_dir=log_dir,
+            use_prior=use_prior,
         )
         return PolicyValueAiEngine(
             searcher,

@@ -96,6 +96,7 @@ def _save_progress(all_samples: List[dict], output_root: str,
         "dirichlet_alpha": args.dirichlet_alpha,
         "batch_size": args.batch_size if args.batch_size is not None else MCTS_BATCH_SIZE,
         "virtual_loss": args.virtual_loss if args.virtual_loss is not None else MCTS_VIRTUAL_LOSS,
+        "use_prior": not args.no_prior,
     }
 
     # 原子写入 sample.json
@@ -152,6 +153,8 @@ def parse_args():
                    help="virtual loss 值（默认读取 MCTS_VIRTUAL_LOSS 配置）")
     p.add_argument("--output", default=None,
                    help="输出目录名（默认 {model}_mcts_{timestamp}）")
+    p.add_argument("--no-prior", action="store_true",
+                   help="禁用模型先验概率，MCTS 仅依赖价值评估")
     p.add_argument("--device", default="cuda",
                    help="推理设备（默认 cuda）")
     return p.parse_args()
@@ -193,6 +196,7 @@ def run_self_play(args):
         "dirichlet_alpha": args.dirichlet_alpha,
         "batch_size": args.batch_size if args.batch_size is not None else MCTS_BATCH_SIZE,
         "virtual_loss": args.virtual_loss if args.virtual_loss is not None else MCTS_VIRTUAL_LOSS,
+        "use_prior": not args.no_prior,
     }
     print(f"[超参数] {hyperparams}")
 
@@ -269,6 +273,7 @@ def play_one_game(model, device, hyperparams: dict, game_idx: int, run_id: str) 
     dirichlet_alpha = hyperparams["dirichlet_alpha"]
     batch_size = hyperparams["batch_size"]
     virtual_loss = hyperparams["virtual_loss"]
+    use_prior = hyperparams["use_prior"]
 
     # 通过 AIEngineBuilder 创建策略-价值引擎（内部自动创建 MCTSSearcher + PolicyValueAiEngine）
     log_key_prefix = f"run{run_id}_game{game_idx}"
@@ -283,6 +288,7 @@ def play_one_game(model, device, hyperparams: dict, game_idx: int, run_id: str) 
         temperature=temperature,
         temp_steps=temp_steps,
         log_key_prefix=log_key_prefix,
+        use_prior=use_prior,
     )
 
     # 初始化棋盘

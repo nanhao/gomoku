@@ -62,6 +62,8 @@ class DualHeadTrainer(ABC):
         lr: float = None,
         weight_decay: float = None,
         gen: Optional[int] = None,
+        value_loss_weight: float = 1.0,
+        policy_loss_weight: float = 0.0,
     ):
         """初始化训练器
 
@@ -72,8 +74,12 @@ class DualHeadTrainer(ABC):
             lr: 学习率，None 时使用 DEFAULT_LR
             weight_decay: AdamW 权重衰减，None 时使用 DEFAULT_WEIGHT_DECAY
             gen: 代数
+            value_loss_weight: 价值损失权重，默认 1.0。设为 0 可禁用来做消融实验
+            policy_loss_weight: 策略损失权重，默认 1.0。设为 0 可禁用来做消融实验
         """
         self.gen = gen
+        self.value_loss_weight = value_loss_weight
+        self.policy_loss_weight = policy_loss_weight
         self.device = device if device is not None else get_device()
 
         # 创建或保存模型
@@ -173,8 +179,8 @@ class DualHeadTrainer(ABC):
         # p_log 已是 LogSoftmax 输出，绝不二次取 log
         policy_loss = -(pi_targets * p_log).sum(dim=1).mean()
 
-        # T9: 总损失（等权相加）
-        total_loss = value_loss + policy_loss
+        # T9: 总损失（value/policy loss 可加权以支持消融实验）
+        total_loss = self.value_loss_weight * value_loss + self.policy_loss_weight * policy_loss
 
         # T10: 反向传播
         total_loss.backward()
@@ -382,7 +388,7 @@ class DualHeadTrainer(ABC):
             p_log, v = self.model.network(val_inputs)
             value_loss = F.mse_loss(v, val_z).item()
             policy_loss = (-(val_pi * p_log).sum(dim=1).mean()).item()
-            total_loss = value_loss + policy_loss
+            total_loss = self.value_loss_weight * value_loss + self.policy_loss_weight * policy_loss
         self.model.network.train()
         return {
             "value_loss": value_loss,
