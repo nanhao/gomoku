@@ -20,8 +20,7 @@ if _proj_root not in sys.path:
 
 import torch
 
-from ai.models.cnn_v7.model import CNNV7Model
-from ai.models.cnn_v7.trainer import CNNV7Trainer
+from ai.registry import get_model, get_trainer
 
 
 # ---------- 参数解析 ----------
@@ -34,6 +33,8 @@ def parse_args():
     )
     p.add_argument("--model", required=True,
                    help="初始权重文件路径（以此为起点训练）")
+    p.add_argument("--model-name", default=None,
+                   help="模型注册名.代数，如 cnn_v8.1。默认从 --model 路径自动解析")
     p.add_argument("--train-from-dir", required=True, nargs='+',
                    help="训练数据目录（sample.json 所在目录），可指定多个")
     p.add_argument("--epochs", type=int, required=True,
@@ -81,12 +82,35 @@ def run_train(args):
 
     # 加载模型
     print(f"[加载模型] {args.model}")
-    model = CNNV7Model(model_path=args.model, fresh=False)
+    model_spec = getattr(args, 'model_name', None)
+    if model_spec:
+        model = get_model(model_spec)
+    else:
+        model_path = os.path.normpath(args.model)
+        parts = model_path.split(os.sep)
+        model_name = None
+        model_gen = None
+        for i, p in enumerate(parts):
+            if p.startswith("gen"):
+                model_gen = int(p[3:])
+                if i >= 1:
+                    model_name = parts[i - 1]
+                break
+        if model_name and model_gen:
+            spec = f"{model_name}.{model_gen}"
+            model = get_model(spec)
+        else:
+            raise ValueError(
+                f"无法从路径 '{args.model}' 解析模型名称和代数。"
+                f"请使用 --model-name 显式指定"
+            )
     model.move_to_device(device)
 
     # 创建训练器
+    trainer_spec = model_spec if model_spec else f"{model_name}.{model_gen}"
     print(f"[训练器] lr={args.lr}, weight_decay={args.l2_reg}, batch_size={args.batch_size}")
-    trainer = CNNV7Trainer(
+    trainer = get_trainer(
+        trainer_spec,
         model=model,
         lr=args.lr,
         weight_decay=args.l2_reg,

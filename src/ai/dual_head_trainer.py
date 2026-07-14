@@ -63,7 +63,7 @@ class DualHeadTrainer(ABC):
         weight_decay: float = None,
         gen: Optional[int] = None,
         value_loss_weight: float = 1.0,
-        policy_loss_weight: float = 0.0,
+        policy_loss_weight: float = 1.0,
     ):
         """初始化训练器
 

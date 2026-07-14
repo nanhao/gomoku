@@ -289,7 +289,7 @@ class TestRunSelfPlayIntegration(unittest.TestCase):
         """创建真实的 argparse.Namespace"""
         import argparse
         parser = argparse.ArgumentParser()
-        parser.add_argument("--model", default="test_model")
+        parser.add_argument("--model", default="models/cnn_v7/gen1/cnn_v7.pth")
         parser.add_argument("--games", type=int, default=games)
         parser.add_argument("--simulations", type=int, default=10)
         parser.add_argument("--c-puct", type=float, default=2.0)
@@ -310,16 +310,16 @@ class TestRunSelfPlayIntegration(unittest.TestCase):
     def test_run_self_play_normal_exit(self):
         """T1: 正常运行完成 → sample.json 和 summary.json 正确生成"""
         import torch
-        from ai.models.cnn_v7.model import CNNV7Model
+        from ai.models.cnn_v8.model import CNNV8Model
         from unittest.mock import patch
 
         args = self._create_args(games=2)
         self.mcts_self_play._SAVE_INTERVAL = 50  # 2 < 50, 不触发周期保存
 
-        # 使用 patch 替换 CNNV7Model 以避免加载真实权重
-        with patch.object(CNNV7Model, '__init__', return_value=None):
-            with patch.object(CNNV7Model, 'move_to_device', return_value=None):
-                model = CNNV7Model.__new__(CNNV7Model)
+        # 使用 patch 替换 CNNV8Model 以避免加载真实权重
+        with patch.object(CNNV8Model, '__init__', return_value=None):
+            with patch.object(CNNV8Model, 'move_to_device', return_value=None):
+                model = CNNV8Model.__new__(CNNV8Model)
                 model.move_to_device = MagicMock()
 
                 # Mock play_one_game 返回伪造样本（2 局各 5 步）
@@ -328,7 +328,7 @@ class TestRunSelfPlayIntegration(unittest.TestCase):
 
                 with patch.object(self.mcts_self_play, 'play_one_game',
                                   side_effect=fake_play_one_game):
-                    with patch.object(self.mcts_self_play, 'CNNV7Model',
+                    with patch.object(self.mcts_self_play, 'get_model',
                                       return_value=model):
                         self.mcts_self_play.run_self_play(args)
 
@@ -351,7 +351,7 @@ class TestRunSelfPlayIntegration(unittest.TestCase):
     def test_run_self_play_merge_existing(self):
         """T5: 已有 sample.json → 新样本合并后写入"""
         import torch
-        from ai.models.cnn_v7.model import CNNV7Model
+        from ai.models.cnn_v8.model import CNNV8Model
         from unittest.mock import patch
 
         # 预写已有 sample.json
@@ -363,9 +363,9 @@ class TestRunSelfPlayIntegration(unittest.TestCase):
         args = self._create_args(games=2)
         self.mcts_self_play._SAVE_INTERVAL = 50
 
-        with patch.object(CNNV7Model, '__init__', return_value=None):
-            with patch.object(CNNV7Model, 'move_to_device', return_value=None):
-                model = CNNV7Model.__new__(CNNV7Model)
+        with patch.object(CNNV8Model, '__init__', return_value=None):
+            with patch.object(CNNV8Model, 'move_to_device', return_value=None):
+                model = CNNV8Model.__new__(CNNV8Model)
                 model.move_to_device = MagicMock()
 
                 def fake_play_one_game(model, device, hyperparams, game_idx, run_id):
@@ -373,7 +373,7 @@ class TestRunSelfPlayIntegration(unittest.TestCase):
 
                 with patch.object(self.mcts_self_play, 'play_one_game',
                                   side_effect=fake_play_one_game):
-                    with patch.object(self.mcts_self_play, 'CNNV7Model',
+                    with patch.object(self.mcts_self_play, 'get_model',
                                       return_value=model):
                         self.mcts_self_play.run_self_play(args)
 
@@ -405,7 +405,7 @@ class TestPeriodicSaveOrchestration(unittest.TestCase):
     def test_periodic_save_called_at_interval(self):
         """T2: 运行 110 局 → 在第 50 和 100 局时触发保存"""
         import torch
-        from ai.models.cnn_v7.model import CNNV7Model
+        from ai.models.cnn_v8.model import CNNV8Model
         from unittest.mock import patch
 
         args = self._create_args(games=110, output_dir=self.temp_dir)
@@ -415,9 +415,9 @@ class TestPeriodicSaveOrchestration(unittest.TestCase):
         self.module._SAVE_INTERVAL = 50
 
         try:
-            with patch.object(CNNV7Model, '__init__', return_value=None):
-                with patch.object(CNNV7Model, 'move_to_device', return_value=None):
-                    model = CNNV7Model.__new__(CNNV7Model)
+            with patch.object(CNNV8Model, '__init__', return_value=None):
+                with patch.object(CNNV8Model, 'move_to_device', return_value=None):
+                    model = CNNV8Model.__new__(CNNV8Model)
                     model.move_to_device = MagicMock()
 
                     # 每局返回 2 条样本
@@ -434,7 +434,7 @@ class TestPeriodicSaveOrchestration(unittest.TestCase):
 
                     with patch.object(self.module, 'play_one_game',
                                       side_effect=fake_play_one_game):
-                        with patch.object(self.module, 'CNNV7Model',
+                        with patch.object(self.module, 'get_model',
                                           return_value=model):
                             with patch.object(self.module, '_save_progress',
                                               side_effect=fake_save_progress):
@@ -449,7 +449,7 @@ class TestPeriodicSaveOrchestration(unittest.TestCase):
     def _create_args(self, games: int, output_dir: str):
         import argparse
         parser = argparse.ArgumentParser()
-        parser.add_argument("--model", default="test_model")
+        parser.add_argument("--model", default="models/cnn_v7/gen1/cnn_v7.pth")
         parser.add_argument("--games", type=int, default=games)
         parser.add_argument("--simulations", type=int, default=10)
         parser.add_argument("--c-puct", type=float, default=2.0)

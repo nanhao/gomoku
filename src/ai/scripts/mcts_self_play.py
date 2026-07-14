@@ -23,7 +23,7 @@ if _proj_root not in sys.path:
 
 import torch
 
-from ai.models.cnn_v7.model import CNNV7Model
+from ai.registry import get_model
 from ai.engine.builder import AIEngineBuilder
 from ai.constants import STRATEGY_SAMPLING
 from config.mcts import MCTS_BATCH_SIZE, MCTS_VIRTUAL_LOSS
@@ -133,6 +133,8 @@ def parse_args():
     )
     p.add_argument("--model", required=True,
                    help="权重文件路径（加载此 .pth 做 MCTS 推理）")
+    p.add_argument("--model-name", default=None,
+                   help="模型注册名.代数，如 cnn_v8.1。默认从 --model 路径自动解析")
     p.add_argument("--games", type=int, required=True,
                    help="对弈局数")
     p.add_argument("--simulations", type=int, default=800,
@@ -183,7 +185,30 @@ def run_self_play(args):
 
     # 加载模型
     print(f"[加载模型] {args.model}")
-    model = CNNV7Model(model_path=args.model, fresh=False)
+    model_spec = getattr(args, 'model_name', None)
+    if model_spec:
+        # 显式指定了模型名.代数 → 用 registry
+        model = get_model(model_spec)
+    else:
+        # 从路径解析模型名和代数：src/ai/models/cnn_v8/gen1/cnn_v8.pth → cnn_v8.1
+        model_path = os.path.normpath(args.model)
+        parts = model_path.split(os.sep)
+        model_name = None
+        model_gen = None
+        for i, p in enumerate(parts):
+            if p.startswith("gen"):
+                model_gen = int(p[3:])
+                if i >= 1:
+                    model_name = parts[i - 1]
+                break
+        if model_name and model_gen:
+            spec = f"{model_name}.{model_gen}"
+            model = get_model(spec)
+        else:
+            raise ValueError(
+                f"无法从路径 '{args.model}' 解析模型名称和代数。"
+                f"请使用 --model-name 显式指定，如 --model-name cnn_v8.1"
+            )
     model.move_to_device(device)
 
     # 超参数汇总（None 时回退到配置默认值）
