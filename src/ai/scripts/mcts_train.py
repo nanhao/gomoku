@@ -9,8 +9,11 @@
 """
 
 import argparse
+import json
 import os
+import shutil
 import sys
+import tempfile
 from typing import List
 
 # 确保项目根在 sys.path 中
@@ -66,15 +69,29 @@ def run_train(args):
     device = torch.device("cuda" if use_cuda else "cpu")
     print(f"[设备] {device}")
 
-    # 验证输入目录：支持直接 sample.json 或子目录自动发现
+    # 验证输入目录：支持直接 sample.json、额外样本文件、子目录自动发现
     train_dirs: List[str] = []
+    temp_dirs: List[str] = []  # 为额外样本文件创建的临时目录，训练结束后清理
     for d in args.train_from_dir:
         sample_path = os.path.join(d, "sample.json")
+        if not os.path.isdir(d):
+            print(f"[警告] 路径不存在或不是目录: {d}，跳过")
+            continue
+
         if os.path.exists(sample_path):
             # 目录自身包含 sample.json，直接使用
             n_samples = _count_samples(sample_path)
-            print(f"[数据] {d} — {n_samples} 条样本")
+            print(f"[数据] {d}/sample.json — {n_samples} 条样本")
             train_dirs.append(d)
+
+            # 同时发现目录下其他样本文件（如 sample copy.json），排除 summary.json
+            extra_files = _discover_extra_samples(d)
+            for extra_path in extra_files:
+                n = _count_samples(extra_path)
+                tmp_dir = _create_temp_sample_dir(extra_path)
+                temp_dirs.append(tmp_dir)
+                train_dirs.append(tmp_dir)
+                print(f"[数据] {d}/{os.path.basename(extra_path)} — {n} 条样本")
         else:
             # 目录自身无 sample.json，扫描子目录自动发现
             sub_dirs = discover_sample_dirs(d)
@@ -145,6 +162,10 @@ def run_train(args):
     print(f"[保存模型] {output_path}")
     trainer.save_model(output_path)
 
+    # 清理为额外样本文件创建的临时目录
+    for td in temp_dirs:
+        shutil.rmtree(td, ignore_errors=True)
+
     # 输出最终损失
     if history:
         final = history[-1]
@@ -157,13 +178,57 @@ def run_train(args):
 
 def _count_samples(sample_path: str) -> int:
     """统计 sample.json 中的样本数（不加载全部内容）"""
-    import json
     try:
         with open(sample_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         return len(data) if isinstance(data, list) else 0
     except Exception:
         return 0
+
+
+def _discover_extra_samples(directory: str) -> List[str]:
+    """发现目录下除 sample.json 和 summary.json 以外的样本 JSON 文件
+
+    扫描 directory 下所有 .json 文件，排除 sample.json 和 summary.json，
+    返回内容为合法 JSON 数组的文件路径列表。
+
+    Args:
+        directory: 要扫描的目录路径
+
+    Returns:
+        额外样本文件路径列表
+    """
+    extra = []
+    try:
+        for entry in os.listdir(directory):
+            if not entry.endswith('.json'):
+                continue
+            if entry in ('sample.json', 'summary.json'):
+                continue
+            full_path = os.path.join(directory, entry)
+            if not os.path.isfile(full_path):
+                continue
+            # 验证是否为合法样本数组
+            if _count_samples(full_path) > 0:
+                extra.append(full_path)
+    except OSError:
+        pass
+    return extra
+
+
+def _create_temp_sample_dir(source_path: str) -> str:
+    """为额外样本文件创建临时目录，将其复制为 sample.json
+
+    Args:
+        source_path: 原始样本文件路径
+
+    Returns:
+        临时目录路径（调用方负责清理）
+    """
+    tmp_dir = tempfile.mkdtemp(prefix="mcts_extra_")
+    dest_path = os.path.join(tmp_dir, "sample.json")
+    shutil.copy2(source_path, dest_path)
+    return tmp_dir
 
 
 # ---------- 入口 ----------
