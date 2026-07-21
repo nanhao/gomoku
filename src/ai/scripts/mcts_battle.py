@@ -3,8 +3,8 @@
 使用 MCTS 搜索让两个模型对打，输出胜率统计。
 
 用法：
-    python src/ai/scripts/mcts_battle.py --model1 cnn_v8.10.pth --model2 cnn_v8.11.pth --games 100
-    python src/ai/scripts/mcts_battle.py --model1 cnn_v8.10.pth --model1-name cnn_v8.10 --model2 cnn_v8.11.pth --model2-name cnn_v8.11 --games 200 --workers 4
+    python src/ai/scripts/mcts_battle.py --model1 cnn_v8.10 --model2 cnn_v8.11 --games 100
+    python src/ai/scripts/mcts_battle.py --model1 cnn_v8.10 --model2 cnn_v8.11 --games 200 --workers 4
 
 设计文档：design/42/main_docs/mcts_battle_design.md
 """
@@ -91,13 +91,9 @@ def parse_args():
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument("--model1", required=True,
-                   help="模型1 权重文件路径")
-    p.add_argument("--model1-name", default=None,
-                   help="模型1 注册名.代数，如 cnn_v8.10。默认从 --model1 路径自动解析")
+                   help="模型1 注册名.代数，如 cnn_v8.10")
     p.add_argument("--model2", required=True,
-                   help="模型2 权重文件路径")
-    p.add_argument("--model2-name", default=None,
-                   help="模型2 注册名.代数，如 cnn_v8.11。默认从 --model2 路径自动解析")
+                   help="模型2 注册名.代数，如 cnn_v8.11")
     p.add_argument("--games", type=int, required=True,
                    help="对战局数")
     p.add_argument("--simulations", type=int, default=800,
@@ -126,22 +122,6 @@ def parse_args():
 
 
 # ---------- 输出函数 ----------
-
-def _get_model_display_name(model_path: str, model_name: str) -> str:
-    """获取模型显示名称
-
-    Args:
-        model_path: 权重文件路径
-        model_name: 注册名.代数（可能为 None）
-
-    Returns:
-        用于显示的模型名称
-    """
-    if model_name:
-        return model_name
-    # 从路径提取文件名（不含扩展名）
-    return os.path.splitext(os.path.basename(model_path))[0]
-
 
 def _print_statistics(model1_name: str, model2_name: str,
                       results: List[BattleGameResult]) -> None:
@@ -213,9 +193,9 @@ def run_battle(args):
     hyperparams = _build_hyperparams(args)
     print(f"[超参数] {hyperparams}")
 
-    # 模型显示名称
-    model1_display = _get_model_display_name(args.model1, args.model1_name)
-    model2_display = _get_model_display_name(args.model2, args.model2_name)
+    # 模型名称直接使用 spec 字符串用于显示
+    model1_display = args.model1
+    model2_display = args.model2
     print(f"[模型] model1={model1_display}, model2={model2_display}")
 
     # 生成本次运行的唯一标识
@@ -267,10 +247,8 @@ def _run_single_process(args, hyperparams: dict, run_id: str, device) -> List[Ba
     print(f"[加载模型2] {args.model2}")
 
     worker = MctsBattleWorker(
-        model1_path=args.model1,
-        model1_name=args.model1_name,
-        model2_path=args.model2,
-        model2_name=args.model2_name,
+        model1_spec=args.model1,
+        model2_spec=args.model2,
         device=str(device),
         config=config,
     )
@@ -310,10 +288,8 @@ def _run_multi_process(args, hyperparams: dict, run_id: str,
             for chunk in chunks:
                 future = executor.submit(
                     MctsBattleWorker.worker_entry,
-                    model1_path=args.model1,
-                    model1_name=args.model1_name,
-                    model2_path=args.model2,
-                    model2_name=args.model2_name,
+                    model1_spec=args.model1,
+                    model2_spec=args.model2,
                     device="cpu",
                     config=config,
                     game_indices=chunk,

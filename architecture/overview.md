@@ -269,8 +269,8 @@ tests/
 | 训练模型 | `python src/ai/train_main.py --model cnn_v7.2 --fresh --train-from-dir data --epochs 300` |
 | MCTS 自对弈 | `python src/ai/scripts/mcts_self_play.py --model cnn_v7.pth --games 100` |
 | MCTS 自对弈（多进程） | `python src/ai/scripts/mcts_self_play.py --model cnn_v7.pth --games 100 --workers 4` |
-| MCTS 双模型对战 | `python src/ai/scripts/mcts_battle.py --model1 cnn_v8.10.pth --model2 cnn_v8.11.pth --games 100` |
-| MCTS 双模型对战（多进程） | `python src/ai/scripts/mcts_battle.py --model1 cnn_v8.10.pth --model2 cnn_v8.11.pth --games 100 --workers 4` |
+| MCTS 双模型对战 | `python src/ai/scripts/mcts_battle.py --model1 cnn_v8.10 --model2 cnn_v8.11 --games 100` |
+| MCTS 双模型对战（多进程） | `python src/ai/scripts/mcts_battle.py --model1 cnn_v8.10 --model2 cnn_v8.11 --games 100 --workers 4` |
 | MCTS 训练 | `python src/ai/scripts/mcts_train.py --model cnn_v7.pth --train-from-dir samples --epochs 100` |
 | 迭代进化 | `python src/ai/iterative_train.py --ai1 cnn_v4.99 --ai2 cnn_v4.100 --sample_dir samples` |
 | 运行测试 | `python -m pytest tests/ -v -s` |

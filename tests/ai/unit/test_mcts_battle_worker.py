@@ -6,7 +6,6 @@
 
 import os
 import sys
-import tempfile
 import unittest
 
 # 添加项目根目录到路径
@@ -48,32 +47,24 @@ class TestBattleGameResult(unittest.TestCase):
 class TestMctsBattleWorker(unittest.TestCase):
     """MctsBattleWorker 类单元测试 — TC2.1 ~ TC2.8"""
 
-    @classmethod
-    def setUpClass(cls):
-        """创建两个测试用的随机权重模型文件"""
-        cls._model1 = CNNV7Model(fresh=True)
-        cls._model2 = CNNV7Model(fresh=True)
-        cls._tmpdir = tempfile.TemporaryDirectory()
-        cls._model1_path = os.path.join(cls._tmpdir.name, "model1.pth")
-        cls._model2_path = os.path.join(cls._tmpdir.name, "model2.pth")
-        cls._model1.save(cls._model1_path)
-        cls._model2.save(cls._model2_path)
+    # 测试用的桩 spec 字符串（使用 _model 注入，不走 registry）
+    _DUMMY_SPEC1 = "test_model_1"
+    _DUMMY_SPEC2 = "test_model_2"
 
     @classmethod
-    def tearDownClass(cls):
-        """清理临时模型文件"""
-        cls._tmpdir.cleanup()
+    def setUpClass(cls):
+        """创建两个测试用的随机权重模型实例"""
+        cls._model1 = CNNV7Model(fresh=True)
+        cls._model2 = CNNV7Model(fresh=True)
 
     # ---------- TC2.1: 正常加载两个模型 ----------
 
     def test_constructor_loads_two_models(self):
-        """TC2.1: 创建 worker，两个模型均加载到 CPU"""
+        """TC2.1: 创建 worker（注入模型），两个模型均可用"""
         cfg = MctsSelfPlayConfig(simulations=2)
         worker = MctsBattleWorker(
-            model1_path=self._model1_path,
-            model1_name=None,
-            model2_path=self._model2_path,
-            model2_name=None,
+            model1_spec=self._DUMMY_SPEC1,
+            model2_spec=self._DUMMY_SPEC2,
             device="cpu",
             config=cfg,
             _model1=self._model1,
@@ -89,10 +80,8 @@ class TestMctsBattleWorker(unittest.TestCase):
         """TC2.3: 执行单局返回 1 个 BattleGameResult，winner ∈ {0,1,2}"""
         cfg = MctsSelfPlayConfig(simulations=2)
         worker = MctsBattleWorker(
-            model1_path=self._model1_path,
-            model1_name=None,
-            model2_path=self._model2_path,
-            model2_name=None,
+            model1_spec=self._DUMMY_SPEC1,
+            model2_spec=self._DUMMY_SPEC2,
             device="cpu",
             config=cfg,
             _model1=self._model1,
@@ -115,10 +104,8 @@ class TestMctsBattleWorker(unittest.TestCase):
         """TC2.4: 执行 3 局返回 3 个结果，game_idx 覆盖 [0,1,2]"""
         cfg = MctsSelfPlayConfig(simulations=2)
         worker = MctsBattleWorker(
-            model1_path=self._model1_path,
-            model1_name=None,
-            model2_path=self._model2_path,
-            model2_name=None,
+            model1_spec=self._DUMMY_SPEC1,
+            model2_spec=self._DUMMY_SPEC2,
             device="cpu",
             config=cfg,
             _model1=self._model1,
@@ -135,10 +122,8 @@ class TestMctsBattleWorker(unittest.TestCase):
         """TC2.5: 50 局中 model1 执黑次数在 15~35 之间"""
         cfg = MctsSelfPlayConfig(simulations=2)
         worker = MctsBattleWorker(
-            model1_path=self._model1_path,
-            model1_name=None,
-            model2_path=self._model2_path,
-            model2_name=None,
+            model1_spec=self._DUMMY_SPEC1,
+            model2_spec=self._DUMMY_SPEC2,
             device="cpu",
             config=cfg,
             _model1=self._model1,
@@ -156,10 +141,8 @@ class TestMctsBattleWorker(unittest.TestCase):
         """TC2.6: 连续执行 2 局，两局结果独立"""
         cfg = MctsSelfPlayConfig(simulations=2)
         worker = MctsBattleWorker(
-            model1_path=self._model1_path,
-            model1_name=None,
-            model2_path=self._model2_path,
-            model2_name=None,
+            model1_spec=self._DUMMY_SPEC1,
+            model2_spec=self._DUMMY_SPEC2,
             device="cpu",
             config=cfg,
             _model1=self._model1,
@@ -177,10 +160,8 @@ class TestMctsBattleWorker(unittest.TestCase):
         """TC2.8: device='cpu' 时两个模型参数均在 CPU 上"""
         cfg = MctsSelfPlayConfig(simulations=2)
         worker = MctsBattleWorker(
-            model1_path=self._model1_path,
-            model1_name=None,
-            model2_path=self._model2_path,
-            model2_name=None,
+            model1_spec=self._DUMMY_SPEC1,
+            model2_spec=self._DUMMY_SPEC2,
             device="cpu",
             config=cfg,
             _model1=self._model1,
