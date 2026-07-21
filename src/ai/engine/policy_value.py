@@ -161,6 +161,33 @@ class PolicyValueAiEngine(AIEngine):
 
     # ---------- 内部方法 ----------
 
+    @staticmethod
+    def compute_prob_from_q(
+        q_values: List[float], visit_counts: List[int], tau: float = 1.0
+    ) -> List[float]:
+        """从 Q 值计算 225 维概率分布
+
+        Q ∈ [-1, 1] → score = (Q+1)/2 ∈ [0, 1] → score^(1/τ) → 归一化。
+        仅考虑 visit_counts > 0 的已访问动作，未访问动作为 0。
+        供落子决策和样本 pi 计算共用。
+
+        Args:
+            q_values: 225 维 Q 值
+            visit_counts: 225 维访问计数
+            tau: 温度参数，默认 1.0
+
+        Returns:
+            225 维概率分布，总和为 1
+        """
+        scores = [((q_values[a] + 1.0) / 2.0) if visit_counts[a] > 0 else 0.0
+                  for a in range(225)]
+        if tau != 1.0:
+            scores = [s ** (1.0 / tau) if s > 0 else 0.0 for s in scores]
+        total = sum(scores)
+        if total > 0:
+            return [s / total for s in scores]
+        return [1.0 / 225] * 225
+
     def _get_temperature(self) -> float:
         """根据当前步数和温度步数决定温度值
 
@@ -196,41 +223,26 @@ class PolicyValueAiEngine(AIEngine):
     def _sample_action_q(
         q_values: List[float], visit_counts: List[int], board: List[int], tau: float
     ) -> int:
-        """基于 Q 值的温度采样选择动作（仅已访问边）
+        """基于 Q 值的温度采样选择动作（仅已访问空位）
 
-        Q ∈ [-1, 1]，先映射到 [0, 1]：score = (Q + 1) / 2，再 score^(1/τ) 采样。
-
-        Args:
-            q_values: 225 维 Q 值
-            visit_counts: 225 维访问计数
-            board: 225 维棋盘
-            tau: 温度参数
-
-        Returns:
-            选中动作索引
+        委托 compute_prob_from_q 计算概率分布，再从合法动作中采样。
         """
-        weights = []
-        actions = []
-        for action in range(225):
-            if board[action] == 0 and visit_counts[action] > 0:
-                score = (q_values[action] + 1.0) / 2.0  # [-1,1] → [0,1]
-                weight = score ** (1.0 / tau) if score > 0 else 0.0
-                weights.append(weight)
-                actions.append(action)
-
+        actions = [a for a in range(225)
+                   if board[a] == 0 and visit_counts[a] > 0]
         if not actions:
             return 0
 
+        probs = PolicyValueAiEngine.compute_prob_from_q(q_values, visit_counts, tau)
+        weights = [probs[a] for a in actions]
         total = sum(weights)
         if total <= 0:
             return random.choice(actions)
 
-        probs = [w / total for w in weights]
+        probs_norm = [w / total for w in weights]
         r = random.random()
         cumulative = 0.0
-        for i, p in enumerate(probs):
+        for i, p in enumerate(probs_norm):
             cumulative += p
             if r <= cumulative:
                 return actions[i]
-
         return actions[-1]

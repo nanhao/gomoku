@@ -11,6 +11,7 @@ from typing import List, Optional
 
 from ai.registry import get_model
 from ai.engine.builder import AIEngineBuilder
+from ai.engine.policy_value import PolicyValueAiEngine
 from ai.constants import STRATEGY_SAMPLING
 from game.game import check_winner, is_board_full
 
@@ -206,17 +207,10 @@ class MctsSelfPlayWorker:
             x, y = md.get_position()
             action = x * 15 + y
 
-            # 计算 π 分布：基于 Q 值（与落子决策统一），仅已访问边
-            # Q ∈ [-1,1] → score ∈ [0,1] → 归一化，τ=1.0
+            # 计算 π 分布：基于 Q 值（与落子决策共用 compute_prob_from_q），τ=1.0
             q_values = md.get_mcts_q_values() or [0.0] * 225
             visit_counts = md.get_mcts_visit_counts()
-            scores = [((q_values[a] + 1.0) / 2.0) if visit_counts[a] > 0 else 0.0
-                      for a in range(225)]
-            total_score = sum(scores)
-            if total_score > 0:
-                pi = [s / total_score for s in scores]
-            else:
-                pi = [1.0 / 225] * 225
+            pi = PolicyValueAiEngine.compute_prob_from_q(q_values, visit_counts)
 
             # 记录样本（z 暂填 0，终局后回填）
             samples.append({"state": state, "pi": pi, "z": 0})
