@@ -21,6 +21,7 @@ if _proj_root not in sys.path:
 import torch
 
 from ai.registry import get_model, get_trainer
+from ai.runners import discover_sample_dirs
 
 
 # ---------- 参数解析 ----------
@@ -65,16 +66,24 @@ def run_train(args):
     device = torch.device("cuda" if use_cuda else "cpu")
     print(f"[设备] {device}")
 
-    # 验证输入目录
+    # 验证输入目录：支持直接 sample.json 或子目录自动发现
     train_dirs: List[str] = []
     for d in args.train_from_dir:
         sample_path = os.path.join(d, "sample.json")
-        if not os.path.exists(sample_path):
-            print(f"[警告] 目录 {d} 中没有 sample.json，跳过")
-            continue
-        n_samples = _count_samples(sample_path)
-        print(f"[数据] {d} — {n_samples} 条样本")
-        train_dirs.append(d)
+        if os.path.exists(sample_path):
+            # 目录自身包含 sample.json，直接使用
+            n_samples = _count_samples(sample_path)
+            print(f"[数据] {d} — {n_samples} 条样本")
+            train_dirs.append(d)
+        else:
+            # 目录自身无 sample.json，扫描子目录自动发现
+            sub_dirs = discover_sample_dirs(d)
+            if sub_dirs:
+                total = sum(_count_samples(os.path.join(sd, "sample.json")) for sd in sub_dirs)
+                print(f"[数据] {d} — 发现 {len(sub_dirs)} 个子目录，共 {total} 条样本")
+                train_dirs.extend(sub_dirs)
+            else:
+                print(f"[警告] 目录 {d} 中未找到 sample.json（含子目录），跳过")
 
     if not train_dirs:
         print("[错误] 没有找到有效的训练数据目录")
