@@ -240,6 +240,7 @@ class AIGameManager:
             # 此时回退到 mcts_visit_counts 作为概率分布的近似
             mcts_counts = decision.get_mcts_visit_counts()
             mcts_value = decision.get_mcts_root_value()
+            mcts_q = decision.get_mcts_q_values()
             if probs is None and mcts_counts is not None:
                 probs = mcts_counts
             # 第四十一次追加：按策略传递温度采样信息
@@ -263,6 +264,7 @@ class AIGameManager:
                     sampling_probs=sampling_probs,
                     mcts_probs=mcts_counts,
                     mcts_value=mcts_value,
+                    mcts_q_values=mcts_q,
                 )
             else:
                 recorder.record_move(
@@ -270,6 +272,7 @@ class AIGameManager:
                     strategy=STRATEGY_ARGMAX,
                     mcts_probs=mcts_counts,
                     mcts_value=mcts_value,
+                    mcts_q_values=mcts_q,
                 )
 
             # 执行落子

@@ -110,22 +110,27 @@ class PolicyValueAiEngine(AIEngine):
             state, log_key=log_key
         )
 
-        # 4. 按策略选择动作
+        # 4. 提取根节点各边的 Q 值
+        q_values = [0.0] * 225
+        root_hash = self.searcher._root_hash
+        if root_hash and root_hash in self.searcher.tree:
+            for action, edge in self.searcher.tree[root_hash]["edges"].items():
+                q_values[action] = edge.get("Q", 0.0)
+
+        # 5. 按策略选择动作（基于 Q 值，仅考虑已访问的边）
         if strategy == STRATEGY_ARGMAX:
-            # 强制贪婪选择（忽略温度）
-            action = self._select_greedy(visit_counts, state[:225])
+            action = self._select_greedy_q(q_values, visit_counts, state[:225])
         else:  # STRATEGY_SAMPLING
-            # 按内部温度逻辑决定 tau，然后采样
             tau = self._get_temperature()
             if tau <= 0:
-                action = self._select_greedy(visit_counts, state[:225])
+                action = self._select_greedy_q(q_values, visit_counts, state[:225])
             else:
-                action = self._sample_action(visit_counts, state[:225], tau)
+                action = self._sample_action_q(q_values, visit_counts, state[:225], tau)
 
         # 转换 flat index 为 (x, y) 坐标
         x, y = action // 15, action % 15
 
-        return MoveDecision(x, y, mcts_visit_counts=visit_counts, mcts_root_value=root_value)
+        return MoveDecision(x, y, mcts_visit_counts=visit_counts, mcts_root_value=root_value, mcts_q_values=q_values)
 
     def after_move(self, x: int, y: int):
         """落子后钩子：推进搜索树根节点
@@ -166,10 +171,13 @@ class PolicyValueAiEngine(AIEngine):
         return -0.5  # 探索步数之后纯贪婪
 
     @staticmethod
-    def _select_greedy(visit_counts: List[int], board: List[int]) -> int:
-        """贪婪选择：在合法空位中选访问计数最大的
+    def _select_greedy_q(q_values: List[float], visit_counts: List[int], board: List[int]) -> int:
+        """贪婪选择：在已访问的空位中选 Q 值最大的
+
+        仅考虑 N > 0 的边，防止选中未访问边（Q 默认为 0 但无子节点）。
 
         Args:
+            q_values: 225 维 Q 值（-1 到 1）
             visit_counts: 225 维访问计数
             board: 225 维棋盘（0=空）
 
@@ -177,22 +185,23 @@ class PolicyValueAiEngine(AIEngine):
             选中动作索引
         """
         best_action = None
-        best_count = -1
+        best_q = float("-inf")
         for action in range(225):
-            if board[action] == 0 and visit_counts[action] > best_count:
-                best_count = visit_counts[action]
+            if board[action] == 0 and visit_counts[action] > 0 and q_values[action] > best_q:
+                best_q = q_values[action]
                 best_action = action
         return best_action if best_action is not None else 0
 
     @staticmethod
-    def _sample_action(
-        visit_counts: List[int], board: List[int], tau: float
+    def _sample_action_q(
+        q_values: List[float], visit_counts: List[int], board: List[int], tau: float
     ) -> int:
-        """温度采样选择动作
+        """基于 Q 值的温度采样选择动作（仅已访问边）
 
-        π(a) ∝ N(a)^(1/τ)，仅考虑空位。
+        Q ∈ [-1, 1]，先映射到 [0, 1]：score = (Q + 1) / 2，再 score^(1/τ) 采样。
 
         Args:
+            q_values: 225 维 Q 值
             visit_counts: 225 维访问计数
             board: 225 维棋盘
             tau: 温度参数
@@ -200,12 +209,12 @@ class PolicyValueAiEngine(AIEngine):
         Returns:
             选中动作索引
         """
-        # 计算采样权重（仅空位）
         weights = []
         actions = []
         for action in range(225):
-            if board[action] == 0:
-                weight = visit_counts[action] ** (1.0 / tau) if visit_counts[action] > 0 else 0.0
+            if board[action] == 0 and visit_counts[action] > 0:
+                score = (q_values[action] + 1.0) / 2.0  # [-1,1] → [0,1]
+                weight = score ** (1.0 / tau) if score > 0 else 0.0
                 weights.append(weight)
                 actions.append(action)
 
@@ -214,10 +223,8 @@ class PolicyValueAiEngine(AIEngine):
 
         total = sum(weights)
         if total <= 0:
-            # 所有权重为 0，均匀随机选
             return random.choice(actions)
 
-        # 归一化 + 采样
         probs = [w / total for w in weights]
         r = random.random()
         cumulative = 0.0
@@ -226,4 +233,4 @@ class PolicyValueAiEngine(AIEngine):
             if r <= cumulative:
                 return actions[i]
 
-        return actions[-1]  # 兜底
+        return actions[-1]

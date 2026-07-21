@@ -297,24 +297,28 @@ class ReplayViewer:
     def _draw_heatmaps(self, step, move):
         """绘制热力图
 
-        output 格式：225 维列表，每个元素按行优先顺序（索引 0~224）
-        对应棋盘位置的 reward 值。
-        MCTS 对局时优先使用 mcts_probs 并归一化为概率。
+        MCTS 对局时优先使用 mcts_q_values（[-1,1] Q 值），
+        其次 mcts_probs（访问计数归一化），最后 output（模型原始输出）。
         """
-        # AI 热力图 — 有 MCTS 数据时归一化访问计数为概率分布
-        mcts_probs = move.get("mcts_probs", [])
-        if len(mcts_probs) >= 225:
-            total = sum(mcts_probs)
-            if total > 0:
-                ai_rewards = [c / total for c in mcts_probs[:225]]
-            else:
-                ai_rewards = [1.0 / 225] * 225
+        # AI 热力图
+        mcts_q = move.get("mcts_q_values", [])
+        if len(mcts_q) >= 225:
+            # Q 值 [-1, 1] → [0, 1] 方便热力图渲染
+            ai_rewards = [(q + 1.0) / 2.0 for q in mcts_q[:225]]
         else:
-            output_vector = move.get("output", [])
-            if len(output_vector) >= 225:
-                ai_rewards = list(output_vector[:225])
+            mcts_probs = move.get("mcts_probs", [])
+            if len(mcts_probs) >= 225:
+                total = sum(mcts_probs)
+                if total > 0:
+                    ai_rewards = [c / total for c in mcts_probs[:225]]
+                else:
+                    ai_rewards = [1.0 / 225] * 225
             else:
-                ai_rewards = []
+                output_vector = move.get("output", [])
+                if len(output_vector) >= 225:
+                    ai_rewards = list(output_vector[:225])
+                else:
+                    ai_rewards = []
         if ai_rewards:
             self.ai_heatmap.draw_heatmap(ai_rewards, self._on_cell_hover)
         
@@ -400,22 +404,35 @@ class ReplayViewer:
         self.info_text.insert(tk.END, f"落子位置: ({pos[0]}, {pos[1]})\n")
 
         # MCTS 信息
+        mcts_q = move.get("mcts_q_values", [])
         mcts_probs = move.get("mcts_probs", [])
-        if len(mcts_probs) >= 225:
-            total = sum(mcts_probs)
+        has_mcts = len(mcts_q) >= 225 or len(mcts_probs) >= 225
+        if has_mcts:
             mcts_value = move.get("mcts_value")
             self.info_text.insert(tk.END, f"\n--- MCTS 搜索结果 ---\n")
             if mcts_value is not None:
                 self.info_text.insert(tk.END, f"根节点价值: {mcts_value:+.4f}\n")
-            # Top-5 着法
-            indexed = [(i, mcts_probs[i]) for i in range(225)]
-            indexed.sort(key=lambda x: -x[1])
-            self.info_text.insert(tk.END, f"Top-5 着法 (访问占比):\n")
-            for idx, count in indexed[:5]:
-                r, c = idx // 15, idx % 15
-                pct = count / total * 100 if total > 0 else 0
-                marker = " ◀ 实际落子" if [r, c] == pos else ""
-                self.info_text.insert(tk.END, f"  ({r:2d},{c:2d}): {pct:5.1f}% (访问 {count} 次){marker}\n")
+            if len(mcts_q) >= 225:
+                # 按 Q 值排序
+                indexed = [(i, mcts_q[i]) for i in range(225)]
+                indexed.sort(key=lambda x: -x[1])
+                self.info_text.insert(tk.END, f"Top-5 着法 (按 Q 值):\n")
+                for idx, q in indexed[:5]:
+                    r, c = idx // 15, idx % 15
+                    marker = " ◀ 实际落子" if [r, c] == pos else ""
+                    count = mcts_probs[idx] if idx < len(mcts_probs) else 0
+                    self.info_text.insert(tk.END, f"  ({r:2d},{c:2d}): Q={q:+.4f} (访问 {count} 次){marker}\n")
+            else:
+                # 按访问计数排序
+                total = sum(mcts_probs)
+                indexed = [(i, mcts_probs[i]) for i in range(225)]
+                indexed.sort(key=lambda x: -x[1])
+                self.info_text.insert(tk.END, f"Top-5 着法 (访问占比):\n")
+                for idx, count in indexed[:5]:
+                    r, c = idx // 15, idx % 15
+                    pct = count / total * 100 if total > 0 else 0
+                    marker = " ◀ 实际落子" if [r, c] == pos else ""
+                    self.info_text.insert(tk.END, f"  ({r:2d},{c:2d}): {pct:5.1f}% (访问 {count} 次){marker}\n")
 
         # 温度采样信息（第四十一次追加：展示落子策略和采样参数）
         strategy = move.get("strategy", "argmax")

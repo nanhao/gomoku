@@ -103,7 +103,8 @@ class DataRecorder:
                     sampling_probs: List[float] = None,
                     mcts_probs: List[float] = None,
                     mcts_log: str = None,
-                    mcts_value: float = None):
+                    mcts_value: float = None,
+                    mcts_q_values: List[float] = None):
         """
         记录一次落子
 
@@ -122,6 +123,7 @@ class DataRecorder:
             mcts_probs: MCTS 搜索返回的 π 分布（访问计数归一化），默认 None（向后兼容）
             mcts_log: 对应 MCTS 搜索日志文件路径，默认 None（向后兼容）
             mcts_value: MCTS 根节点价值评估，值域 [-1, 1]，默认 None（向后兼容）
+            mcts_q_values: 225 维 MCTS 边平均 Q 值，值域 [-1, 1]，默认 None（向后兼容）
         """
         # 校验游戏编号一致性
         self._ensure_game_id(game_id)
@@ -152,6 +154,8 @@ class DataRecorder:
             entry["mcts_log"] = mcts_log
         if mcts_value is not None:
             entry["mcts_value"] = mcts_value
+        if mcts_q_values is not None:
+            entry["mcts_q_values"] = list(mcts_q_values)
 
         self.current_game_data["history"].append(entry)
     
