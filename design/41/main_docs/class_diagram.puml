@@ -1,0 +1,61 @@
+@startuml
+!theme plain
+
+title MCTS 自对弈多进程 — 类关系图
+
+class "mcts_self_play.py\n(入口脚本)" as Entry {
+    + parse_args()
+    + run_self_play()
+    + _load_existing_samples()
+    + _save_progress()
+}
+
+class "MctsSelfPlayWorker\n(mcts_self_play_worker.py)" as Worker {
+    + __init__(model_path, model_name, device, config)
+    + run_games(game_indices, run_id) -> List[dict]
+}
+
+class "MctsSelfPlayConfig\n(mcts_self_play_worker.py)" as Config {
+    + simulations: int
+    + c_puct: float
+    + temp_steps: int
+    + temperature: float
+    + dirichlet_epsilon: float
+    + dirichlet_alpha: float
+    + batch_size: int
+    + virtual_loss: float
+    + use_prior: bool
+}
+
+class "AIEngineBuilder\n(engine/builder.py)" as Builder {
+    + build_policy_value(model, ...) -> PolicyValueAiEngine
+}
+
+class "PolicyValueAiEngine\n(engine/policy_value.py)" as Engine {
+    + get_move(board, current_player, strategy) -> MoveDecision
+    + after_move(x, y)
+}
+
+class "MCTSSearcher\n(mcts/searcher.py)" as Searcher {
+    + search(state, num_simulations, log_key) -> Tuple
+    + advance_root(action) -> bool
+}
+
+class "BaseModel\n(base_model.py)" as Model {
+    + predict(board_vector) -> ModelPredict
+    + predict_batch(board_vectors) -> List[ModelPredict]
+    + move_to_device(device)
+}
+
+Entry ..> Config : 构造
+Entry ..> Worker : submit 到 ProcessPoolExecutor
+Worker o-- Config : 持有
+Worker ..> Builder : 每局调用
+Worker ..> Model : 加载并持有
+Builder ..> Searcher : 创建
+Builder ..> Engine : 创建
+Engine o-- Searcher : 持有
+Engine ..> Model : 搜索时调用推理
+Searcher ..> Model : 批量推理
+
+@enduml

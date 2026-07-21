@@ -1,0 +1,59 @@
+@startuml
+!theme plain
+
+title MCTS 自对弈多进程交互流程
+
+participant "主进程\n(mcts_self_play.py)" as Main
+participant "ProcessPoolExecutor" as Pool
+participant "Worker 0\n(MctsSelfPlayWorker)" as W0
+participant "Worker 1\n(MctsSelfPlayWorker)" as W1
+participant "Worker N\n(MctsSelfPlayWorker)" as Wn
+participant "磁盘" as Disk
+
+== 初始化 ==
+
+Main -> Main: parse_args()\n解析 --games --workers 等
+Main -> Main: 加载已有 sample.json（复用目录时合并）
+Main -> Main: 按 worker 数量均分 game_indices
+Main -> Main: 注册 SIGINT handler
+
+== 并行执行 ==
+
+Main -> Pool: submit(worker.run_games, indices_chunk_0)
+Main -> Pool: submit(worker.run_games, indices_chunk_1)
+Main -> Pool: submit(worker.run_games, indices_chunk_n)
+
+create W0
+Pool -> W0: 创建进程，加载模型
+create W1
+Pool -> W1: 创建进程，加载模型
+create Wn
+Pool -> Wn: 创建进程，加载模型
+
+par 并行执行
+    W0 -> W0: 循环跑局\n每局创建 engine\n运行 MCTS 搜索\n收集样本
+    W1 -> W1: 循环跑局\n每局创建 engine\n运行 MCTS 搜索\n收集样本
+    Wn -> Wn: 循环跑局\n每局创建 engine\n运行 MCTS 搜索\n收集样本
+end
+
+W0 --> Pool: 返回 samples_chunk_0
+W1 --> Pool: 返回 samples_chunk_1
+Wn --> Pool: 返回 samples_chunk_n
+
+== 结果收集 ==
+
+Main -> Main: 按 game_idx 排序合并所有 chunk
+Main -> Disk: 原子写入 sample.json + summary.json
+Main -> Main: 打印统计信息
+
+== Ctrl+C 中断 ==
+
+alt 用户按 Ctrl+C
+    Main -> Main: SIGINT handler\n停止提交新任务
+    Main -> Pool: shutdown(wait=True)\n等待进行中任务完成
+    Pool --> Main: 返回已完成的结果
+    Main -> Main: 合并已有结果
+    Main -> Disk: 保存部分数据
+end
+
+@enduml

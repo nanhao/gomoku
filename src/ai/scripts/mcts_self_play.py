@@ -14,7 +14,8 @@ import os
 import signal
 import sys
 import time
-from typing import List, Tuple
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from typing import List
 
 # 确保项目根在 sys.path 中
 _proj_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -23,6 +24,7 @@ if _proj_root not in sys.path:
 
 import torch
 
+from ai.scripts.mcts_self_play_worker import MctsSelfPlayWorker, MctsSelfPlayConfig
 from ai.registry import get_model
 from ai.engine.builder import AIEngineBuilder
 from ai.constants import STRATEGY_SAMPLING
@@ -159,16 +161,39 @@ def parse_args():
                    help="禁用模型先验概率，MCTS 仅依赖价值评估")
     p.add_argument("--device", default="cuda",
                    help="推理设备（默认 cuda）")
+    p.add_argument("--workers", type=int, default=None,
+                   help="并行 worker 进程数（默认 CPU 核数，1 为单进程串行）")
     return p.parse_args()
 
 
 # ---------- 主流程 ----------
 
+def _distribute_indices(total: int, num_chunks: int) -> List[List[int]]:
+    """将 [0, total) 的整数均匀分配到 num_chunks 个列表中
+
+    Args:
+        total: 总数
+        num_chunks: 分块数
+
+    Returns:
+        列表的列表，每个子列表包含分配到的索引
+    """
+    if num_chunks <= 0:
+        num_chunks = 1
+    indices = list(range(total))
+    chunks: List[List[int]] = [[] for _ in range(num_chunks)]
+    for i, idx in enumerate(indices):
+        chunks[i % num_chunks].append(idx)
+    # 移除空 chunk（当 num_chunks > total 时）
+    return [c for c in chunks if c]
+
+
 def run_self_play(args):
     """执行所有局自我对弈
 
-    Returns:
-        各局输出目录路径列表
+    根据 --workers 参数选择单进程或多进程模式：
+    - workers=1: 单进程串行（与原有逻辑一致）
+    - workers>1: ProcessPoolExecutor 并行
     """
     # 确定输出根目录
     if args.output is None:
@@ -179,18 +204,86 @@ def run_self_play(args):
         output_root = args.output
     os.makedirs(output_root, exist_ok=True)
 
-    # 确定设备
-    device = torch.device(args.device if torch.cuda.is_available() and args.device == "cuda" else "cpu")
+    # 确定 worker 数
+    # getattr 在 args 不含 workers 属性时回退到 1（兼容旧测试 Mock）
+    workers = getattr(args, 'workers', 1)
+    if workers is None:
+        workers = os.cpu_count() or 1
+    workers = max(1, workers)
+
+    # 设备：多进程模式下固定使用 CPU
+    if workers > 1:
+        device = "cpu"
+    else:
+        device = torch.device(args.device if torch.cuda.is_available() and args.device == "cuda" else "cpu")
     print(f"[设备] {device}")
+    print(f"[workers] {workers}")
+
+    # 超参数汇总
+    hyperparams = {
+        "simulations": args.simulations,
+        "c_puct": args.c_puct,
+        "temp_steps": args.temp_steps,
+        "temperature": args.temperature,
+        "dirichlet_epsilon": args.dirichlet_epsilon,
+        "dirichlet_alpha": args.dirichlet_alpha,
+        "batch_size": args.batch_size if args.batch_size is not None else MCTS_BATCH_SIZE,
+        "virtual_loss": args.virtual_loss if args.virtual_loss is not None else MCTS_VIRTUAL_LOSS,
+        "use_prior": not args.no_prior,
+    }
+    print(f"[超参数] {hyperparams}")
+
+    # 生成本次运行的唯一标识
+    run_id = f"{int(time.time() * 1000) % 1000000:06d}"
+
+    # 加载已有样本
+    all_samples = _load_existing_samples(output_root)
+    if all_samples:
+        print(f"[加载] 已有 {len(all_samples)} 条样本")
+
+    # 注册 SIGINT 信号处理器
+    global _interrupted
+    _interrupted = False
+    original_handler = signal.signal(signal.SIGINT, _signal_handler)
+
+    try:
+        completed_games = 0
+
+        if workers == 1:
+            # 单进程模式：保持原有逻辑
+            completed_games, all_samples = _run_single_process(
+                args, hyperparams, output_root, run_id, all_samples
+            )
+        else:
+            # 多进程模式
+            completed_games, all_samples = _run_multi_process(
+                args, hyperparams, output_root, run_id, all_samples, workers
+            )
+
+        # 最终保存
+        if completed_games > 0:
+            _save_progress(all_samples, output_root, args, completed_games)
+
+        print(f"\n[完成] 共 {completed_games} 局，{len(all_samples)} 条样本，输出: {output_root}")
+
+    finally:
+        signal.signal(signal.SIGINT, original_handler)
+
+
+def _run_single_process(args, hyperparams: dict, output_root: str,
+                        run_id: str, all_samples: List[dict]):
+    """单进程模式：加载模型并串行执行所有对局
+
+    与原有 run_self_play 逻辑一致，保留模型加载和设备配置。
+    """
+    device = torch.device(args.device if torch.cuda.is_available() and args.device == "cuda" else "cpu")
 
     # 加载模型
     print(f"[加载模型] {args.model}")
     model_spec = getattr(args, 'model_name', None)
     if model_spec:
-        # 显式指定了模型名.代数 → 用 registry
         model = get_model(model_spec)
     else:
-        # 从路径解析模型名和代数：src/ai/models/cnn_v8/gen1/cnn_v8.pth → cnn_v8.1
         model_path = os.path.normpath(args.model)
         parts = model_path.split(os.sep)
         model_name = None
@@ -211,70 +304,91 @@ def run_self_play(args):
             )
     model.move_to_device(device)
 
-    # 超参数汇总（None 时回退到配置默认值）
-    hyperparams = {
-        "simulations": args.simulations,
-        "c_puct": args.c_puct,
-        "temp_steps": args.temp_steps,
-        "temperature": args.temperature,
-        "dirichlet_epsilon": args.dirichlet_epsilon,
-        "dirichlet_alpha": args.dirichlet_alpha,
-        "batch_size": args.batch_size if args.batch_size is not None else MCTS_BATCH_SIZE,
-        "virtual_loss": args.virtual_loss if args.virtual_loss is not None else MCTS_VIRTUAL_LOSS,
-        "use_prior": not args.no_prior,
-    }
-    print(f"[超参数] {hyperparams}")
+    completed_games = 0
+    for game_idx in range(args.games):
+        if _interrupted:
+            print(f"\n[中断] 已停止，共完成 {completed_games} 局")
+            break
 
-    # 生成本次运行的唯一标识，避免跨 run 的 game_idx 重复。
-    # 使用时间戳后 6 位替代 UUID，简洁且有序。
-    run_id = f"{int(time.time() * 1000) % 1000000:06d}"
+        print(f"\n{'='*50}")
+        print(f"[局 {game_idx + 1}/{args.games}] 开始")
+        t_start = time.time()
 
-    # 加载已有样本（复用同一输出目录时合并旧数据）
-    all_samples = _load_existing_samples(output_root)
-    if all_samples:
-        print(f"[加载] 已有 {len(all_samples)} 条样本")
+        samples = play_one_game(model, device, hyperparams, game_idx, run_id)
+        all_samples.extend(samples)
+        completed_games += 1
 
-    # 注册 SIGINT 信号处理器，支持 Ctrl+C 优雅退出
-    global _interrupted
-    _interrupted = False
-    original_handler = signal.signal(signal.SIGINT, _signal_handler)
+        elapsed = time.time() - t_start
+        print(f"[局 {game_idx + 1}/{args.games}] 完成 — {len(samples)} 步, "
+              f"结果: {_describe_result(samples)}, 耗时: {elapsed:.1f}s")
 
-    try:
-        completed_games = 0
-        total_moves = 0
-
-        for game_idx in range(args.games):
-            # 检测中断标志（由 _signal_handler 设置）
-            if _interrupted:
-                print(f"\n[中断] 已停止，共完成 {completed_games} 局")
-                break
-
-            print(f"\n{'='*50}")
-            print(f"[局 {game_idx + 1}/{args.games}] 开始")
-            t_start = time.time()
-
-            samples = play_one_game(model, device, hyperparams, game_idx, run_id)
-            all_samples.extend(samples)
-            total_moves += len(samples)
-            completed_games += 1
-
-            elapsed = time.time() - t_start
-            print(f"[局 {game_idx + 1}/{args.games}] 完成 — {len(samples)} 步, "
-                  f"结果: {_describe_result(samples)}, 耗时: {elapsed:.1f}s")
-
-            # 周期保存：每 _SAVE_INTERVAL 局自动写入一次，降低数据丢失风险
-            if completed_games % _SAVE_INTERVAL == 0:
-                _save_progress(all_samples, output_root, args, completed_games)
-
-        # 最终保存（覆盖周期保存未触发的剩余局）
-        if completed_games > 0:
+        if completed_games % _SAVE_INTERVAL == 0:
             _save_progress(all_samples, output_root, args, completed_games)
 
-        print(f"\n[完成] 共 {completed_games} 局，{len(all_samples)} 条样本，输出: {output_root}")
+    return completed_games, all_samples
 
-    finally:
-        # 恢复原始信号处理器，避免影响后续代码
-        signal.signal(signal.SIGINT, original_handler)
+
+def _run_multi_process(args, hyperparams: dict, output_root: str,
+                       run_id: str, all_samples: List[dict], workers: int):
+    """多进程模式：通过 ProcessPoolExecutor 并行执行对局
+
+    将 game_indices 均匀分配给各 worker，每个 worker 在子进程中独立加载模型并执行。
+    收集完成后合并样本并保存。
+    """
+    # 构建 MctsSelfPlayConfig
+    config = MctsSelfPlayConfig(
+        simulations=hyperparams["simulations"],
+        c_puct=hyperparams["c_puct"],
+        temp_steps=hyperparams["temp_steps"],
+        temperature=hyperparams["temperature"],
+        dirichlet_epsilon=hyperparams["dirichlet_epsilon"],
+        dirichlet_alpha=hyperparams["dirichlet_alpha"],
+        batch_size=hyperparams["batch_size"],
+        virtual_loss=hyperparams["virtual_loss"],
+        use_prior=hyperparams["use_prior"],
+    )
+
+    # 分配 game_indices
+    model_name = getattr(args, 'model_name', None)
+    chunks = _distribute_indices(args.games, workers)
+    print(f"[分配] {workers} 个 worker，各负责局数: {[len(c) for c in chunks]}")
+
+    completed_games = 0
+    t_total_start = time.time()
+
+    try:
+        with ProcessPoolExecutor(max_workers=workers) as executor:
+            futures = {}
+            for chunk in chunks:
+                future = executor.submit(
+                    MctsSelfPlayWorker.worker_entry,
+                    model_path=args.model,
+                    model_name=model_name,
+                    device="cpu",
+                    config=config,
+                    game_indices=chunk,
+                    run_id=run_id,
+                )
+                futures[future] = len(chunk)
+
+            for future in as_completed(futures):
+                chunk_size = futures[future]
+                try:
+                    chunk_samples = future.result()
+                    all_samples.extend(chunk_samples)
+                    completed_games += chunk_size
+                    print(f"[进度] worker 完成 {chunk_size} 局，累计 {completed_games}/{args.games}")
+                except Exception as e:
+                    print(f"[错误] worker 执行失败: {e}")
+
+    except KeyboardInterrupt:
+        print("\n[中断] 等待进行中的 worker 完成...")
+        # ProcessPoolExecutor 的 __exit__ 会等待已提交的任务
+
+    elapsed_total = time.time() - t_total_start
+    print(f"[耗时] 总耗时 {elapsed_total:.1f}s")
+
+    return completed_games, all_samples
 
 
 def play_one_game(model, device, hyperparams: dict, game_idx: int, run_id: str) -> List[dict]:
