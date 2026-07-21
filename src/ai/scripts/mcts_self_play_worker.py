@@ -1,37 +1,19 @@
 """MCTS 自对弈 Worker 模块
 
-包含 MctsSelfPlayConfig（超参数数据类）和 MctsSelfPlayWorker（多局执行器）。
+包含 MctsSelfPlayWorker（多局执行器）。
+MctsSelfPlayConfig 已迁移至 mcts_config.py，此处保留重导出以兼容旧 import。
 供 ProcessPoolExecutor 的子进程调用，每个 worker 加载一次模型后串行执行多局。
 """
 
 import os
 import time
-from dataclasses import dataclass
 from typing import List, Optional
 
 from ai.registry import get_model
 from ai.engine.builder import AIEngineBuilder
 from ai.engine.policy_value import PolicyValueAiEngine
-from ai.constants import STRATEGY_SAMPLING
-from game.game import check_winner, is_board_full
-
-
-@dataclass
-class MctsSelfPlayConfig:
-    """MCTS 自对弈超参数配置
-
-    替代旧的 hyperparams 字典，符合"结构化数据用 dataclass"规范。
-    所有字段均有默认值，与当前 mcts_self_play.py 的 CLI 默认值一致。
-    """
-    simulations: int = 800
-    c_puct: float = 2.0
-    temp_steps: int = 8
-    temperature: float = 1.0
-    dirichlet_epsilon: float = 0.25
-    dirichlet_alpha: float = 0.03
-    batch_size: int = 225
-    virtual_loss: float = 3.0
-    use_prior: bool = True
+from ai.scripts.mcts_game_runner import MctsGameRunner
+from ai.scripts.mcts_config import MctsSelfPlayConfig  # noqa: F401 — 重导出以兼容旧 import
 
 
 class MctsSelfPlayWorker:
@@ -68,6 +50,9 @@ class MctsSelfPlayWorker:
         self._model_name = model_name
         self._device = device
         self._config = config
+
+        # 创建公用的对局运行器
+        self._runner = MctsGameRunner(config)
 
         # 加载模型：逻辑与当前 run_self_play 中的模型加载一致
         if _model is not None:
@@ -166,8 +151,7 @@ class MctsSelfPlayWorker:
     def _play_one_game(self, game_idx: int, run_id: str) -> List[dict]:
         """执行一局自我对弈
 
-        与当前 mcts_self_play.py 中 play_one_game() 等价：
-        创建 PolicyValueAiEngine → 循环落子 → 记录样本 → 终局回填 z 值。
+        创建 PolicyValueAiEngine → 委托 MctsGameRunner.run 执行对局循环 → 终局回填 z 值。
         每局使用全新 engine 实例（模型复用），确保 MCTS 搜索树不跨局污染。
 
         Args:
@@ -193,46 +177,20 @@ class MctsSelfPlayWorker:
             use_prior=cfg.use_prior,
         )
 
-        # 初始化棋盘
-        board = [0] * 225
-        current_player = 1  # 黑先
+        # 通过 on_move 回调收集样本（z 暂填 0，终局后回填）
         samples: List[dict] = []
 
-        while True:
-            state = board + [current_player]
-            board_2d = [[board[i * 15 + j] for j in range(15)] for i in range(15)]
-
-            # MCTS 搜索 + 决策
-            md = engine.get_move(board_2d, current_player, strategy=STRATEGY_SAMPLING)
-            x, y = md.get_position()
-            action = x * 15 + y
-
-            # 计算 π 分布：基于 Q 值（与落子决策共用 compute_prob_from_q），τ=1.0
+        def on_move(state: List[int], md, current_player: int) -> None:
             q_values = md.get_mcts_q_values() or [0.0] * 225
             visit_counts = md.get_mcts_visit_counts()
             pi = PolicyValueAiEngine.compute_prob_from_q(q_values, visit_counts)
-
-            # 记录样本（z 暂填 0，终局后回填）
             samples.append({"state": state, "pi": pi, "z": 0})
 
-            # 落子
-            board[action] = current_player
-
-            # 终局判定
-            winner = check_winner(board, action)
-            is_terminal = (winner != 0) or is_board_full(board)
-
-            # 子树复用
-            engine.after_move(x, y)
-
-            if is_terminal:
-                break
-
-            # 切换玩家
-            current_player = 2 if current_player == 1 else 1
+        # 委托 MctsGameRunner 执行对局循环（self-play 模式：同一 engine 同时执黑执白）
+        result = self._runner.run(engine, engine, run_id, game_idx, on_move=on_move)
 
         # 回填 z 值
-        final_winner = winner if winner != 0 else 0
+        final_winner = result.winner if result.winner != 0 else 0
         for sample in samples:
             player = sample["state"][225]
             if final_winner == 0:

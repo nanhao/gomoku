@@ -119,8 +119,13 @@ src/
 │   ├── keep_gpu_alive.py  GPU 保活
 │   │
 │   └── scripts/           独立脚本
-│       ├── mcts_self_play.py  MCTS 自对弈（AlphaGo Zero）
-│       └── mcts_train.py      MCTS 训练
+│       ├── mcts_self_play.py     MCTS 自对弈（AlphaGo Zero）
+│       ├── mcts_self_play_worker.py  MCTS 自对弈 Worker
+│       ├── mcts_game_runner.py   MCTS 公用对局运行器
+│       ├── mcts_config.py        MCTS 配置数据类
+│       ├── mcts_battle.py        MCTS 双模型对战
+│       ├── mcts_battle_worker.py MCTS 对战 Worker
+│       └── mcts_train.py         MCTS 训练
 │
 ├── gui/           # GUI 界面（tkinter）
 │   ├── main.py         主窗口
@@ -227,6 +232,10 @@ MCTS训练: mcts_self_play.py → create_engine(cnn_v7)
           → play_single_game() → PolicyValueAiEngine
           → MCTSSearcher.search() × 800模拟/步
           → 生成 sample.json → mcts_train.py → dual_head_trainer
+
+MCTS对战: mcts_battle.py → create_engine(cnn_v7.10) × 2
+          → MctsBattleWorker → MctsGameRunner.run
+          → 输出双方胜率统计
 ```
 
 ---
@@ -260,6 +269,8 @@ tests/
 | 训练模型 | `python src/ai/train_main.py --model cnn_v7.2 --fresh --train-from-dir data --epochs 300` |
 | MCTS 自对弈 | `python src/ai/scripts/mcts_self_play.py --model cnn_v7.pth --games 100` |
 | MCTS 自对弈（多进程） | `python src/ai/scripts/mcts_self_play.py --model cnn_v7.pth --games 100 --workers 4` |
+| MCTS 双模型对战 | `python src/ai/scripts/mcts_battle.py --model1 cnn_v8.10.pth --model2 cnn_v8.11.pth --games 100` |
+| MCTS 双模型对战（多进程） | `python src/ai/scripts/mcts_battle.py --model1 cnn_v8.10.pth --model2 cnn_v8.11.pth --games 100 --workers 4` |
 | MCTS 训练 | `python src/ai/scripts/mcts_train.py --model cnn_v7.pth --train-from-dir samples --epochs 100` |
 | 迭代进化 | `python src/ai/iterative_train.py --ai1 cnn_v4.99 --ai2 cnn_v4.100 --sample_dir samples` |
 | 运行测试 | `python -m pytest tests/ -v -s` |

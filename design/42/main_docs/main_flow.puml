@@ -1,0 +1,57 @@
+@startuml
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title MCTS 双模型对战 — 多进程交互流程
+
+participant "主进程\n(mcts_battle.py)" as Main
+participant "ProcessPoolExecutor" as Pool
+participant "Worker 0\n(MctsBattleWorker)" as W0
+participant "Worker 1\n(MctsBattleWorker)" as W1
+participant "Worker N\n(MctsBattleWorker)" as Wn
+
+== 初始化 ==
+
+Main -> Main: parse_args()\n解析 --model1 --model2 --games --workers 等
+Main -> Main: 按 worker 数量均分 game_indices
+Main -> Main: 注册 SIGINT handler
+
+== 并行执行 ==
+
+Main -> Pool: submit(worker_entry, model1, model2, indices_chunk_0)
+Main -> Pool: submit(worker_entry, model1, model2, indices_chunk_1)
+Main -> Pool: submit(worker_entry, model1, model2, indices_chunk_n)
+
+create W0
+Pool -> W0: 创建进程，加载 model1 + model2
+create W1
+Pool -> W1: 创建进程，加载 model1 + model2
+create Wn
+Pool -> Wn: 创建进程，加载 model1 + model2
+
+par 并行执行
+    W0 -> W0: 循环跑局（每局随机执方，创建 engine，收集结果）
+    W1 -> W1: 循环跑局（每局随机执方，创建 engine，收集结果）
+    Wn -> Wn: 循环跑局（每局随机执方，创建 engine，收集结果）
+end
+
+W0 --> Pool: 返回 results_chunk_0
+W1 --> Pool: 返回 results_chunk_1
+Wn --> Pool: 返回 results_chunk_n
+
+== 结果收集 ==
+
+Main -> Main: 合并所有 chunk 的 BattleGameResult
+Main -> Main: 打印每局结果
+Main -> Main: 打印统计信息（双方胜率、平局率）
+
+== Ctrl+C 中断 ==
+
+alt 用户按 Ctrl+C
+    Main -> Main: SIGINT handler，停止提交新任务
+    Main -> Pool: shutdown(wait=True)，等待进行中任务完成
+    Pool --> Main: 返回已完成的结果
+    Main -> Main: 合并已有结果，打印已有统计
+end
+
+@enduml

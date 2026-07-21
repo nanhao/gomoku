@@ -1,0 +1,120 @@
+@startuml
+!theme plain
+
+' 中文字体配置
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title MCTS 双模型对战 — 类关系图
+
+class "mcts_battle.py\n(入口脚本)" as BattleEntry {
+    + parse_args()
+    + run_battle()
+    + _run_single_process()
+    + _run_multi_process()
+    + _print_statistics()
+}
+
+class "mcts_self_play.py\n(入口脚本)" as SelfPlayEntry {
+    + parse_args()
+    + run_self_play()
+    + _run_single_process()
+    + _run_multi_process()
+    + _save_progress()
+}
+
+class "MctsBattleWorker\n(mcts_battle_worker.py)" as BattleWorker {
+    + __init__(model1_path, model1_name, model2_path, model2_name, device, config)
+    + run_games(game_indices, run_id) -> List[BattleGameResult]
+    + {static} worker_entry(...) -> List[BattleGameResult]
+}
+
+class "MctsSelfPlayWorker\n(mcts_self_play_worker.py)" as SelfPlayWorker {
+    + __init__(model_path, model_name, device, config)
+    + run_games(game_indices, run_id) -> List[dict]
+    + {static} worker_entry(...) -> List[dict]
+    + {static} _load_model(...)
+}
+
+class "MctsGameRunner\n(mcts_game_runner.py)" as Runner {
+    + __init__(config: MctsSelfPlayConfig)
+    + run(engine_black, engine_white, run_id, game_idx, on_move=None) -> GameResult
+}
+
+class "MctsSelfPlayConfig\n(mcts_self_play_worker.py)" as Config {
+    + simulations: int
+    + c_puct: float
+    + temp_steps: int
+    + temperature: float
+    + dirichlet_epsilon: float
+    + dirichlet_alpha: float
+    + batch_size: int
+    + virtual_loss: float
+    + use_prior: bool
+}
+
+class "GameResult\n(mcts_game_runner.py)" as GameResult {
+    + winner: int
+    + move_count: int
+}
+
+class "BattleGameResult\n(mcts_battle_worker.py)" as BattleResult {
+    + game_idx: int
+    + winner: int
+    + model1_color: int
+    + model2_color: int
+    + model1_won: bool
+    + model2_won: bool
+    + move_count: int
+}
+
+class "AIEngineBuilder\n(engine/builder.py)" as Builder {
+    + build_policy_value(model, ...) -> PolicyValueAiEngine
+}
+
+class "PolicyValueAiEngine\n(engine/policy_value.py)" as Engine {
+    + get_move(board, current_player, strategy) -> MoveDecision
+    + after_move(x, y)
+    + {static} compute_prob_from_q(q_values, visit_counts, tau) -> List[float]
+}
+
+class "MCTSSearcher\n(mcts/searcher.py)" as Searcher {
+    + search(state, log_key) -> Tuple
+    + advance_root(action) -> bool
+}
+
+class "BaseModel\n(base_model.py)" as Model {
+    + predict(board_vector) -> ModelPredict
+    + move_to_device(device)
+}
+
+' 入口脚本关系
+BattleEntry ..> Config : 构造
+BattleEntry ..> BattleWorker : submit 到 ProcessPoolExecutor
+SelfPlayEntry ..> Config : 构造
+SelfPlayEntry ..> SelfPlayWorker : submit 到 ProcessPoolExecutor
+
+' Worker 关系
+BattleWorker o-- Config : 持有
+BattleWorker o-- Runner : 持有
+BattleWorker ..> Builder : 每局调用
+BattleWorker ..> Model : 加载两个并持有
+BattleWorker ..> BattleResult : 返回
+
+SelfPlayWorker o-- Config : 持有
+SelfPlayWorker o-- Runner : 持有
+SelfPlayWorker ..> Builder : 每局调用
+SelfPlayWorker ..> Model : 加载并持有
+
+' Runner 关系
+Runner o-- Config : 持有
+Runner ..> Engine : run 中调用 get_move + after_move
+Runner ..> GameResult : 返回
+
+' 引擎层级
+Builder ..> Searcher : 创建
+Builder ..> Engine : 创建
+Engine o-- Searcher : 持有
+Engine ..> Model : 搜索时调用推理
+Searcher ..> Model : 批量推理
+
+@enduml

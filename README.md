@@ -329,6 +329,40 @@ python src/ai/scripts/mcts_self_play.py --model src/ai/models/cnn_v8/gen1/cnn_v8
 python src/ai/scripts/mcts_self_play.py --model src/ai/models/cnn_v8/gen1/cnn_v8.pth --games 100 --workers 4
 ```
 
+#### MCTS 双模型对战
+
+> 让两个不同代的 MCTS 模型对打，输出胜率统计。参数体系与 mcts_self_play 一致。
+
+```bash
+python src/ai/scripts/mcts_battle.py --model1 <权重路径1> --model2 <权重路径2> --games <局数> [选项]
+```
+
+**选项**：
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--model1` | **必需** | 模型1 权重文件路径 |
+| `--model2` | **必需** | 模型2 权重文件路径 |
+| `--model1-name` | 从路径解析 | 模型1 注册名.代数 |
+| `--model2-name` | 从路径解析 | 模型2 注册名.代数 |
+| `--games` | **必需** | 对战局数 |
+| `--simulations` | 800 | 每步 MCTS 模拟次数 |
+| `--c-puct` | 2.0 | PUCT 探索系数 |
+| `--temp-steps` | 8 | 温度探索步数 |
+| `--temperature` | 1.0 | 温度参数 |
+| `--workers` | CPU 核数 | 并行 worker 进程数 |
+| `--device` | cuda | 推理设备（多进程强制 CPU） |
+
+**示例**：
+
+```bash
+# 基本对战：cnn_v8 第10代 vs 第11代
+python src/ai/scripts/mcts_battle.py --model1 src/ai/models/cnn_v8/gen10/cnn_v8.pth --model2 src/ai/models/cnn_v8/gen11/cnn_v8.pth --games 100
+
+# 多进程并行
+python src/ai/scripts/mcts_battle.py --model1 src/ai/models/cnn_v8/gen10/cnn_v8.pth --model2 src/ai/models/cnn_v8/gen11/cnn_v8.pth --games 200 --workers 4
+```
+
 #### MCTS 训练
 
 > 支持所有双头模型（cnn_v7, cnn_v8, ...），根据权重路径自动选择对应的模型类和训练器。
