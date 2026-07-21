@@ -207,27 +207,24 @@ class TestMctsSelfPlayWorker(unittest.TestCase):
         )
         samples = worker.run_games(game_indices=[0, 1], run_id="test")
 
-        # 找出两局的第一条样本（state[225] 记录当前落子方）
-        first_game_samples = []
-        second_game_samples = []
-        current_first_state = None
+        # 用空棋盘出现次数分隔两局：每局首样本 board 全空
+        game1_samples = []
+        game2_samples = []
+        empty_board_count = 0
         for s in samples:
             board = s["state"][:225]
-            if current_first_state is None or board == current_first_state:
-                # 仍处于第一局（或刚进入第二局但还没找到分隔点）
-                if all(c == 0 for c in board):
-                    # 空棋盘 → 新局开始
-                    if current_first_state is not None:
-                        second_game_samples.append(s)
-                        continue
-                    else:
-                        current_first_state = list(board)
-                first_game_samples.append(s)
+            if all(c == 0 for c in board):
+                empty_board_count += 1
+            if empty_board_count == 1:
+                game1_samples.append(s)
             else:
-                second_game_samples.append(s)
+                game2_samples.append(s)
 
-        self.assertGreater(len(first_game_samples), 0, "应有第一局样本")
-        self.assertGreater(len(second_game_samples), 0, "应有第二局样本")
+        self.assertGreater(len(game1_samples), 0, "应有第一局样本")
+        self.assertGreater(len(game2_samples), 0, "应有第二局样本")
+        # 第二局首样本棋盘为空
+        self.assertTrue(all(c == 0 for c in game2_samples[0]["state"][:225]),
+                        "第二局首样本应为空棋盘")
 
 
 if __name__ == "__main__":

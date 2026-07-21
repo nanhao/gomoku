@@ -26,10 +26,7 @@ import torch
 
 from ai.scripts.mcts_self_play_worker import MctsSelfPlayWorker, MctsSelfPlayConfig
 from ai.registry import get_model
-from ai.engine.builder import AIEngineBuilder
-from ai.constants import STRATEGY_SAMPLING
 from config.mcts import MCTS_BATCH_SIZE, MCTS_VIRTUAL_LOSS
-from game.game import check_winner, is_board_full
 
 
 # ---------- 常量 ----------
@@ -39,6 +36,45 @@ _SAVE_INTERVAL = 50
 
 # 中断标志位，由信号处理器设置，主循环检查
 _interrupted = False
+
+
+def _build_hyperparams(args) -> dict:
+    """从 CLI args 构建超参数字典，消除 _save_progress 与 run_self_play 重复"""
+    return {
+        "simulations": args.simulations,
+        "c_puct": args.c_puct,
+        "temp_steps": args.temp_steps,
+        "temperature": args.temperature,
+        "dirichlet_epsilon": args.dirichlet_epsilon,
+        "dirichlet_alpha": args.dirichlet_alpha,
+        "batch_size": args.batch_size if args.batch_size is not None else MCTS_BATCH_SIZE,
+        "virtual_loss": args.virtual_loss if args.virtual_loss is not None else MCTS_VIRTUAL_LOSS,
+        "use_prior": not args.no_prior,
+    }
+
+
+def _parse_model_spec_from_path(model_path: str) -> str:
+    """从权重文件路径解析模型 spec 字符串（如 cnn_v8.1）
+
+    解析逻辑与 MctsSelfPlayWorker._load_model 中一致，
+    提取为共用函数消除重复。
+    """
+    norm_path = os.path.normpath(model_path)
+    parts = norm_path.split(os.sep)
+    model_name = None
+    model_gen = None
+    for i, p in enumerate(parts):
+        if p.startswith("gen"):
+            model_gen = int(p[3:])
+            if i >= 1:
+                model_name = parts[i - 1]
+            break
+    if model_name and model_gen is not None:
+        return f"{model_name}.{model_gen}"
+    raise ValueError(
+        f"无法从路径 '{model_path}' 解析模型名称和代数。"
+        f"请使用 --model-name 显式指定，如 --model-name cnn_v8.1"
+    )
 
 
 def _signal_handler(signum, frame):
@@ -88,18 +124,8 @@ def _save_progress(all_samples: List[dict], output_root: str,
         args: argparse.Namespace（用于获取 model、games、hyperparams）
         completed_games: 当前已完成局数
     """
-    # 超参数（与 run_self_play 中定义一致）
-    hyperparams = {
-        "simulations": args.simulations,
-        "c_puct": args.c_puct,
-        "temp_steps": args.temp_steps,
-        "temperature": args.temperature,
-        "dirichlet_epsilon": args.dirichlet_epsilon,
-        "dirichlet_alpha": args.dirichlet_alpha,
-        "batch_size": args.batch_size if args.batch_size is not None else MCTS_BATCH_SIZE,
-        "virtual_loss": args.virtual_loss if args.virtual_loss is not None else MCTS_VIRTUAL_LOSS,
-        "use_prior": not args.no_prior,
-    }
+    # 超参数（与 _build_hyperparams 共用）
+    hyperparams = _build_hyperparams(args)
 
     # 原子写入 sample.json
     sample_path = os.path.join(output_root, "sample.json")
@@ -220,17 +246,7 @@ def run_self_play(args):
     print(f"[workers] {workers}")
 
     # 超参数汇总
-    hyperparams = {
-        "simulations": args.simulations,
-        "c_puct": args.c_puct,
-        "temp_steps": args.temp_steps,
-        "temperature": args.temperature,
-        "dirichlet_epsilon": args.dirichlet_epsilon,
-        "dirichlet_alpha": args.dirichlet_alpha,
-        "batch_size": args.batch_size if args.batch_size is not None else MCTS_BATCH_SIZE,
-        "virtual_loss": args.virtual_loss if args.virtual_loss is not None else MCTS_VIRTUAL_LOSS,
-        "use_prior": not args.no_prior,
-    }
+    hyperparams = _build_hyperparams(args)
     print(f"[超参数] {hyperparams}")
 
     # 生成本次运行的唯一标识
@@ -252,7 +268,7 @@ def run_self_play(args):
         if workers == 1:
             # 单进程模式：保持原有逻辑
             completed_games, all_samples = _run_single_process(
-                args, hyperparams, output_root, run_id, all_samples
+                args, hyperparams, output_root, run_id, all_samples, device
             )
         else:
             # 多进程模式
@@ -271,37 +287,17 @@ def run_self_play(args):
 
 
 def _run_single_process(args, hyperparams: dict, output_root: str,
-                        run_id: str, all_samples: List[dict]):
+                        run_id: str, all_samples: List[dict], device):
     """单进程模式：加载模型并串行执行所有对局
 
     与原有 run_self_play 逻辑一致，保留模型加载和设备配置。
     """
-    device = torch.device(args.device if torch.cuda.is_available() and args.device == "cuda" else "cpu")
-
     # 加载模型
     print(f"[加载模型] {args.model}")
     model_spec = getattr(args, 'model_name', None)
-    if model_spec:
-        model = get_model(model_spec)
-    else:
-        model_path = os.path.normpath(args.model)
-        parts = model_path.split(os.sep)
-        model_name = None
-        model_gen = None
-        for i, p in enumerate(parts):
-            if p.startswith("gen"):
-                model_gen = int(p[3:])
-                if i >= 1:
-                    model_name = parts[i - 1]
-                break
-        if model_name and model_gen:
-            spec = f"{model_name}.{model_gen}"
-            model = get_model(spec)
-        else:
-            raise ValueError(
-                f"无法从路径 '{args.model}' 解析模型名称和代数。"
-                f"请使用 --model-name 显式指定，如 --model-name cnn_v8.1"
-            )
+    if not model_spec:
+        model_spec = _parse_model_spec_from_path(args.model)
+    model = get_model(model_spec)
     model.move_to_device(device)
 
     completed_games = 0
@@ -378,6 +374,9 @@ def _run_multi_process(args, hyperparams: dict, output_root: str,
                     all_samples.extend(chunk_samples)
                     completed_games += chunk_size
                     print(f"[进度] worker 完成 {chunk_size} 局，累计 {completed_games}/{args.games}")
+                    # 周期保存：每 _SAVE_INTERVAL 局写入磁盘，防止中途崩溃丢失数据
+                    if completed_games % _SAVE_INTERVAL == 0:
+                        _save_progress(all_samples, output_root, args, completed_games)
                 except Exception as e:
                     print(f"[错误] worker 执行失败: {e}")
 
@@ -392,7 +391,7 @@ def _run_multi_process(args, hyperparams: dict, output_root: str,
 
 
 def play_one_game(model, device, hyperparams: dict, game_idx: int, run_id: str) -> List[dict]:
-    """执行一局自我对弈
+    """执行一局自我对弈（薄封装，委托给 MctsSelfPlayWorker）
 
     Args:
         model: CNNV7Model 实例
@@ -404,91 +403,23 @@ def play_one_game(model, device, hyperparams: dict, game_idx: int, run_id: str) 
     Returns:
         sample 列表，每项 {"state": [...], "pi": [...], "z": int}
     """
-    simulations = hyperparams["simulations"]
-    c_puct = hyperparams["c_puct"]
-    temp_steps = hyperparams["temp_steps"]
-    temperature = hyperparams["temperature"]
-    dirichlet_epsilon = hyperparams["dirichlet_epsilon"]
-    dirichlet_alpha = hyperparams["dirichlet_alpha"]
-    batch_size = hyperparams["batch_size"]
-    virtual_loss = hyperparams["virtual_loss"]
-    use_prior = hyperparams["use_prior"]
-
-    # 通过 AIEngineBuilder 创建策略-价值引擎（内部自动创建 MCTSSearcher + PolicyValueAiEngine）
-    log_key_prefix = f"run{run_id}_game{game_idx}"
-    engine = AIEngineBuilder.build_policy_value(
-        model=model,
-        num_simulations=simulations,
-        c_puct=c_puct,
-        dirichlet_epsilon=dirichlet_epsilon,
-        dirichlet_alpha=dirichlet_alpha,
-        batch_size=batch_size,
-        virtual_loss=virtual_loss,
-        temperature=temperature,
-        temp_steps=temp_steps,
-        log_key_prefix=log_key_prefix,
-        use_prior=use_prior,
+    config = MctsSelfPlayConfig(
+        simulations=hyperparams["simulations"],
+        c_puct=hyperparams["c_puct"],
+        temp_steps=hyperparams["temp_steps"],
+        temperature=hyperparams["temperature"],
+        dirichlet_epsilon=hyperparams["dirichlet_epsilon"],
+        dirichlet_alpha=hyperparams["dirichlet_alpha"],
+        batch_size=hyperparams["batch_size"],
+        virtual_loss=hyperparams["virtual_loss"],
+        use_prior=hyperparams["use_prior"],
     )
-
-    # 初始化棋盘
-    board = [0] * 225
-    current_player = 1  # 黑先
-    samples = []
-    move_count = 0
-
-    while True:
-        state = board + [current_player]
-
-        # 将 flat board 转为 15×15 二维矩阵（get_move 新接口要求）
-        board_2d = [[board[i * 15 + j] for j in range(15)] for i in range(15)]
-
-        # MCTS 搜索 + 决策（log_key 由引擎内部自动生成，strategy="sampling" 使用温度探索）
-        md = engine.get_move(board_2d, current_player, strategy=STRATEGY_SAMPLING)
-        x, y = md.get_position()
-        action = x * 15 + y
-        visit_counts = md.get_mcts_visit_counts()
-
-        # 计算 π 分布（τ=1.0 归一化）
-        total_visits = sum(visit_counts)
-        if total_visits > 0:
-            pi = [c / total_visits for c in visit_counts]
-        else:
-            pi = [1.0 / 225] * 225
-
-        # 记录样本（z 暂填 0，终局后回填）
-        samples.append({"state": state, "pi": pi, "z": 0})
-
-        # 落子到棋盘
-        board[action] = current_player
-
-        # 终局判定
-        winner = check_winner(board, action)
-        is_terminal = (winner != 0) or is_board_full(board)
-
-        # 子树复用（无条件调用 after_move，终局节点的 advance_root 同样成功）
-        # 使用 (x, y) 坐标代替旧 action 索引
-        engine.after_move(x, y)
-
-        if is_terminal:
-            if winner == 0:
-                winner = 0  # 平局
-            break
-
-        # 切换玩家
-        current_player = 2 if current_player == 1 else 1
-        move_count += 1
-
-    # 回填 z 值（z 值翻转算法）
-    for sample in samples:
-        P = sample["state"][225]  # 该步的落子方
-        if winner == 0:
-            sample["z"] = 0
-        elif winner == P:
-            sample["z"] = 1
-        else:
-            sample["z"] = -1
-
-    return samples
+    # _model 注入复用已加载的模型，避免子进程 pickle
+    worker = MctsSelfPlayWorker(
+        model_path="", model_name=None, device=str(device), config=config,
+        _model=model,
+    )
+    return worker.run_games(game_indices=[game_idx], run_id=run_id)
 
 
 def _describe_result(samples: List[dict]) -> str:

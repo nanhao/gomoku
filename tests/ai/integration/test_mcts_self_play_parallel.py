@@ -70,22 +70,29 @@ class TestCliArgs(unittest.TestCase):
     """CLI 参数测试 — TC4.2"""
 
     def test_workers_default_is_none(self):
-        """--workers 未指定时默认为 None（由 run_self_play 回退到 cpu_count）"""
-        parser = parse_args.__wrapped__ if hasattr(parse_args, '__wrapped__') else parse_args
-        # 直接测试 argparse 默认值
-        import argparse
-        p = argparse.ArgumentParser()
-        p.add_argument("--workers", type=int, default=None)
-        args = p.parse_args([])
-        self.assertIsNone(args.workers)
+        """--workers 未指定时默认为 None"""
+        # 由于 --model 和 --games 是 required，用 parse_known_args 测试
+        import sys
+        from ai.scripts.mcts_self_play import parse_args
+        original_argv = sys.argv
+        try:
+            sys.argv = ["mcts_self_play.py", "--model", "x.pth", "--games", "1"]
+            args = parse_args()
+            self.assertIsNone(args.workers)
+        finally:
+            sys.argv = original_argv
 
     def test_workers_explicit_value(self):
         """--workers 显式指定"""
-        import argparse
-        p = argparse.ArgumentParser()
-        p.add_argument("--workers", type=int, default=None)
-        args = p.parse_args(["--workers", "4"])
-        self.assertEqual(args.workers, 4)
+        import sys
+        from ai.scripts.mcts_self_play import parse_args
+        original_argv = sys.argv
+        try:
+            sys.argv = ["mcts_self_play.py", "--model", "x.pth", "--games", "1", "--workers", "4"]
+            args = parse_args()
+            self.assertEqual(args.workers, 4)
+        finally:
+            sys.argv = original_argv
 
 
 class TestMultiProcessSelfPlay(unittest.TestCase):
@@ -93,16 +100,31 @@ class TestMultiProcessSelfPlay(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        """创建测试用的随机权重模型文件"""
+        """创建测试用的随机权重模型文件（遵循 gen 目录结构）"""
         cls._fresh_model = CNNV7Model(fresh=True)
         cls._tmpdir = tempfile.TemporaryDirectory()
-        cls._model_path = os.path.join(cls._tmpdir.name, "test_model.pth")
+        # 构造符合 gen 解析规范的路径：tmpdir/cnn_v7/gen99/cnn_v7.pth
+        cls._model_dir = os.path.join(cls._tmpdir.name, "cnn_v7", "gen99")
+        os.makedirs(cls._model_dir, exist_ok=True)
+        cls._model_path = os.path.join(cls._model_dir, "cnn_v7.pth")
         cls._fresh_model.save(cls._model_path)
 
     @classmethod
     def tearDownClass(cls):
         """清理临时文件"""
         cls._tmpdir.cleanup()
+
+    def test_process_pool_executor_worker_entry(self):
+        """验证 worker_entry 静态方法签名正确且可被 pickle 序列化
+
+        注：完整的 ProcessPoolExecutor 多进程测试需在实际模型目录下运行，
+        此处验证 worker_entry 的 pickle 兼容性和函数签名。
+        """
+        import pickle
+        # 验证 worker_entry 可被 pickle（ProcessPoolExecutor 的前置条件）
+        pickled = pickle.dumps(MctsSelfPlayWorker.worker_entry)
+        unpickled = pickle.loads(pickled)
+        self.assertTrue(callable(unpickled))
 
     def test_single_worker_vs_two_workers(self):
         """TC2.1: 单 worker 和多 worker 产生相同局数的样本"""

@@ -248,3 +248,6 @@ introduce batch mcts and virtual loss in mcts. But don't use multi thread.
 测试了屏蔽 value 网络、屏蔽 policy 网络、调大 mcts 评估次数和 batch，感觉还是网络太小支持不了。因为 agz 的方法是从零开始训练，会有很多噪音，模型太小无法从噪音里面去识别出有效信息，训练就停滞。所以决定还是要扩展模型规模和调整训练节奏。
 所以新加一个模型 cnn_v8。网络结构和 cnn_v7 的唯一区别就是，在 flatten 后面加一个 fc-linear 层，这样就多了好几万参数了。
 由于训练太耗时了，决定把 mcts 做一个退化处理。batch=225，一步搜索 225 次，同时落子改为依照平均奖励值q，而不是 N。
+
+# intention_id=41
+目前运行 mcts_self_play 脚本很耗时。需要一个提速的方案。
