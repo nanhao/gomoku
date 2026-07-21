@@ -82,7 +82,7 @@ src/
 │   │   ├── searcher.py       PUCT选择·评估·回传·子树复用
 │   │   └── search_logger.py  结构化日志（JSON，支持验收验证）
 │   │
-│   ├── models/            9 种模型实现（每种独立子目录）
+│   ├── models/            10 种模型实现（每种独立子目录）
 │   │   ├── random/      纯随机
 │   │   ├── fc_v1/       全连接（226→1000×5→225）
 │   │   ├── cnn_v1/      卷积 v1（3→32→64→128）
@@ -91,7 +91,8 @@ src/
 │   │   ├── cnn_v4/      +1隐藏层（~2.8万参）
 │   │   ├── cnn_v5/      +2隐藏层（~3.8万参）
 │   │   ├── cnn_v6/      残差+BN（~3.8万参）
-│   │   └── cnn_v7/      双头残差（策略+价值，~4.0万参）★AlphaGo Zero
+│   │   ├── cnn_v7/      双头残差（策略+价值，~4.0万参）★AlphaGo Zero
+│   │   └── cnn_v8/      双头残差+FC隐藏层（策略+价值，~8.2万参）★
 │   │
 │   ├── game_manager.py    AI 对战管理（PvE + AI内战 + 温度采样编排）
 │   ├── data_recorder.py   对战数据记录
@@ -164,7 +165,7 @@ src/
 
 AlphaGo Zero 风格的蒙特卡洛树搜索，支持 Batch MCTS + Virtual Loss：
 - **Selection**：PUCT 公式 \(a = \text{argmax}(Q_a + c_{\text{puct}} \cdot P_a \cdot \frac{\sqrt{\sum N_b}}{1 + N_a})\)，批次内施加 VL 临时惩罚（N+=3, W-=3）以多样化路径
-- **Batch Evaluation**：每批收集 B=16 个叶节点，合并为一次模型推理
+- **Batch Evaluation**：每批收集 B=225 个叶节点（已退化为单批次处理，一步搜索 225 次后按 Q 值落子），合并为一次模型推理
 - **Backup**：沿路径回传，每层价值取反；VL 撤销后执行真实回传
 - **Dirichlet 噪声**：根节点施加 \(\alpha=0.03, \epsilon=0.25\)
 - **子树复用**：`advance_root` 推进根节点复用搜索树
@@ -174,7 +175,7 @@ AlphaGo Zero 风格的蒙特卡洛树搜索，支持 Batch MCTS + Virtual Loss�
 | 引擎 | 适用模型 | 决策方式 | 用途 |
 |------|---------|---------|------|
 | `SinglePolicyAiEngine` | random, fc_v1, cnn_v1~v6 | 模型 softmax → argmax/sampling | 传统 AI、PvE |
-| `PolicyValueAiEngine` | cnn_v7 | MCTS 搜索 → 温度采样 | AlphaGo Zero 训练 |
+| `PolicyValueAiEngine` | cnn_v7, cnn_v8 | MCTS 搜索 → 温度采样 | AlphaGo Zero 训练 |
 
 ### 5. 模型层次结构
 
@@ -188,6 +189,7 @@ BaseModel (ABC)
     ├── CNNV3Model / V4 / V5        # 纯卷积极简系列
     ├── CNNV6Model                  # 残差+BN
     └── CNNV7Model                  # 双头: LogSoftmax(225) + Tanh(1) ★
+        └── CNNV8Model              # 双头+FC隐藏层: LogSoftmax(225) + Tanh(1) ★
 ```
 
 输入编码差异：
@@ -200,7 +202,7 @@ BaseModel (ABC)
 传统训练流程（cnn_v1~v6）:
   self_play → record.json → evaluator(棋型评估) → sample.json → trainer(KL散度)
 
-AlphaGo Zero 训练流程（cnn_v7）:
+AlphaGo Zero 训练流程（cnn_v7/v8）:
   mcts_self_play → sample.json → dual_head_trainer(MSE+CrossEntropy)
 
 迭代进化:
