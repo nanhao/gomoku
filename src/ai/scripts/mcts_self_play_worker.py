@@ -205,12 +205,16 @@ class MctsSelfPlayWorker:
             md = engine.get_move(board_2d, current_player, strategy=STRATEGY_SAMPLING)
             x, y = md.get_position()
             action = x * 15 + y
-            visit_counts = md.get_mcts_visit_counts()
 
-            # 计算 π 分布（τ=1.0 归一化）
-            total_visits = sum(visit_counts)
-            if total_visits > 0:
-                pi = [c / total_visits for c in visit_counts]
+            # 计算 π 分布：基于 Q 值（与落子决策统一），仅已访问边
+            # Q ∈ [-1,1] → score ∈ [0,1] → 归一化，τ=1.0
+            q_values = md.get_mcts_q_values() or [0.0] * 225
+            visit_counts = md.get_mcts_visit_counts()
+            scores = [((q_values[a] + 1.0) / 2.0) if visit_counts[a] > 0 else 0.0
+                      for a in range(225)]
+            total_score = sum(scores)
+            if total_score > 0:
+                pi = [s / total_score for s in scores]
             else:
                 pi = [1.0 / 225] * 225
 
