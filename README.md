@@ -71,7 +71,7 @@ python src/ai/battle.py --ai1 <AI指定> --ai2 <AI指定> [--games <局数>] [�
 | `--temp-side` | 温度采样作用方：`black` / `white` / `both` / `random` | `both` |
 | `--temp-seed` | 温度采样随机种子（用于复现对战结果） | None（不可复现） |
 
-**可用 AI：** `random` / `fc_v1` / `cnn_v1` / `cnn_v2` / `cnn_v3.1` / `cnn_v3.2` / `cnn_v4.1` / `cnn_v5.1` / `cnn_v6.1` ...
+**可用 AI：** `random` / `fc_v1` / `cnn_v1` / `cnn_v2` / `cnn_v3.1` / `cnn_v3.2` / `cnn_v4.1` / `cnn_v5.1` / `cnn_v6.1` / `cnn_v7.1` / `cnn_v8.1` ...
 
 > **多代模型说明**：`cnn_v3` 支持多代模型，使用 `模型名.代数` 格式指定（如 `cnn_v3.1`、`cnn_v3.2`），不同代数的模型权重存储在 `src/ai/models/cnn_v3/gen{i}/` 目录下。非多代模型（如 `fc_v1`、`cnn_v1`）直接使用模型名称。
 
@@ -291,7 +291,7 @@ python -m ai.sample_visualizer --sample data.json --count 3 --no-heatmap --seed 
 
 ### AlphaGo Zero MCTS 训练
 
-基于 cnn_v7 双头模型的强化学习训练体系，通过 MCTS 自对弈生成高质量样本，训练模型逼近 MCTS 决策。
+基于 cnn_v7/v8 双头模型的强化学习训练体系，通过 MCTS 自对弈生成高质量样本，训练模型逼近 MCTS 决策。
 
 #### MCTS 自我对弈
 
@@ -301,7 +301,8 @@ python src/ai/scripts/mcts_self_play.py --model <权重路径> --games <局数> 
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `--model` | 模型权重文件路径（.pth） | 必填 |
+| `--model` | 模型权重文件路径（.pth），自动解析模型名.代数 | 必填 |
+| `--model-name` | 显式指定模型注册名.代数（如 cnn_v8.1），覆盖路径解析 | None |
 | `--games` | 对弈局数 | 必填 |
 | `--simulations` | 每步 MCTS 模拟次数 | 800 |
 | `--c-puct` | PUCT 探索系数 | 2.0 |
@@ -313,16 +314,20 @@ python src/ai/scripts/mcts_self_play.py --model <权重路径> --games <局数> 
 | `--device` | 推理设备 | cuda |
 
 ```bash
-# 示例：使用 cnn_v7 权重进行 100 局 MCTS 自对弈
-python src/ai/scripts/mcts_self_play.py --model src/ai/models/cnn_v7/cnn_v7.pth --games 100
+# 示例：使用 cnn_v8 权重进行 100 局 MCTS 自对弈
+python src/ai/scripts/mcts_self_play.py --model src/ai/models/cnn_v8/gen1/cnn_v8.pth --games 100
 
 # 示例：自定义模拟次数和输出目录
 python src/ai/scripts/mcts_self_play.py --model cnn_v7.pth --games 50 --simulations 400 --output my_samples
 
-python src/ai/scripts/mcts_self_play.py --model src/ai/models/cnn_v7/gen1/cnn_v7.pth --games 2000 --simulations 100 --output samples/7/v1 --temp-steps 100
+python src/ai/scripts/mcts_self_play.py --model src/ai/models/cnn_v7/gen4/cnn_v7.pth --games 4000 --simulations 800 --output samples/7/v4 --temp-steps 20
+
+python src/ai/scripts/mcts_self_play.py --model src/ai/models/cnn_v8/gen1/cnn_v8.pth --games 100 --simulations 800 --output samples/8/v1 --temp-steps 50
 ```
 
 #### MCTS 训练
+
+> 支持所有双头模型（cnn_v7, cnn_v8, ...），根据权重路径自动选择对应的模型类和训练器。
 
 ```bash
 python src/ai/scripts/mcts_train.py --model <权重路径> --train-from-dir <数据目录> --epochs <轮数> [选项]
@@ -330,7 +335,8 @@ python src/ai/scripts/mcts_train.py --model <权重路径> --train-from-dir <数
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `--model` | 初始权重文件路径 | 必填 |
+| `--model` | 初始权重文件路径（自动解析模型名.代数） | 必填 |
+| `--model-name` | 显式指定模型注册名.代数（如 cnn_v8.1），覆盖路径解析 | None |
 | `--train-from-dir` | 训练数据目录（含 sample.json） | 必填 |
 | `--epochs` | 训练轮数 | 必填 |
 | `--output` | 训练后权重保存路径 | `--model` 的值（覆盖） |
@@ -347,7 +353,7 @@ python src/ai/scripts/mcts_train.py --model <权重路径> --train-from-dir <数
 
 ```bash
 # 示例：从 MCTS 自对弈样本训练
-python src/ai/scripts/mcts_train.py --model cnn_v7.pth --train-from-dir my_samples --epochs 100
+python src/ai/scripts/mcts_train.py --model src/ai/models/cnn_v8/gen1/cnn_v8.pth --train-from-dir samples/8/v1 --epochs 30 --output src/ai/models/cnn_v8/gen2/cnn_v8.pth --val-split 0.1
 
 # 示例：指定输出路径和验证集比例
 python src/ai/scripts/mcts_train.py --model src/ai/models/cnn_v7/gen1/cnn_v7.pth --train-from-dir samples/7/v2 --epochs 300 --output src/ai/models/cnn_v7/gen2/cnn_v7.pth --val-split 0.1
@@ -529,6 +535,17 @@ python tests/run_tests.py
 - **特点**：在 cnn_v6 基础上增加价值头，采用 AlphaGo Zero 相对视角编码
 - **训练方式**：AlphaGo Zero MCTS 自我对弈 + MSE(价值) + CrossEntropy(策略) + AdamW 正则化
 - **模型文件**：`src/ai/models/cnn_v7/gen{i}/cnn_v7.pth`（多代模型）
+
+### CNN v8 模型（双头残差卷积 + FC 隐藏层）
+
+- **输入**：15×15×3 张量（相对视角编码：我方棋子、对方棋子、我方颜色）
+- **输出**：双头 —— 策略头 225 维 LogSoftmax + 价值头 Tanh [-1,1]
+- **网络结构**：在 cnn_v7 基础上为双头各添加一层 FC(225→64)→ReLU 隐藏层
+- **参数量**：约 8.2 万（cnn_v7 的 2.1 倍）
+- **特点**：共享特征层与 cnn_v7 一致，策略头 conv_out → Flatten → FC→ReLU→FC→LogSoftmax，价值头 value_conv_out → Flatten → FC→ReLU→FC→Tanh
+- **训练方式**：AlphaGo Zero MCTS 自我对弈 + MSE(价值) + CrossEntropy(策略) + AdamW 正则化
+- **模型文件**：`src/ai/models/cnn_v8/gen{i}/cnn_v8.pth`（多代模型）
+- **结构图**：[cnn_v8_architecture.puml](src/ai/models/cnn_v8/cnn_v8_architecture.puml) / [cnn_v8_architecture.png](src/ai/models/cnn_v8/cnn_v8_architecture.png)
 
 ---
 
