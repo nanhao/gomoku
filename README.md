@@ -312,6 +312,7 @@ python src/ai/scripts/mcts_self_play.py --model <权重路径> --games <局数> 
 | `--dirichlet-alpha` | 狄利克雷分布参数 | 0.03 |
 | `--output` | 输出目录名 | `{model}_mcts_{timestamp}` |
 | `--device` | 推理设备 | cuda |
+| `--workers` | 并行 worker 进程数（CPU 推理），1=单进程 | CPU 核数 |
 
 ```bash
 # 示例：使用 cnn_v8 权重进行 100 局 MCTS 自对弈
@@ -323,6 +324,9 @@ python src/ai/scripts/mcts_self_play.py --model cnn_v7.pth --games 50 --simulati
 python src/ai/scripts/mcts_self_play.py --model src/ai/models/cnn_v7/gen4/cnn_v7.pth --games 4000 --simulations 800 --output samples/7/v4 --temp-steps 20
 
 python src/ai/scripts/mcts_self_play.py --model src/ai/models/cnn_v8/gen1/cnn_v8.pth --games 100 --simulations 800 --output samples/8/v1 --temp-steps 50
+
+# 多进程并行（4 workers，CPU 推理）
+python src/ai/scripts/mcts_self_play.py --model src/ai/models/cnn_v8/gen1/cnn_v8.pth --games 100 --workers 4
 ```
 
 #### MCTS 训练
