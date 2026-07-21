@@ -5,6 +5,7 @@
 """
 
 import os
+import time
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -150,9 +151,15 @@ class MctsSelfPlayWorker:
             所有对局产生的样本列表，每项为 {"state": [...], "pi": [...], "z": int}
         """
         all_samples: List[dict] = []
-        for game_idx in game_indices:
+        total = len(game_indices)
+        for i, game_idx in enumerate(game_indices):
+            t_start = time.time()
             samples = self._play_one_game(game_idx, run_id)
             all_samples.extend(samples)
+            elapsed = time.time() - t_start
+            print(f"[局 {i + 1}/{total}] game_idx={game_idx} — "
+                  f"{len(samples)} 步, 结果: {self._describe_result(samples)}, "
+                  f"耗时: {elapsed:.1f}s")
         return all_samples
 
     def _play_one_game(self, game_idx: int, run_id: str) -> List[dict]:
@@ -238,3 +245,18 @@ class MctsSelfPlayWorker:
                 sample["z"] = -1
 
         return samples
+
+    @staticmethod
+    def _describe_result(samples: List[dict]) -> str:
+        """用人类可读方式描述对局结果"""
+        if not samples:
+            return "无样本"
+        last_z = samples[-1]["z"]
+        last_player = samples[-1]["state"][225]
+        if last_z == 1:
+            return f"玩家{last_player}胜"
+        elif last_z == -1:
+            other = 2 if last_player == 1 else 1
+            return f"玩家{other}胜"
+        else:
+            return "平局"
