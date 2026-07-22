@@ -251,8 +251,8 @@ class TestModelRegistryData(unittest.TestCase):
     """测试 MODEL_REGISTRY 数据完整性"""
 
     def test_registry_has_nine_models(self):
-        """MODEL_REGISTRY 应包含 10 个模型（random, fc_v1, cnn_v1~v8）"""
-        self.assertEqual(len(MODEL_REGISTRY), 10)
+        """MODEL_REGISTRY 应包含 11 个模型（random, fc_v1, cnn_v1~v9）"""
+        self.assertEqual(len(MODEL_REGISTRY), 11)
 
     def test_registry_entry_format(self):
         """每个注册项格式为 RegistryEntry(model_path, trainer_path_or_None, supports_multi_gen)"""
