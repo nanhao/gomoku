@@ -181,9 +181,8 @@ class MctsSelfPlayWorker:
         samples: List[dict] = []
 
         def on_move(state: List[int], md, current_player: int) -> None:
-            q_values = md.get_mcts_q_values() or [0.0] * 225
             visit_counts = md.get_mcts_visit_counts()
-            pi = PolicyValueAiEngine.compute_prob_from_q(q_values, visit_counts)
+            pi = PolicyValueAiEngine.compute_prob_from_n(visit_counts)
             samples.append({"state": state, "pi": pi, "z": 0})
 
         # 委托 MctsGameRunner 执行对局循环（self-play 模式：同一 engine 同时执黑执白）

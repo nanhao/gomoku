@@ -110,27 +110,20 @@ class PolicyValueAiEngine(AIEngine):
             state, log_key=log_key
         )
 
-        # 4. 提取根节点各边的 Q 值
-        q_values = [0.0] * 225
-        root_hash = self.searcher._root_hash
-        if root_hash and root_hash in self.searcher.tree:
-            for action, edge in self.searcher.tree[root_hash]["edges"].items():
-                q_values[action] = edge.get("Q", 0.0)
-
-        # 5. 按策略选择动作（基于 Q 值，仅考虑已访问的边）
+        # 4. 按策略选择动作（基于 visit_counts，仅考虑已访问的边）
         if strategy == STRATEGY_ARGMAX:
-            action = self._select_greedy_q(q_values, visit_counts, state[:225])
+            action = self._select_greedy_n(visit_counts, state[:225])
         else:  # STRATEGY_SAMPLING
             tau = self._get_temperature()
             if tau <= 0:
-                action = self._select_greedy_q(q_values, visit_counts, state[:225])
+                action = self._select_greedy_n(visit_counts, state[:225])
             else:
-                action = self._sample_action_q(q_values, visit_counts, state[:225], tau)
+                action = self._sample_action_n(visit_counts, state[:225], tau)
 
         # 转换 flat index 为 (x, y) 坐标
         x, y = action // 15, action % 15
 
-        return MoveDecision(x, y, mcts_visit_counts=visit_counts, mcts_root_value=root_value, mcts_q_values=q_values)
+        return MoveDecision(x, y, mcts_visit_counts=visit_counts, mcts_root_value=root_value)
 
     def after_move(self, x: int, y: int):
         """落子后钩子：推进搜索树根节点
@@ -162,30 +155,29 @@ class PolicyValueAiEngine(AIEngine):
     # ---------- 内部方法 ----------
 
     @staticmethod
-    def compute_prob_from_q(
-        q_values: List[float], visit_counts: List[int], tau: float = 1.0
-    ) -> List[float]:
-        """从 Q 值计算 225 维概率分布
+    def compute_prob_from_n(visit_counts: List[int], tau: float = 1.0) -> List[float]:
+        """从访问计数计算 225 维概率分布
 
-        Q ∈ [-1, 1] → score = (Q+1)/2 ∈ [0, 1] → score^(1/τ) → 归一化。
-        仅考虑 visit_counts > 0 的已访问动作，未访问动作为 0。
+        N(a)^(1/τ) / Σ N(b)^(1/τ)，标准 MCTS 行为。
         供落子决策和样本 pi 计算共用。
 
         Args:
-            q_values: 225 维 Q 值
             visit_counts: 225 维访问计数
             tau: 温度参数，默认 1.0
 
         Returns:
             225 维概率分布，总和为 1
         """
-        scores = [((q_values[a] + 1.0) / 2.0) if visit_counts[a] > 0 else 0.0
-                  for a in range(225)]
-        if tau != 1.0:
-            scores = [s ** (1.0 / tau) if s > 0 else 0.0 for s in scores]
-        total = sum(scores)
+        if tau <= 0:
+            max_count = max(visit_counts)
+            max_indices = [i for i, c in enumerate(visit_counts) if c == max_count]
+            result = [0.0] * 225
+            for i in max_indices:
+                result[i] = 1.0 / len(max_indices)
+            return result
+        total = sum(c ** (1.0 / tau) for c in visit_counts)
         if total > 0:
-            return [s / total for s in scores]
+            return [(c ** (1.0 / tau)) / total for c in visit_counts]
         return [1.0 / 225] * 225
 
     def _get_temperature(self) -> float:
@@ -198,13 +190,12 @@ class PolicyValueAiEngine(AIEngine):
         return -0.5  # 探索步数之后纯贪婪
 
     @staticmethod
-    def _select_greedy_q(q_values: List[float], visit_counts: List[int], board: List[int]) -> int:
-        """贪婪选择：在已访问的空位中选 Q 值最大的
+    def _select_greedy_n(visit_counts: List[int], board: List[int]) -> int:
+        """贪婪选择：在已访问的空位中选访问计数最大的
 
-        仅考虑 N > 0 的边，防止选中未访问边（Q 默认为 0 但无子节点）。
+        仅考虑 N > 0 的边，防止选中未访问边。
 
         Args:
-            q_values: 225 维 Q 值（-1 到 1）
             visit_counts: 225 维访问计数
             board: 225 维棋盘（0=空）
 
@@ -212,27 +203,27 @@ class PolicyValueAiEngine(AIEngine):
             选中动作索引
         """
         best_action = None
-        best_q = float("-inf")
+        best_n = -1
         for action in range(225):
-            if board[action] == 0 and visit_counts[action] > 0 and q_values[action] > best_q:
-                best_q = q_values[action]
+            if board[action] == 0 and visit_counts[action] > best_n:
+                best_n = visit_counts[action]
                 best_action = action
         return best_action if best_action is not None else 0
 
     @staticmethod
-    def _sample_action_q(
-        q_values: List[float], visit_counts: List[int], board: List[int], tau: float
+    def _sample_action_n(
+        visit_counts: List[int], board: List[int], tau: float
     ) -> int:
-        """基于 Q 值的温度采样选择动作（仅已访问空位）
+        """基于访问计数的温度采样选择动作（仅已访问空位）
 
-        委托 compute_prob_from_q 计算概率分布，再从合法动作中采样。
+        委托 compute_prob_from_n 计算概率分布，再从合法动作中采样。
         """
         actions = [a for a in range(225)
                    if board[a] == 0 and visit_counts[a] > 0]
         if not actions:
             return 0
 
-        probs = PolicyValueAiEngine.compute_prob_from_q(q_values, visit_counts, tau)
+        probs = PolicyValueAiEngine.compute_prob_from_n(visit_counts, tau)
         weights = [probs[a] for a in actions]
         total = sum(weights)
         if total <= 0:
