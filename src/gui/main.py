@@ -346,9 +346,10 @@ class GomokuGUI:
             messagebox.showwarning("提示", "没有正在进行的游戏")
             return
         
-        # 游戏会自动保存，这里只是提示
         save_name = self.controller.current_save_name or "未知"
-        messagebox.showinfo("提示", f"游戏已自动保存！\n存档名称: {save_name}")
+        state = self.controller.get_state()
+        self.controller.save.save_game(state, save_name)
+        messagebox.showinfo("提示", f"游戏已保存！\n存档名称: {save_name}")
     
     def _load_game(self):
         """加载游戏"""

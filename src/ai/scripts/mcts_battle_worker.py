@@ -137,6 +137,10 @@ class MctsBattleWorker:
         Returns:
             BattleGameResult 列表
         """
+        # 多进程模式下禁用 CUDA，必须在 import torch 之前设置
+        import os
+        os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
+
         worker = MctsBattleWorker(
             model1_spec, model2_spec, device, config
         )

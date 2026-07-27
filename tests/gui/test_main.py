@@ -360,14 +360,25 @@ class TestSaveGame:
 
         mock_msg.showwarning.assert_called_once()
 
-    def test_with_game_shows_info(self):
-        """有游戏时保存应提示已自动保存"""
+    def test_with_game_saves_and_shows_info(self):
+        """有游戏时保存应实际调用 save_game 并提示"""
         self.gui.controller.new_game("save_test")
-        with patch("gui.main.messagebox") as mock_msg:
-            self.gui._save_game()
+        with patch.object(self.gui.controller.save, 'save_game') as mock_save:
+            with patch("gui.main.messagebox") as mock_msg:
+                self.gui._save_game()
 
+        # 验证实际调用了 save_game
+        mock_save.assert_called_once()
+        call_args = mock_save.call_args[0]
+        # 第一个参数是 game_state dict，第二个参数是 save_name
+        assert call_args[1] == "save_test"
+        # 验证 state 包含棋盘数据
+        assert "board" in call_args[0]
+        assert "current_player" in call_args[0]
+
+        # 验证提示信息
         mock_msg.showinfo.assert_called_once()
-        assert "保存" in mock_msg.showinfo.call_args[0][1] or "保存" in str(mock_msg.showinfo.call_args)
+        assert "保存" in mock_msg.showinfo.call_args[0][1]
 
 
 class TestModelLoadErrorHandling:

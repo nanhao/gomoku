@@ -375,7 +375,7 @@ class NeuralNetworkModel(BaseModel):
         Args:
             model_path: 模型文件路径
         """
-        self.network.load_state_dict(torch.load(model_path, weights_only=True))
+        self.network.load_state_dict(torch.load(model_path, weights_only=True, map_location='cpu'))
         self.network.eval()
 
     def move_to_device(self, device: torch.device = None) -> torch.device:
