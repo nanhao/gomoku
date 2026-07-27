@@ -230,7 +230,7 @@ def _draw_stones(ax, board: Sequence[int]) -> None:
 
 
 def _draw_attack_markers(ax, attack: Sequence[int]) -> None:
-    """在 attack_positions 上画红色星号。"""
+    """在 attack_positions 上画空心红圈。"""
     if not attack:
         return
     xs: List[int] = []
@@ -239,8 +239,8 @@ def _draw_attack_markers(ax, attack: Sequence[int]) -> None:
         row, col = divmod(int(idx), BOARD_SIZE)
         xs.append(col)
         ys.append(BOARD_SIZE - 1 - row)
-    ax.scatter(xs, ys, marker="*", color="red", s=220, zorder=10,
-               edgecolors="black", linewidths=0.4)
+    ax.scatter(xs, ys, marker="o", facecolors="none", edgecolors="red",
+               s=260, zorder=10, linewidths=2.2)
 
 
 def _format_title(sample_idx: int, shape: Optional[str],
@@ -273,8 +273,8 @@ def _draw_one_sample(ax, sample_idx: int, sample: Dict,
     # 4) 棋子
     _draw_stones(ax, meta["board"])
 
-    # 5) attack 标记
-    _draw_attack_markers(ax, meta["attack"])
+    # 5) attack 标记（已禁用）
+    # _draw_attack_markers(ax, meta["attack"])
 
     # 6) 标题
     ax.set_title(

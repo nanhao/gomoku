@@ -1,75 +1,174 @@
-"""深入分析训练过程"""
-import sys
-sys.path.insert(0, 'd:/projects/gomoku')
+"""深度分析：v9.1 随机性、v9.2 value/policy 质量"""
+import json, sys, math, random
+sys.path.insert(0, 'd:/projects/gomoku/src')
 
-import json
-import torch
-from ai.models.cnn_v1.model import CNNModel
+from game.game import check_winner
+from ai.sample_visualizer import SampleVisualizer
 
-# 加载样本
-with open('d:/projects/gomoku/ai/train_data/cnn_v1_cycle_1_1/1/sample.json') as f:
-    data = json.load(f)
+with open('d:/projects/gomoku/debug/sample.json', 'r', encoding='utf-8') as f:
+    samples = json.load(f)
 
-# 找一个有高概率位置的样本
-sample = data[22]  # 之前看到 (7,6) 有 0.48 的概率
 
-board = sample['input'][:225]
-target = sample['output']
-mask = sample['mask']
-player = sample['input'][225]
+# ========== 辅助函数 ==========
 
-print('Sample 22 分析:')
-print('棋盘上棋子数:', sum(1 for x in board if x != 0))
-print('Target (7,6):', target[7*15+6])
-print('Target (7,11):', target[7*15+11])
-print('Target max:', max(target), 'at', target.index(max(target)))
-print('Target sum:', sum(target))
-print('Mask sum:', sum(mask))
+def compute_entropy(policy):
+    """策略熵，随机均匀分布的理论最大值 ≈ log(225) = 5.416"""
+    return -sum(p * math.log(max(p, 1e-12)) for p in policy)
 
-# 检查棋盘状态
-print('\n棋盘位置 (7,6)-(7,11):')
-for i in range(6, 12):
-    pos = 7*15 + i
-    print(f'  (7,{i}): board={board[pos]}, target={target[pos]:.4f}')
+def find_winning_moves(state):
+    """找出当前方可以一步赢的所有位置"""
+    board = state[:225]
+    player = state[225]
+    moves = []
+    for pos in range(225):
+        if board[pos] == 0:
+            bc = board[:]
+            bc[pos] = player
+            if check_winner(bc, pos) == player:
+                moves.append(pos)
+    return moves
 
-# 手动模拟 Evaluator 的 reward 计算
-print('\n模拟 reward 计算:')
-# 假设 (7,6) 是活四的一端，应该有高 reward
-# 但 sample 中的 output 已经是 Softmax 后的概率
+def policy_mass_on(policy, positions):
+    """policy 中指定位置的概率之和"""
+    return sum(policy[p] for p in positions)
 
-# 检查模型训练过程
-print('\n=== 手动训练步骤 ===')
-model = CNNModel(fresh=True)
+UNIFORM_ENTROPY = math.log(225)  # ≈ 5.416
 
-# 转换输入
-input_tensor = model._vector_to_tensor(sample['input'])
-target_tensor = torch.tensor([target], dtype=torch.float32)
-mask_tensor = torch.tensor([mask], dtype=torch.float32)
 
-print('Input shape:', input_tensor.shape)
-print('Target shape:', target_tensor.shape)
+# ========== 1) v9.1 随机性检查 ==========
 
-# 前向传播
-model.network.train()
-output = model.network(input_tensor)
-print('Model output shape:', output.shape)
-print('Model output (7,6):', output[0, 7*15+6].item())
+print("=" * 60)
+print("1. v9.1 随机性检查")
+print("=" * 60)
 
-# 计算 loss
-criterion = torch.nn.L1Loss(reduction='none')
-loss = criterion(output, target_tensor)
-loss = loss * mask_tensor
-print('Per-position loss at (7,6):', loss[0, 7*15+6].item())
-print('Total loss:', loss.sum().item() / mask_tensor.sum().item())
+v9_1_entropies = [compute_entropy(s['v9_1_policy']) for s in samples]
+v9_1_values = [s['v9_1_value'] for s in samples]
+pi_entropies = [compute_entropy(s['pi']) for s in samples]
 
-# 反向传播
-optimizer = torch.optim.Adam(model.network.parameters(), lr=0.001)
-optimizer.zero_grad()
-loss.sum().backward()
-optimizer.step()
+print(f"  v9.1 policy 熵: 均值={sum(v9_1_entropies)/len(v9_1_entropies):.4f}, "
+      f"最小={min(v9_1_entropies):.4f}, 最大={max(v9_1_entropies):.4f}")
+print(f"  参考: 随机均匀熵 = {UNIFORM_ENTROPY:.4f}")
+print(f"  偏离均匀的熵差: 均值={UNIFORM_ENTROPY - sum(v9_1_entropies)/len(v9_1_entropies):.4f}")
 
-# 检查更新后的输出
-model.network.eval()
-with torch.no_grad():
-    new_output = model.network(input_tensor)
-print('After 1 step, output (7,6):', new_output[0, 7*15+6].item())
+print(f"  v9.1 value 分布: 均值={sum(v9_1_values)/len(v9_1_values):.4f}, "
+      f"std={math.sqrt(sum((v-sum(v9_1_values)/len(v9_1_values))**2 for v in v9_1_values)/len(v9_1_values)):.4f}, "
+      f"min={min(v9_1_values):.4f}, max={max(v9_1_values):.4f}")
+
+# 检查 v9.1 policy 在空位上的均匀性
+for s in samples[:5]:
+    board = s['state'][:225]
+    empty_positions = [i for i in range(225) if board[i] == 0]
+    empty_probs = [s['v9_1_policy'][i] for i in empty_positions]
+    if empty_probs:
+        cv = (math.sqrt(sum((p-sum(empty_probs)/len(empty_probs))**2 for p in empty_probs)/len(empty_probs))
+              / (sum(empty_probs)/len(empty_probs)))
+        print(f"  sample: 空位概率 CV={cv:.3f} (接近0≈均匀)")
+
+
+# ========== 2) v9.2 value 分析 ==========
+
+print()
+print("=" * 60)
+print("2. v9.2 value 预测即将胜利的能力")
+print("=" * 60)
+
+v9_2_values = [s['v9_2_value'] for s in samples]
+z_values = [s['z'] for s in samples]
+
+print(f"  v9.2 value: 均值={sum(v9_2_values)/len(v9_2_values):.4f}, "
+      f"min={min(v9_2_values):.4f}, max={max(v9_2_values):.4f}")
+print(f"  预期: 所有局面当前方差一步赢, value 应接近 1.0")
+
+pos_count = sum(1 for v in v9_2_values if v > 0)
+high_count = sum(1 for v in v9_2_values if v > 0.9)
+mid_count = sum(1 for v in v9_2_values if 0.5 < v <= 0.9)
+low_count = sum(1 for v in v9_2_values if v <= 0.5)
+print(f"  value > 0:   {pos_count}/{len(samples)} ({100*pos_count/len(samples):.1f}%)")
+print(f"  value > 0.9: {high_count}/{len(samples)} ({100*high_count/len(samples):.1f}%)")
+print(f"  value 0.5~0.9: {mid_count}/{len(samples)} ({100*mid_count/len(samples):.1f}%)")
+print(f"  value ≤ 0.5:  {low_count}/{len(samples)} ({100*low_count/len(samples):.1f}%)")
+
+# 对比 v9.1 vs v9.2
+print(f"\n  v9.1 value: 均值={sum(v9_1_values)/len(v9_1_values):.4f}")
+print(f"  v9.2 value: 均值={sum(v9_2_values)/len(v9_2_values):.4f}")
+
+# z 值一致性：z=1 表示当前方最终赢了（我们这里是差一步赢的局面，z 应大多=1）
+z_pos = sum(1 for z in z_values if z > 0)
+print(f"  z=1 (当前方最终胜): {z_pos}/{len(samples)}")
+
+
+# ========== 3) v9.2 policy vs winning moves ==========
+
+print()
+print("=" * 60)
+print("3. v9.2 policy 对比 MCTS pi — 赢棋位概率集中度")
+print("=" * 60)
+
+v9_2_entropies = [compute_entropy(s['v9_2_policy']) for s in samples]
+
+print(f"  v9.2 policy 熵: 均值={sum(v9_2_entropies)/len(v9_2_entropies):.4f}, "
+      f"最小={min(v9_2_entropies):.4f}, 最大={max(v9_2_entropies):.4f}")
+print(f"  MCTS pi 熵:   均值={sum(pi_entropies)/len(pi_entropies):.4f}, "
+      f"最小={min(pi_entropies):.4f}, 最大={max(pi_entropies):.4f}")
+print(f"  参考: 随机均匀熵 = {UNIFORM_ENTROPY:.4f}")
+
+# 赢棋位概率
+winning_mass_pi = []
+winning_mass_v9 = []
+for s in samples:
+    wm = find_winning_moves(s['state'])
+    if wm:
+        winning_mass_pi.append(policy_mass_on(s['pi'], wm))
+        winning_mass_v9.append(policy_mass_on(s['v9_2_policy'], wm))
+
+print(f"\n  赢棋位的概率集中度 (共 {len(winning_mass_pi)} 样本有赢棋位):")
+print(f"  MCTS pi:  均值={sum(winning_mass_pi)/len(winning_mass_pi):.4f}, "
+      f"min={min(winning_mass_pi):.4f}, max={max(winning_mass_pi):.4f}")
+print(f"  v9.2 policy: 均值={sum(winning_mass_v9)/len(winning_mass_v9):.4f}, "
+      f"min={min(winning_mass_v9):.4f}, max={max(winning_mass_v9):.4f}")
+
+# top-1 一致性
+top1_match = 0
+for s in samples:
+    pi_best = max(range(225), key=lambda i: s['pi'][i])
+    v9_best = max(range(225), key=lambda i: s['v9_2_policy'][i])
+    if pi_best == v9_best:
+        top1_match += 1
+print(f"\n  pi 和 v9.2 policy 的 argmax 一致: {top1_match}/{len(samples)} ({100*top1_match/len(samples):.1f}%)")
+
+# top-1 是否命中赢棋位
+pi_top1_win = sum(1 for s in samples
+                  if max(range(225), key=lambda i: s['pi'][i]) in find_winning_moves(s['state']))
+v9_top1_win = sum(1 for s in samples
+                  if max(range(225), key=lambda i: s['v9_2_policy'][i]) in find_winning_moves(s['state']))
+print(f"  pi  argmax 命中赢棋位:    {pi_top1_win}/{len(samples)} ({100*pi_top1_win/len(samples):.1f}%)")
+print(f"  v9.2 argmax 命中赢棋位:   {v9_top1_win}/{len(samples)} ({100*v9_top1_win/len(samples):.1f}%)")
+
+
+# ========== 4) 画 12×2 热力图对比 ==========
+
+print()
+print("=" * 60)
+print("4. 生成对比热力图")
+print("=" * 60)
+
+random.seed(123)
+picked = random.sample(samples, 12)
+
+# 为每个样本生成两个条目：pi 和 v9.2 policy
+viz_samples = []
+for s in picked:
+    state = s['state']
+    viz_samples.append({"input": state, "output": s['pi'], "_label": "MCTS pi"})
+    viz_samples.append({"input": state, "output": s['v9_2_policy'], "_label": "v9.2 policy"})
+
+viz = SampleVisualizer()
+out = viz.visualize(
+    viz_samples,
+    count=24,
+    output_path='d:/projects/gomoku/debug/heatmap_pi_vs_v9_2.png',
+    show_heatmap=True,
+    heatmap_mode="log",
+    heatmap_alpha=0.75,
+)
+print(f'Done: {out}')
