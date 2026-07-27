@@ -14,7 +14,7 @@ MCTS_LOG_DIR: str = "mcts_log"
 MCTS_LOSS_LOG_DIR: str = "mcts_loss_logs"
 
 # Batch MCTS 每批收集的 simulation 数
-MCTS_BATCH_SIZE: int = 225
+MCTS_BATCH_SIZE: int = 1
 
 # Virtual Loss 值（用于批次内路径多样化）
 MCTS_VIRTUAL_LOSS: float = 3.0

@@ -251,3 +251,6 @@ introduce batch mcts and virtual loss in mcts. But don't use multi thread.
 
 # intention_id=41
 目前运行 mcts_self_play 脚本很耗时。需要一个提速的方案。
+
+# intention_id=42
+新增 cnn_v9，在 cnn_v8 的基础上，把所有卷积层的通道数增加到 48
