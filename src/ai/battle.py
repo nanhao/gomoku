@@ -141,10 +141,19 @@ def run_battle(ai1_name: str, ai2_name: str, num_games: int,
     round_name = f"{ai1_name}_vs_{ai2_name}"
     # 使用常量定义的 AI 数据目录
     recorder = DataRecorder(round_name, AI_DATA_DIR)
+
+    # 实时打印进度
+    def on_progress(current: int, total: int) -> None:
+        """每局完成后的进度回调"""
+        pct = current * 100 // total
+        print(f"\r进度: [{current}/{total}] {pct}%", end="", flush=True)
     
     # 执行对战（每局执方随机），start_ai_vs_ai_random 内部每局调用 create_engine
     results = AIGameManager.start_ai_vs_ai_random(
-        ai1_name, ai2_name, num_games, recorder, temp_config=temp_config)
+        ai1_name, ai2_name, num_games, recorder, temp_config=temp_config,
+        on_progress=on_progress)
+    print()  # 换行，脱离进度行
+    print()
     
     # 逐局输出结果
     for r in results:

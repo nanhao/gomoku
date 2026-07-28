@@ -6,7 +6,7 @@
 """
 
 import random as _stdrandom
-from typing import List, NamedTuple, Optional, Tuple
+from typing import Callable, List, NamedTuple, Optional, Tuple
 from game import GomokuController
 from ai.engine import AIEngine, create_engine
 from ai.constants import STRATEGY_ARGMAX, STRATEGY_SAMPLING
@@ -353,6 +353,7 @@ class AIGameManager:
         num_games: int,
         recorder: DataRecorder,
         temp_config: Optional[TempConfig] = None,
+        on_progress: Optional[Callable[[int, int], None]] = None,
     ) -> List[dict]:
         """执行 AI 内战（每局执方随机）
     
@@ -366,6 +367,7 @@ class AIGameManager:
             num_games: 对战局数
             recorder: 数据记录器
             temp_config: 可选温度采样配置；None 时保持原有 argmax 行为
+            on_progress: 可选进度回调，每局完成后调用，参数为 (current: int, total: int)
     
         Returns:
             对战结果列表，每项格式：
@@ -413,5 +415,9 @@ class AIGameManager:
                 "ai1_won": ai1_won,
                 "ai2_won": ai2_won,
             })
+
+            # 进度回调
+            if on_progress is not None:
+                on_progress(game_num, num_games)
     
         return results
