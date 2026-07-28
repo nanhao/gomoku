@@ -71,7 +71,7 @@ python src/ai/battle.py --ai1 <AI指定> --ai2 <AI指定> [--games <局数>] [�
 | `--temp-side` | 温度采样作用方：`black` / `white` / `both` / `random` | `both` |
 | `--temp-seed` | 温度采样随机种子（用于复现对战结果） | None（不可复现） |
 
-**可用 AI：** `random` / `fc_v1` / `cnn_v1` / `cnn_v2` / `cnn_v3.1` / `cnn_v3.2` / `cnn_v4.1` / `cnn_v5.1` / `cnn_v6.1` / `cnn_v7.1` / `cnn_v8.1` ...
+**可用 AI：** `random` / `fc_v1` / `cnn_v1` / `cnn_v2` / `cnn_v3.1` / `cnn_v4.1` / `cnn_v5.1` / `cnn_v6.1` / `cnn_v7.1` / `cnn_v8.1` / `cnn_v9.1` / `cnn_v10.1` ...
 
 > **多代模型说明**：`cnn_v3` 支持多代模型，使用 `模型名.代数` 格式指定（如 `cnn_v3.1`、`cnn_v3.2`），不同代数的模型权重存储在 `src/ai/models/cnn_v3/gen{i}/` 目录下。非多代模型（如 `fc_v1`、`cnn_v1`）直接使用模型名称。
 
@@ -393,6 +393,61 @@ python src/ai/scripts/mcts_train.py --model src/ai/models/cnn_v8/gen1/cnn_v8.pth
 
 # 示例：指定输出路径和验证集比例
 python src/ai/scripts/mcts_train.py --model src/ai/models/cnn_v7/gen1/cnn_v7.pth --train-from-dir samples/7/v2 --epochs 300 --output src/ai/models/cnn_v7/gen2/cnn_v7.pth --val-split 0.1
+```
+
+### 价值头训练（cnn_v10）
+
+cnn_v10 是纯价值头模型（无策略头），训练仅使用 MSE 损失。自对弈通过"枚举-评估"方式生成样本，样本格式为 `{"state": [...], "z": int}`。
+
+#### 价值头自对弈
+
+```bash
+python src/ai/scripts/value_self_play.py --model <权重路径> --games <局数> [选项]
+```
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--model` | 模型权重文件路径（.pth） | 必填 |
+| `--model-name` | 显式指定模型注册名.代数（如 cnn_v10.1） | 从路径解析 |
+| `--games` | 对弈局数 | 必填 |
+| `--output` | 输出目录名 | `{model}_value_{timestamp}` |
+| `--device` | 推理设备 | cuda |
+| `--workers` | 并行进程数，1=单进程 | CPU 核数 |
+| `--temperature` | 温度值 | 1.0 |
+| `--temp-steps` | 前 N 步启用温度采样 | 8 |
+| `--temp-side` | 采样方：black/white/random/both | random |
+
+```bash
+# 示例
+python src/ai/scripts/value_self_play.py --model src/ai/models/cnn_v10/gen1/cnn_v10.pth --games 100
+python src/ai/scripts/value_self_play.py --model cnn_v10.pth --games 50 --output my_samples --workers 4
+```
+
+#### 价值头训练
+
+```bash
+python src/ai/scripts/value_train.py --model <权重路径> --train-from-dir <数据目录> --epochs <轮数> [选项]
+```
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--model` | 初始权重文件路径 | 必填 |
+| `--model-name` | 显式指定模型注册名.代数 | 从路径解析 |
+| `--train-from-dir` | 训练数据目录（可多个） | 必填 |
+| `--epochs` | 训练轮数 | 必填 |
+| `--output` | 输出权重路径 | 覆盖 --model |
+| `--batch-size` | batch size | 2048 |
+| `--lr` | 学习率 | 0.001 |
+| `--l2-reg` | AdamW weight_decay | 1e-4 |
+| `--val-split` | 验证集比例 | 0.1 |
+| `--no-shuffle` | 关闭数据打乱 | — |
+| `--device` | 训练设备 | cuda |
+
+> **损失函数**：MSE(价值)，仅训练价值头。训练完成后自动生成 loss 曲线图保存至 `mcts_loss_logs/`。
+
+```bash
+# 示例
+python src/ai/scripts/value_train.py --model src/ai/models/cnn_v10/gen1/cnn_v10.pth --train-from-dir samples/10/v1 --epochs 100 --output src/ai/models/cnn_v10/gen2/cnn_v10.pth
 ```
 
 ### 迭代进化训练
