@@ -20,9 +20,11 @@ class MoveDecision:
         _mcts_visit_counts: 225 维 MCTS 访问计数，未传入时为 None
         _mcts_root_value: MCTS 根节点价值评估（从当前玩家视角），未传入时为 None
         _mcts_q_values: 225 维 MCTS 边平均 Q 值，未传入时为 None
+        _value_evaluations: 225 维原始评估值（softmax 前），未传入时为 None
+        _state_value: 当前局面模型价值输出，未传入时为 None
     """
 
-    def __init__(self, x: int, y: int, probs: List[float] = None, mcts_visit_counts: List[int] = None, mcts_root_value: float = None, mcts_q_values: List[float] = None):
+    def __init__(self, x: int, y: int, probs: List[float] = None, mcts_visit_counts: List[int] = None, mcts_root_value: float = None, mcts_q_values: List[float] = None, value_evaluations: List[float] = None, state_value: float = None):
         """
         Args:
             x: 落子行坐标 (0-14)
@@ -31,12 +33,16 @@ class MoveDecision:
             mcts_visit_counts: 可选的 225 维 MCTS 访问计数
             mcts_root_value: 可选的 MCTS 根节点价值，值域 [-1, 1]
             mcts_q_values: 可选的 225 维 MCTS 边平均 Q 值，值域 [-1, 1]
+            value_evaluations: 可选的 225 维原始评估值（softmax 前的 values）
+            state_value: 可选的当前局面模型价值，值域 [-1, 1]
         """
         self._position: Tuple[int, int] = (x, y)
         self._probs: Optional[List[float]] = probs
         self._mcts_visit_counts: Optional[List[int]] = mcts_visit_counts
         self._mcts_root_value: Optional[float] = mcts_root_value
         self._mcts_q_values: Optional[List[float]] = mcts_q_values
+        self._value_evaluations: Optional[List[float]] = value_evaluations
+        self._state_value: Optional[float] = state_value
 
     def get_position(self) -> Tuple[int, int]:
         """返回落子位置 (x, y) tuple"""
@@ -57,6 +63,14 @@ class MoveDecision:
     def get_mcts_q_values(self) -> Optional[List[float]]:
         """返回 225 维 MCTS 边平均 Q 值，未传入时返回 None"""
         return self._mcts_q_values
+
+    def get_value_evaluations(self) -> Optional[List[float]]:
+        """返回 225 维原始评估值（softmax 前），未传入时返回 None"""
+        return self._value_evaluations
+
+    def get_state_value(self) -> Optional[float]:
+        """返回当前局面模型价值输出，未传入时返回 None"""
+        return self._state_value
 
     def __repr__(self) -> str:
         return f"MoveDecision(x={self._position[0]}, y={self._position[1]})"

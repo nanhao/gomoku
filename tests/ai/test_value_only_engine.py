@@ -99,6 +99,13 @@ class TestIsolatedDetection(unittest.TestCase):
         self.assertFalse(self._is_isolated(board, 9 * 15 + 9),
                          "斜线距离 2 应非孤立")
 
+    def test_knight_like_not_isolated(self):
+        """TC-ISO-07: 非轴向/非对角线的 2 格位置（如 1,2 跳）也应非孤立"""
+        board = self._board_with_stone([(7 * 15 + 7, 1)])
+        # (5,6) 距 (7,7) 为 (-2,-1)，旧逻辑会遗漏
+        self.assertFalse(self._is_isolated(board, 5 * 15 + 6),
+                         "(5,6) 距天元 2 格内，应非孤立")
+
     def test_corner_isolated_empty_board(self):
         """TC-ISO-05: 空棋盘角落为孤立"""
         board = [0] * 225

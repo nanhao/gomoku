@@ -241,6 +241,8 @@ class AIGameManager:
             mcts_counts = decision.get_mcts_visit_counts()
             mcts_value = decision.get_mcts_root_value()
             mcts_q = decision.get_mcts_q_values()
+            value_evals = decision.get_value_evaluations()
+            state_val = decision.get_state_value()
             if probs is None and mcts_counts is not None:
                 probs = mcts_counts
             # 第四十一次追加：按策略传递温度采样信息
@@ -265,6 +267,8 @@ class AIGameManager:
                     mcts_probs=mcts_counts,
                     mcts_value=mcts_value,
                     mcts_q_values=mcts_q,
+                    value_evaluations=value_evals,
+                    state_value=state_val,
                 )
             else:
                 recorder.record_move(
@@ -273,6 +277,8 @@ class AIGameManager:
                     mcts_probs=mcts_counts,
                     mcts_value=mcts_value,
                     mcts_q_values=mcts_q,
+                    value_evaluations=value_evals,
+                    state_value=state_val,
                 )
 
             # 执行落子

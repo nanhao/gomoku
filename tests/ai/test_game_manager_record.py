@@ -60,7 +60,8 @@ class _SpyRecorder:
 
     def record_move(self, game_id, input_vector, output_vector, position,
                     strategy=None, temperature=None, top_k=None,
-                    sampling_probs=None, mcts_probs=None, mcts_value=None, mcts_q_values=None):
+                    sampling_probs=None, mcts_probs=None, mcts_value=None, mcts_q_values=None,
+                    value_evaluations=None, state_value=None):
         self.move_calls.append({
             "game_id": game_id,
             "strategy": strategy,
@@ -201,12 +202,14 @@ class _SpyRecorderFull(_SpyRecorder):
 
     def record_move(self, game_id, input_vector, output_vector, position,
                     strategy=None, temperature=None, top_k=None,
-                    sampling_probs=None, mcts_probs=None, mcts_value=None, mcts_q_values=None):
+                    sampling_probs=None, mcts_probs=None, mcts_value=None, mcts_q_values=None,
+                    value_evaluations=None, state_value=None):
         super().record_move(
             game_id, input_vector, output_vector, position,
             strategy=strategy, temperature=temperature,
             top_k=top_k, sampling_probs=sampling_probs,
             mcts_probs=mcts_probs, mcts_value=mcts_value, mcts_q_values=mcts_q_values,
+            value_evaluations=value_evaluations, state_value=state_value,
         )
         # 额外保存实际数值，供值级别断言使用
         self.move_calls[-1]["sampling_probs_values"] = (

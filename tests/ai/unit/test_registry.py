@@ -272,10 +272,10 @@ class TestCNNV10Registry(unittest.TestCase):
                 if not os.listdir(gen_dir):
                     os.rmdir(gen_dir)
 
-    def test_cnn_v10_has_no_trainer(self):
-        """cnn_v10 暂不支持训练，trainer_path 为 None"""
+    def test_cnn_v10_has_trainer(self):
+        """cnn_v10 已有训练器（value_self_play + value_train）"""
         _, trainer_path, _ = MODEL_REGISTRY["cnn_v10"]
-        self.assertIsNone(trainer_path)
+        self.assertEqual(trainer_path, "ai.models.cnn_v10.trainer.CNNV10Trainer")
 
 
 class TestLazyLoading(unittest.TestCase):
@@ -342,8 +342,8 @@ class TestModelRegistryData(unittest.TestCase):
         self.assertIsNone(trainer_path)
 
     def test_trainable_models_have_trainers(self):
-        """fc_v1、cnn_v1、cnn_v2、cnn_v3 应有 trainer"""
-        for name in ["fc_v1", "cnn_v1", "cnn_v2", "cnn_v3"]:
+        """fc_v1、cnn_v1、cnn_v2、cnn_v3、cnn_v10 应有 trainer"""
+        for name in ["fc_v1", "cnn_v1", "cnn_v2", "cnn_v3", "cnn_v10"]:
             _, trainer_path, _ = MODEL_REGISTRY[name]
             self.assertIsNotNone(trainer_path,
                                 f"{name} 应有 trainer_path")

@@ -132,6 +132,10 @@ class HeatmapCanvas:
         """清空画布。"""
         self.canvas.delete("all")
 
+    def set_title(self, title: str) -> None:
+        """更新标题。"""
+        self.title = title
+
     # ------- 绘制 -------
 
     def draw_heatmap(self, rewards, on_cell_hover=None) -> None:

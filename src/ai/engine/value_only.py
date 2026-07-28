@@ -33,14 +33,6 @@ class ValueOnlyAiEngine(AIEngine):
     - temperature / top_k / rng 一局对弈中不变。
     """
 
-    # 8 个方向：上下左右 + 四条斜线
-    _DIRECTIONS: List[Tuple[int, int]] = [
-        (-1, 0), (1, 0),    # 上下
-        (0, -1), (0, 1),    # 左右
-        (-1, -1), (1, 1),   # 主对角线
-        (-1, 1), (1, -1),   # 副对角线
-    ]
-
     def __init__(
         self,
         model: BaseModel,
@@ -98,20 +90,27 @@ class ValueOnlyAiEngine(AIEngine):
         # === 步骤 1: 预处理——分离孤立空位与候选空位 ===
         evaluations = [0.0] * 225      # 每个位置的评估值
         candidate_positions: List[int] = []  # 非孤立空位的平坦索引
-        occupied_mask = [False] * 225   # True = 已有棋子
+        occupied_mask = [False] * 225   # True = 已有棋子或孤立空位（不参与决策）
 
         for idx in range(225):
             if flat_board[idx] != 0:
                 occupied_mask[idx] = True
                 continue
             if self._is_isolated_empty(flat_board, idx):
-                evaluations[idx] = -1.0
+                occupied_mask[idx] = True  # 孤立空位与已有棋子一样 mask 掉
             else:
                 candidate_positions.append(idx)
 
         # === 步骤 2: 模拟落子，检测终局 ===
         opponent = 2 if current_player == 1 else 1
         need_model_eval: List[Tuple[int, List[int]]] = []  # (候选索引, 新局面 flat_board)
+
+        # 兜底：如果所有空位都被 mask（如空棋盘），则开放全部空位
+        if not candidate_positions:
+            for idx in range(225):
+                if flat_board[idx] == 0:
+                    candidate_positions.append(idx)
+                    occupied_mask[idx] = False
 
         for p in candidate_positions:
             # 模拟落子
@@ -144,6 +143,11 @@ class ValueOnlyAiEngine(AIEngine):
                 v_i = results[i].value  # 对手视角价值
                 evaluations[p] = -v_i   # 取反转回当前方视角
 
+        # === 步骤 3.5: 当前局面价值评估（用于回放展示）===
+        bv_current = flat_board.copy()
+        bv_current.append(current_player)
+        state_value = self.model.predict(bv_current).value
+
         # === 步骤 4: masked softmax 归一化 ===
         probs = self._masked_softmax(evaluations, occupied_mask)
 
@@ -169,7 +173,9 @@ class ValueOnlyAiEngine(AIEngine):
                 rng=self.rng,
             )
 
-        return MoveDecision(x, y, probs=probs)
+        return MoveDecision(x, y, probs=probs,
+                          value_evaluations=evaluations,
+                          state_value=state_value)
 
     def after_move(self, x: int, y: int):
         """落子后钩子：空操作（无搜索树管理需求）。
@@ -186,8 +192,7 @@ class ValueOnlyAiEngine(AIEngine):
     def _is_isolated_empty(board_flat: List[int], idx: int) -> bool:
         """判断空位是否为孤立空位
 
-        孤立空位：在上下左右及四条斜线共 8 个方向上，
-        相邻 1~2 格范围内均无任何棋子。
+        孤立空位：周围 2 格范围内（5×5 窗口）均无任何棋子。
 
         Args:
             board_flat: 225 维展平棋盘
@@ -199,16 +204,17 @@ class ValueOnlyAiEngine(AIEngine):
         x = idx // 15
         y = idx % 15
 
-        for dx, dy in ValueOnlyAiEngine._DIRECTIONS:
-            # 检查距离 1 和距离 2
-            for dist in [1, 2]:
-                nx = x + dx * dist
-                ny = y + dy * dist
+        for dx in range(-2, 3):
+            for dy in range(-2, 3):
+                if dx == 0 and dy == 0:
+                    continue
+                nx = x + dx
+                ny = y + dy
                 if 0 <= nx < 15 and 0 <= ny < 15:
                     if board_flat[nx * 15 + ny] != 0:
                         return False  # 发现棋子，非孤立
 
-        return True  # 所有方向均无棋子
+        return True  # 周围 2 格内均无棋子
 
     @staticmethod
     def _masked_softmax(

@@ -104,7 +104,9 @@ class DataRecorder:
                     mcts_probs: List[float] = None,
                     mcts_log: str = None,
                     mcts_value: float = None,
-                    mcts_q_values: List[float] = None):
+                    mcts_q_values: List[float] = None,
+                    value_evaluations: List[float] = None,
+                    state_value: float = None):
         """
         记录一次落子
 
@@ -156,6 +158,12 @@ class DataRecorder:
             entry["mcts_value"] = mcts_value
         if mcts_q_values is not None:
             entry["mcts_q_values"] = list(mcts_q_values)
+
+        # cnn_v10 价值头引擎扩展：原始评估值与局面价值
+        if value_evaluations is not None:
+            entry["value_evaluations"] = list(value_evaluations)
+        if state_value is not None:
+            entry["state_value"] = state_value
 
         self.current_game_data["history"].append(entry)
     

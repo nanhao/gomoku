@@ -246,7 +246,7 @@ deactivate main
 main -> ai_battle : run_ai_vs_ai_mode(num_games, ai1_name, ai2_name)
 activate ai_battle
 
-ai_battle -> ai : TempConfig(temperature=1.0, temp_moves=12)
+ai_battle -> ai : TempConfig(temperature=1.0, temp_moves=2)
 activate ai
 ai --> ai_battle : temp_config
 deactivate ai

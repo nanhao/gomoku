@@ -169,19 +169,21 @@ class ReplayViewer:
             self.sample_heatmap = None
         
         # Sampling 热力图（第四十一次追加：温度采样展示）
+        # 当有 value_evaluations 时复用为 Value Evals 展示
         sampling_frame = tk.Frame(heatmap_frame, bg="#F5F5DC")
         sampling_frame.pack(side=tk.LEFT, padx=(20, 0))
         
         self.sampling_heatmap = HeatmapCanvas(sampling_frame, title="Sampling", width=280, height=280)
         self.sampling_heatmap.pack()
         
-        tk.Label(
+        self.sampling_label = tk.Label(
             sampling_frame,
             text="Sampling",
             font=("微软雅黑", 9, "bold"),
             bg="#F5F5DC",
             fg="#228B22"
-        ).pack(pady=(5, 0))
+        )
+        self.sampling_label.pack(pady=(5, 0))
         
         # 颜色标尺
         self.legend = HeatmapLegend(right_frame)
@@ -329,15 +331,28 @@ class ReplayViewer:
                 rewards = list(output_vector[:225])
                 self.sample_heatmap.draw_heatmap(rewards, self._on_cell_hover)
         
-        # Sampling 热力图（第四十一次追加：展示温度变换后的采样概率）
+        # Sampling 热力图（第四十一次追加：温度变换后的采样概率）
+        # 当有 value_evaluations 时优先展示 cnn_v10 原始评估值
         if self.sampling_heatmap:
+            value_evals = move.get("value_evaluations", [])
             strategy = move.get("strategy", "")
             sampling_probs = move.get("sampling_probs", [])
-            if strategy == "sampling" and len(sampling_probs) >= 225:
+            
+            if len(value_evals) >= 225:
+                # cnn_v10: 展示原始评估值（值域 [-1, 1] → 映射到 [0, 1]）
+                evals_list = [(v + 1.0) / 2.0 for v in value_evals[:225]]
+                self.sampling_heatmap.draw_heatmap(evals_list, self._on_cell_hover)
+                self.sampling_heatmap.set_title("Value Evals")
+                self.sampling_label.config(text="Value Evals", fg="#8B4513")
+            elif strategy == "sampling" and len(sampling_probs) >= 225:
                 probs_list = list(sampling_probs[:225])
                 self.sampling_heatmap.draw_heatmap(probs_list, self._on_cell_hover)
+                self.sampling_heatmap.set_title("Sampling")
+                self.sampling_label.config(text="Sampling", fg="#228B22")
             else:
                 self.sampling_heatmap.canvas.delete("all")
+                self.sampling_heatmap.set_title("Sampling")
+                self.sampling_label.config(text="Sampling", fg="#228B22")
     
     def _draw_pieces(self, input_vector, move):
         """绘制棋子"""
@@ -401,6 +416,22 @@ class ReplayViewer:
         player = "黑" if step % 2 == 1 else "白"
         self.info_text.insert(tk.END, f"\n落子方: {player}\n")
         self.info_text.insert(tk.END, f"落子位置: ({pos[0]}, {pos[1]})\n")
+
+        # cnn_v10 价值头信息
+        state_val = move.get("state_value")
+        if state_val is not None:
+            self.info_text.insert(tk.END, f"\n--- cnn_v10 价值评估 ---\n")
+            self.info_text.insert(tk.END, f"当前局面价值: {state_val:+.4f}\n")
+            value_evals = move.get("value_evaluations", [])
+            if len(value_evals) >= 225:
+                # Top-5 按原始评估值排序
+                indexed = [(i, value_evals[i]) for i in range(225)]
+                indexed.sort(key=lambda x: -x[1])
+                self.info_text.insert(tk.END, f"Top-5 着法 (原始评估值):\n")
+                for idx, val in indexed[:5]:
+                    r, c = idx // 15, idx % 15
+                    marker = " ◀ 实际落子" if [r, c] == pos else ""
+                    self.info_text.insert(tk.END, f"  ({r:2d},{c:2d}): {val:+.4f}{marker}\n")
 
         # MCTS 信息
         mcts_probs = move.get("mcts_probs", [])
