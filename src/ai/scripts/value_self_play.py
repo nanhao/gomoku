@@ -257,7 +257,7 @@ def _run_single_process(args, hyperparams: dict, output_root: str,
         temp_steps=hyperparams["temp_steps"],
         temp_side=hyperparams["temp_side"],
         top_k=hyperparams["top_k"],
-        seed=hyperparams["temp_seed"],
+        seed=hyperparams["seed"],
     )
 
     completed_games = 0
@@ -293,7 +293,7 @@ def _run_multi_process(args, hyperparams: dict, output_root: str,
         temp_steps=hyperparams["temp_steps"],
         temp_side=hyperparams["temp_side"],
         top_k=hyperparams["top_k"],
-        seed=hyperparams["temp_seed"],
+        seed=hyperparams["seed"],
     )
 
     # 分配 game_indices
