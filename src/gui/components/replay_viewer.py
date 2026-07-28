@@ -339,12 +339,14 @@ class ReplayViewer:
             sampling_probs = move.get("sampling_probs", [])
             
             if len(value_evals) >= 225:
-                # cnn_v10: 展示原始评估值（值域 [-1, 1] → 映射到 [0, 1]）
-                evals_list = [(v + 1.0) / 2.0 for v in value_evals[:225]]
+                # cnn_v10: 原始评估值 [-1,1]，用 linear 模式渲染，tooltip 显示原始值
+                self.sampling_heatmap.heatmap_mode = "linear"
+                evals_list = list(value_evals[:225])
                 self.sampling_heatmap.draw_heatmap(evals_list, self._on_cell_hover)
                 self.sampling_heatmap.set_title("Value Evals")
                 self.sampling_label.config(text="Value Evals", fg="#8B4513")
             elif strategy == "sampling" and len(sampling_probs) >= 225:
+                self.sampling_heatmap.heatmap_mode = "log"
                 probs_list = list(sampling_probs[:225])
                 self.sampling_heatmap.draw_heatmap(probs_list, self._on_cell_hover)
                 self.sampling_heatmap.set_title("Sampling")
