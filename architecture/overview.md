@@ -76,13 +76,14 @@ src/
 │   │   ├── ai_engine.py      AIEngine 抽象基类 + MoveDecision
 │   │   ├── builder.py        工厂 builder + create_engine 智能路由
 │   │   ├── single_policy.py  SinglePolicyAiEngine（单头模型：argmax/sampling）
-│   │   └── policy_value.py   PolicyValueAiEngine（双头模型：MCTS搜索）
+│   │   ├── policy_value.py   PolicyValueAiEngine（双头模型：MCTS搜索）
+│   │   └── value_only.py     ValueOnlyAiEngine（价值头模型：枚举-评估）
 │   │
 │   ├── mcts/              MCTS 搜索器
 │   │   ├── searcher.py       PUCT选择·评估·回传·子树复用
 │   │   └── search_logger.py  结构化日志（JSON，支持验收验证）
 │   │
-│   ├── models/            10 种模型实现（每种独立子目录）
+│   ├── models/            11 种模型实现（每种独立子目录）
 │   │   ├── random/      纯随机
 │   │   ├── fc_v1/       全连接（226→1000×5→225）
 │   │   ├── cnn_v1/      卷积 v1（3→32→64→128）
@@ -92,7 +93,9 @@ src/
 │   │   ├── cnn_v5/      +2隐藏层（~3.8万参）
 │   │   ├── cnn_v6/      残差+BN（~3.8万参）
 │   │   ├── cnn_v7/      双头残差（策略+价值，~4.0万参）★AlphaGo Zero
-│   │   └── cnn_v8/      双头残差+FC隐藏层（策略+价值，~8.2万参）★
+│   │   ├── cnn_v8/      双头残差+FC隐藏层（策略+价值，~8.2万参）★
+│   │   ├── cnn_v9/      双头残差+48通道（策略+价值，~12.8万参）★
+│   │   └── cnn_v10/     价值头残差（仅价值，~10万参）★
 │   │
 │   ├── game_manager.py    AI 对战管理（PvE + AI内战 + 温度采样编排）
 │   ├── data_recorder.py   对战数据记录
@@ -180,7 +183,8 @@ AlphaGo Zero 风格的蒙特卡洛树搜索，支持 Batch MCTS + Virtual Loss�
 | 引擎 | 适用模型 | 决策方式 | 用途 |
 |------|---------|---------|------|
 | `SinglePolicyAiEngine` | random, fc_v1, cnn_v1~v6 | 模型 softmax → argmax/sampling | 传统 AI、PvE |
-| `PolicyValueAiEngine` | cnn_v7, cnn_v8 | MCTS 搜索 → 温度采样 | AlphaGo Zero 训练 |
+| `PolicyValueAiEngine` | cnn_v7, cnn_v8, cnn_v9 | MCTS 搜索 → 温度采样 | AlphaGo Zero 训练 |
+| `ValueOnlyAiEngine` | cnn_v10 | 枚举候选+模型评估+softmax → argmax/sampling | 价值头模型对战 |
 
 ### 5. 模型层次结构
 
@@ -193,13 +197,15 @@ BaseModel (ABC)
     ├── CNNV2Model                  # 轻量CNN
     ├── CNNV3Model / V4 / V5        # 纯卷积极简系列
     ├── CNNV6Model                  # 残差+BN
-    └── CNNV7Model                  # 双头: LogSoftmax(225) + Tanh(1) ★
-        └── CNNV8Model              # 双头+FC隐藏层: LogSoftmax(225) + Tanh(1) ★
+    ├── CNNV7Model                  # 双头: LogSoftmax(225) + Tanh(1) ★
+    │   └── CNNV8Model              # 双头+FC隐藏层: LogSoftmax(225) + Tanh(1) ★
+    │       └── CNNV9Model          # 双头+48通道: LogSoftmax(225) + Tanh(1) ★
+    └── CNNV10Model                 # 价值头: Tanh(1) ★
 ```
 
 输入编码差异：
 - **CNN v1~v6**：绝对视角（通道=黑棋/白棋/当前方颜色指示）
-- **CNN v7**：相对视角（通道=我方/对方/我方颜色），保证颜色互换不变性
+- **CNN v7/v8/v9/v10**：相对视角（通道=我方/对方/我方颜色），保证颜色互换不变性
 
 ### 6. 训练体系
 

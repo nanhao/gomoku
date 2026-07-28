@@ -1,0 +1,80 @@
+@startuml cnn_v10_flow
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,sans-serif
+title CNN v10 落子决策流程
+
+actor "游戏控制器" as Controller
+
+participant "ValueOnlyAiEngine" as Engine
+participant "CNNV10Model" as Model
+database "棋盘 15×15" as Board
+
+Controller -> Engine : get_move(board, current_player, strategy)
+activate Engine
+
+    ' === 步骤 1: 预处理 ===
+    Engine -> Engine : 步骤1: 遍历225个位置
+    note right
+        空位 + 非孤立 → 候选集 C
+        空位 + 孤立   → 评估值 = -1
+        已有棋子      → mask掉
+    end note
+
+    ' === 步骤 2: 模拟落子 + 终局检测 ===
+    Engine -> Engine : 步骤2: 对 C 中每个位置 p
+    loop 每个候选位置 p
+        Engine -> Board : 模拟 current_player 在 p 落子
+        Board --> Engine : 新局面 g
+        alt g 为终局 (五连/棋盘满)
+            Engine -> Engine : p 评估值 = 1 / -1 / 0
+            note right: 胜=1 / 负=-1 / 平=0
+        else g 非终局
+            Engine -> Engine : g 加入待评估列表 G
+        end
+    end
+
+    ' === 步骤 3: 模型评估 ===
+    Engine -> Engine : 步骤3: 构建 board_vector (对手视角)
+    note right
+        对 G 中每个局面:
+        current_player = 对方
+    end note
+
+    Engine -> Model : predict_batch(G 中所有 board_vector)
+    activate Model
+        Model -> Model : _prepare_input × N
+        Model -> Model : network.forward(batch_tensor)
+        note right: 输出 (N, 1) 价值张量，值域 [-1,1]
+    Model --> Engine : List[ModelPredict] (每个含 value)
+    deactivate Model
+
+    Engine -> Engine : 取反: v_i' = -v_i
+    note right: 转回当前落子方视角
+
+    ' === 步骤 4: 概率归一化 ===
+    Engine -> Engine : 步骤4: masked softmax 归一化
+    note right
+        评估分布(225维):
+        - 终局位置: 1/-1/0
+        - 候选位置: v_i'
+        - 孤立空位: -1
+        - 已有棋子: mask掉
+
+        softmax → 概率分布(225维)
+        已有棋子概率=0
+    end note
+
+    ' === 步骤 5: 落子决策 ===
+    Engine -> Engine : 步骤5: 按策略选择
+    alt strategy = "argmax"
+        Engine -> Engine : 选概率最大的合法位置
+        note right: 并列时随机打破
+    else strategy = "sampling"
+        Engine -> Engine : 温度加权采样
+        note right: temperature_sample()
+    end
+
+    Engine --> Controller : MoveDecision(x, y, probs=概率分布)
+deactivate Engine
+
+@enduml

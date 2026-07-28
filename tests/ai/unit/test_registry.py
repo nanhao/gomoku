@@ -212,6 +212,72 @@ class TestListModels(unittest.TestCase):
         self.assertIn("cnn_v3", models)
 
 
+class TestCNNV10Registry(unittest.TestCase):
+    """cnn_v10 注册表测试（设计 TC-REG-01 ~ TC-REG-03）"""
+
+    def test_get_model_cnn_v10(self):
+        """TC-REG-01: get_model("cnn_v10.1") 返回 CNNV10Model"""
+        from ai.models.cnn_v10.model import CNNV10Model
+        import torch
+        # 创建临时权重文件
+        base_dir = os.path.dirname(CNNV10Model.DEFAULT_MODEL_PATH)
+        gen_dir = os.path.join(base_dir, "gen1")
+        pth_path = os.path.join(gen_dir, "cnn_v10.pth")
+        os.makedirs(gen_dir, exist_ok=True)
+        pre_exists = os.path.exists(pth_path)
+        if not pre_exists:
+            tmp = CNNV10Model(fresh=True, gen=1)
+            torch.save(tmp.network.state_dict(), pth_path)
+        try:
+            model = get_model("cnn_v10.1")
+            self.assertIsInstance(model, CNNV10Model)
+            self.assertEqual(model.name, "cnn_v10")
+            self.assertEqual(model.full_name, "cnn_v10.1")
+            # smoke: predict 成功
+            result = model.predict([0] * 226)
+            self.assertIsNotNone(result.value)
+        finally:
+            if not pre_exists and os.path.exists(pth_path):
+                os.remove(pth_path)
+                if not os.listdir(gen_dir):
+                    os.rmdir(gen_dir)
+
+    def test_get_model_cnn_v10_without_gen_raises(self):
+        """TC-REG-02: cnn_v10 未指定代数应抛 ValueError"""
+        with self.assertRaises(ValueError) as ctx:
+            get_model("cnn_v10")
+        self.assertIn("多代模型必须指定代数", str(ctx.exception))
+
+    def test_create_engine_routes_to_value_only(self):
+        """TC-REG-03: create_engine("cnn_v10.1") 返回 ValueOnlyAiEngine"""
+        from ai.engine.value_only import ValueOnlyAiEngine
+        from ai.engine.builder import create_engine
+        from ai.models.cnn_v10.model import CNNV10Model
+        import torch
+        # 创建临时权重文件
+        base_dir = os.path.dirname(CNNV10Model.DEFAULT_MODEL_PATH)
+        gen_dir = os.path.join(base_dir, "gen1")
+        pth_path = os.path.join(gen_dir, "cnn_v10.pth")
+        os.makedirs(gen_dir, exist_ok=True)
+        pre_exists = os.path.exists(pth_path)
+        if not pre_exists:
+            tmp = CNNV10Model(fresh=True, gen=1)
+            torch.save(tmp.network.state_dict(), pth_path)
+        try:
+            engine = create_engine("cnn_v10.1")
+            self.assertIsInstance(engine, ValueOnlyAiEngine)
+        finally:
+            if not pre_exists and os.path.exists(pth_path):
+                os.remove(pth_path)
+                if not os.listdir(gen_dir):
+                    os.rmdir(gen_dir)
+
+    def test_cnn_v10_has_no_trainer(self):
+        """cnn_v10 暂不支持训练，trainer_path 为 None"""
+        _, trainer_path, _ = MODEL_REGISTRY["cnn_v10"]
+        self.assertIsNone(trainer_path)
+
+
 class TestLazyLoading(unittest.TestCase):
     """测试懒加载：首次调用前不应导入模型模块"""
 
@@ -251,8 +317,8 @@ class TestModelRegistryData(unittest.TestCase):
     """测试 MODEL_REGISTRY 数据完整性"""
 
     def test_registry_has_nine_models(self):
-        """MODEL_REGISTRY 应包含 11 个模型（random, fc_v1, cnn_v1~v9）"""
-        self.assertEqual(len(MODEL_REGISTRY), 11)
+        """MODEL_REGISTRY 应包含 12 个模型（random, fc_v1, cnn_v1~v10）"""
+        self.assertEqual(len(MODEL_REGISTRY), 12)
 
     def test_registry_entry_format(self):
         """每个注册项格式为 RegistryEntry(model_path, trainer_path_or_None, supports_multi_gen)"""

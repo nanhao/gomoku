@@ -119,6 +119,58 @@ class TestModelPredictUnpacking(unittest.TestCase):
         self.assertIsNone(result[1])
 
 
+class TestModelPredictValueOnly(unittest.TestCase):
+    """测试 TYPE_VALUE_ONLY 类型构造与解包（设计 TC-MP-01, TC-MP-02）"""
+
+    @classmethod
+    def setUpClass(cls):
+        from ai.base_model import ModelPredict
+        cls.ModelPredict = ModelPredict
+
+    def test_construct_value_only_type(self):
+        """TC-MP-01: 仅传 value 时 type == TYPE_VALUE_ONLY"""
+        result = self.ModelPredict(value=0.5)
+        self.assertEqual(result.type, self.ModelPredict.TYPE_VALUE_ONLY)
+        self.assertIsNone(result.policy)
+        self.assertEqual(result.value, 0.5)
+
+    def test_construct_value_only_negative(self):
+        """TYPE_VALUE_ONLY 支持负值"""
+        result = self.ModelPredict(value=-0.8)
+        self.assertEqual(result.type, self.ModelPredict.TYPE_VALUE_ONLY)
+        self.assertEqual(result.value, -0.8)
+        self.assertIsNone(result.policy)
+
+    def test_unpack_value_only(self):
+        """TC-MP-02: 元组解包 policy 为 None, value 正确"""
+        result = self.ModelPredict(value=0.5)
+        p, v = result
+        self.assertIsNone(p)
+        self.assertEqual(v, 0.5)
+
+    def test_index_access_value_only(self):
+        """TYPE_VALUE_ONLY 下标访问 result[0] 为 None, result[1] 为 value"""
+        result = self.ModelPredict(value=-0.3)
+        self.assertIsNone(result[0])
+        self.assertEqual(result[1], -0.3)
+
+    def test_repr_value_only(self):
+        """TYPE_VALUE_ONLY 的 repr 包含 value_only 和 value"""
+        result = self.ModelPredict(value=0.75)
+        r = repr(result)
+        self.assertIn("value_only", r)
+        self.assertIn("0.75", r)
+
+    def test_value_only_constant_exists(self):
+        """TYPE_VALUE_ONLY 常量值正确"""
+        self.assertEqual(self.ModelPredict.TYPE_VALUE_ONLY, "value_only")
+
+    def test_both_none_raises(self):
+        """policy 和 value 都为 None 时应抛异常"""
+        with self.assertRaises(ValueError):
+            self.ModelPredict()
+
+
 class TestModelPredictRepr(unittest.TestCase):
     """测试 __repr__ 输出"""
 

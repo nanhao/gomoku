@@ -28,52 +28,68 @@ class ModelPredict:
 
     统一所有模型的 predict() 返回值，消除当前返回类型不一致的问题：
     - 单头模型（random/fc/cnn v1-6）：仅预测概率分布
-    - 双头模型（cnn_v7）：同时预测概率分布 + 局面评估
+    - 双头模型（cnn_v7/v8/v9）：同时预测概率分布 + 局面评估
+    - 价值头模型（cnn_v10）：仅输出局面价值评估
 
     通过 type 字段区分：
     - TYPE_POLICY_ONLY：仅包含策略概率分布
     - TYPE_POLICY_VALUE：包含策略概率分布 + 局面价值评估
+    - TYPE_VALUE_ONLY：仅包含局面价值评估
 
     支持元组解包：
         result = model.predict(board_vector)
         policy, value = result  # 兼容旧代码
 
     Attributes:
-        policy: 225 维落子概率列表，值域 (0, 1)，总和为 1
-        value: 局面价值评估（可选），值域 [-1, 1]，仅 TYPE_POLICY_VALUE 时有效
-        type: 结果类型标识，取值为 TYPE_POLICY_ONLY 或 TYPE_POLICY_VALUE
+        policy: 225 维落子概率列表，值域 (0, 1)，总和为 1；TYPE_VALUE_ONLY 时为 None
+        value: 局面价值评估，值域 [-1, 1]；TYPE_POLICY_ONLY 时为 None
+        type: 结果类型标识
     """
 
     # 类型常量
     TYPE_POLICY_ONLY = "policy_only"
     TYPE_POLICY_VALUE = "policy_value"
+    TYPE_VALUE_ONLY = "value_only"
 
     # 标准 policy 维度
     POLICY_DIM = 225
 
-    def __init__(self, policy: List[float], value: Optional[float] = None):
+    def __init__(self, policy: Optional[List[float]] = None, value: Optional[float] = None):
         """创建预测结果
 
         Args:
-            policy: 225 维落子概率分布，值域 (0, 1)，总和为 1
-            value: 局面价值评估，None 表示无价值头输出
+            policy: 225 维落子概率分布，值域 (0, 1)，总和为 1。
+                    TYPE_VALUE_ONLY 时为 None
+            value: 局面价值评估，值域 [-1, 1]。
+                   TYPE_POLICY_ONLY 时为 None
 
         Raises:
-            ValueError: policy 长度不为 225
+            ValueError: policy 和 value 同时为 None；policy 非 None 但长度不为 225
         """
-        # 校验 policy 维度
-        if len(policy) != self.POLICY_DIM:
+        # 校验：policy 和 value 不能同时为 None
+        if policy is None and value is None:
+            raise ValueError("policy 和 value 不能同时为 None")
+
+        # 校验 policy 维度（仅当 policy 非 None 时）
+        if policy is not None and len(policy) != self.POLICY_DIM:
             raise ValueError(
                 f"policy 长度必须为 {self.POLICY_DIM}，实际为 {len(policy)}"
             )
 
         self._policy = policy
         self._value = value
-        self._type = self.TYPE_POLICY_VALUE if value is not None else self.TYPE_POLICY_ONLY
+
+        # 根据参数组合判定类型
+        if policy is not None and value is not None:
+            self._type = self.TYPE_POLICY_VALUE
+        elif policy is not None:
+            self._type = self.TYPE_POLICY_ONLY
+        else:
+            self._type = self.TYPE_VALUE_ONLY
 
     @property
-    def policy(self) -> List[float]:
-        """225 维落子概率分布"""
+    def policy(self) -> Optional[List[float]]:
+        """225 维落子概率分布，TYPE_VALUE_ONLY 时为 None"""
         return self._policy
 
     @property
@@ -83,7 +99,7 @@ class ModelPredict:
 
     @property
     def type(self) -> str:
-        """结果类型：TYPE_POLICY_ONLY 或 TYPE_POLICY_VALUE"""
+        """结果类型：TYPE_POLICY_ONLY / TYPE_POLICY_VALUE / TYPE_VALUE_ONLY"""
         return self._type
 
     # ---- 元组解包支持（兼容旧代码） ----
@@ -107,11 +123,14 @@ class ModelPredict:
 
     def __repr__(self):
         """调试输出"""
-        p_len = len(self._policy)
-        if self._value is not None:
-            return (f"ModelPredict(type={self._type!r}, policy_len={p_len}, "
-                    f"value={self._value:.4f})")
-        return f"ModelPredict(type={self._type!r}, policy_len={p_len})"
+        if self._policy is not None:
+            p_len = len(self._policy)
+            if self._value is not None:
+                return (f"ModelPredict(type={self._type!r}, policy_len={p_len}, "
+                        f"value={self._value:.4f})")
+            return f"ModelPredict(type={self._type!r}, policy_len={p_len})"
+        else:
+            return f"ModelPredict(type={self._type!r}, value={self._value:.4f})"
 
 
 class BaseModel(ABC):

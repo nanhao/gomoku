@@ -1,0 +1,117 @@
+@startuml cnn_v10_class
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,sans-serif
+title CNN v10 类图
+
+' ===== 网络层 =====
+class CNNV10Network {
+    +hidden_size: int
+    +conv1: Conv2d(3,48,3)
+    +bn1: BatchNorm2d(48)
+    +conv2: Conv2d(48,48,3)
+    +bn2: BatchNorm2d(48)
+    +conv3: Conv2d(48,48,3)
+    +bn3: BatchNorm2d(48)
+    +conv4: Conv2d(48,48,3)
+    +bn4: BatchNorm2d(48)
+    +conv5: Conv2d(48,48,3)
+    +bn5: BatchNorm2d(48)
+    +value_conv_out: Conv2d(48,1,1)
+    +value_fc1: Linear(225,64)
+    +value_fc2: Linear(64,1)
+    --
+    +forward(Tensor): Tensor
+}
+
+' ===== 模型层 =====
+class NeuralNetworkModel {
+    +network: nn.Module
+    +name: str (abstract)
+    --
+    +predict(board_vector): ModelPredict
+    +predict_batch(board_vectors): List[ModelPredict]
+    +save(path): str
+    +load(path): void
+    +move_to_device(device): device
+    -_create_network(): nn.Module (abstract)
+    -_prepare_input(board_vector, device): Tensor (abstract)
+}
+
+class CNNV10Model {
+    +DEFAULT_MODEL_PATH: str
+    +name: str = "cnn_v10"
+    --
+    +predict(board_vector): ModelPredict
+    +predict_batch(board_vectors): List[ModelPredict]
+    -_create_network(): CNNV10Network
+    -_prepare_input(board_vector, device): Tensor
+}
+
+' ===== 数据类型 =====
+class ModelPredict {
+    +TYPE_POLICY_ONLY: str
+    +TYPE_POLICY_VALUE: str
+    +TYPE_VALUE_ONLY: str (new)
+    +POLICY_DIM: int = 225
+    --
+    +policy: Optional[List[float]]
+    +value: Optional[float]
+    +type: str
+    --
+    +__iter__(): (policy, value)
+}
+
+' ===== 引擎层 =====
+abstract class AIEngine {
+    --
+    +get_move(board, current_player, strategy): MoveDecision (abstract)
+    +after_move(x, y): void (abstract)
+    +board_to_vector(board, current_player): List[int] (static)
+}
+
+class SinglePolicyAiEngine {
+    +model: BaseModel
+    +temperature: float
+    +top_k: Optional[int]
+    +rng: Optional[Random]
+    --
+    +get_move(board, current_player, strategy): MoveDecision
+    +after_move(x, y): void
+}
+
+class ValueOnlyAiEngine {
+    +model: BaseModel
+    +temperature: float
+    +top_k: Optional[int]
+    +rng: Optional[Random]
+    --
+    +get_move(board, current_player, strategy): MoveDecision
+    +after_move(x, y): void
+}
+
+class MoveDecision {
+    --
+    +get_position(): (x, y)
+    +get_probs(): Optional[List[float]]
+    +get_mcts_visit_counts(): Optional[List[int]]
+    +get_mcts_root_value(): Optional[float]
+}
+
+class AIEngineBuilder {
+    --
+    +build_single_policy(ai_name, temperature, top_k, rng): SinglePolicyAiEngine (static)
+    +build_policy_value(model, ...): PolicyValueAiEngine (static)
+    +build_value_only(model, temperature, top_k, rng): ValueOnlyAiEngine (static)
+}
+
+' ===== 关系 =====
+NeuralNetworkModel <|-- CNNV10Model
+CNNV10Model *-- CNNV10Network : _create_network()
+CNNV10Model ..> ModelPredict : predict()
+AIEngine <|-- ValueOnlyAiEngine
+ValueOnlyAiEngine --> MoveDecision : get_move()
+ValueOnlyAiEngine o-- CNNV10Model : model
+AIEngineBuilder ..> ValueOnlyAiEngine : build_value_only()
+AIEngineBuilder ..> SinglePolicyAiEngine : build_single_policy()
+
+@enduml

@@ -112,6 +112,37 @@ class AIEngineBuilder:
         )
 
 
+    @staticmethod
+    def build_value_only(
+        model,
+        temperature: float = 1.0,
+        top_k: Optional[int] = None,
+        rng=None,
+    ):
+        """创建价值头引擎
+
+        为 cnn_v10 等纯价值头模型创建 ValueOnlyAiEngine。
+        不涉及 MCTS 搜索。
+
+        Args:
+            model: BaseModel 实例
+            temperature: 温度参数，默认 1.0
+            top_k: 采样截断阈值，None 表示不截断
+            rng: 可选随机源
+
+        Returns:
+            ValueOnlyAiEngine 实例
+        """
+        from ai.engine.value_only import ValueOnlyAiEngine
+
+        return ValueOnlyAiEngine(
+            model,
+            temperature=temperature,
+            top_k=top_k,
+            rng=rng,
+        )
+
+
 # ---------- create_engine 智能路由 ----------
 
 def create_engine(ai_name: str):
@@ -172,6 +203,9 @@ def create_engine(ai_name: str):
             log_key_prefix=None,
             log_dir=None,
         )
+    elif result.type == ModelPredict.TYPE_VALUE_ONLY:
+        # 价值头模型 → 创建 ValueOnlyAiEngine
+        return AIEngineBuilder.build_value_only(model)
     else:
         # 单头模型（TYPE_POLICY_ONLY）→ 创建 SinglePolicyAiEngine
         return AIEngineBuilder.build_single_policy(ai_name)
