@@ -8,6 +8,7 @@ import os
 from typing import Callable, List
 
 from ai import AIGameManager, DataRecorder, Evaluator
+from ai.base_model import ModelPredict
 from ai.constants import AI_DATA_DIR, TRAIN_DATA_DIR
 from app.exceptions import ModelLoadError
 
@@ -84,12 +85,15 @@ class BattleSession:
         except ValueError as e:
             raise ModelLoadError(f"模型加载失败: {e}") from e
 
-        # 对战完成后生成训练样本
-        evaluator = Evaluator(
-            ai_data_dir=self._ai_data_dir,
-            train_data_dir=self._train_data_dir,
-        )
-        evaluator.evaluate_round(recorder.get_round_dir())
+        # 对战完成后生成训练样本（价值头模型跳过传统棋型评估）
+        if _is_value_only_model(self._ai1_name) or _is_value_only_model(self._ai2_name):
+            print(f"[跳过评估] 价值头模型不使用传统棋型评估")
+        else:
+            evaluator = Evaluator(
+                ai_data_dir=self._ai_data_dir,
+                train_data_dir=self._train_data_dir,
+            )
+            evaluator.evaluate_round(recorder.get_round_dir())
 
         return results
 
@@ -103,3 +107,24 @@ class BattleSession:
             DataRecorder 实例；run() 未调用时返回 None
         """
         return self._recorder
+
+
+def _is_value_only_model(ai_name: str) -> bool:
+    """判断 AI 名称是否为价值头模型（cnn_v10）
+
+    通过 registry 加载模型后检测 predict 返回类型。
+    加载失败时返回 False（兜底安全策略）。
+
+    Args:
+        ai_name: AI 名称，如 "cnn_v10.1"
+
+    Returns:
+        True 表示价值头模型
+    """
+    try:
+        from ai.registry import get_model
+        model = get_model(ai_name)
+        result = model.predict([0] * 226)
+        return result.type == ModelPredict.TYPE_VALUE_ONLY
+    except Exception:
+        return False

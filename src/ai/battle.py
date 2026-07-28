@@ -188,6 +188,9 @@ def build_parser() -> argparse.ArgumentParser:
   # cnn_v3.1 vs cnn_v3.2（多代模型），对战 50 局
   python ai/battle.py --ai1 cnn_v3.1 --ai2 cnn_v3.2 --games 50
 
+  # cnn_v10.1 vs cnn_v10.2（价值头模型），对战 50 局
+  python ai/battle.py --ai1 cnn_v10.1 --ai2 cnn_v10.2 --games 50
+
   # 禁用温度采样，全程 argmax
   python ai/battle.py --ai1 cnn_v3.1 --ai2 cnn_v3.2 --games 50 --no-temp-sampling
 

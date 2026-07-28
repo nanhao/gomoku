@@ -1,0 +1,49 @@
+@startuml
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,sans-serif
+title CNN v10 自我对弈流程
+
+start
+
+:解析 CLI 参数;
+:确定输出目录和 worker 数;
+:加载已有样本;
+
+if (workers > 1?) then (是)
+  :多进程模式;
+  :分配 game_indices;
+  fork
+    :Worker 1\n加载模型\n执行分配的局;
+  fork again
+    :Worker 2\n加载模型\n执行分配的局;
+  fork again
+    :Worker N\n加载模型\n执行分配的局;
+  end fork
+  :收集各 worker 样本;
+else (否)
+  :单进程模式;
+  :加载模型到设备;
+
+  while (还有未完成的局?) is (是)
+    :创建 ValueOnlyAiEngine x2;
+    :AIGameManager.play_single_game;
+
+    note right
+      engine_black = engine_white
+      temperature sampling 按配置
+    end note
+
+    while (对局中有步?) is (是)
+      :取 board_vector 为 state;
+      :生成 sample\n{"state": [...], "z": z};
+    endwhile (否)
+
+    :累积样本;
+  endwhile (否)
+endif
+
+:周期保存 sample.json + summary.json;
+:最终保存;
+
+stop
+@enduml

@@ -1,0 +1,64 @@
+@startuml
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,sans-serif
+title CNN v10 训练流程
+
+start
+
+:解析 CLI 参数;
+:确定设备 GPU/CPU;
+
+:验证输入目录;
+note right
+  支持多目录 + 子目录自动发现
+end note
+
+:加载模型;
+note right
+  model = get_model("cnn_v10.X")
+end note
+
+:模型移到训练设备;
+
+:创建 CNNV10Trainer;
+note right
+  optimizer = AdamW
+  criterion = MSE
+end note
+
+:加载样本数据;
+note right
+  states, zs = _load_samples(dirs)
+end note
+
+:转换训练张量;
+note right
+  states -> (N, 3, 15, 15)
+  zs -> (N, 1)
+end note
+
+if (val_split > 0?) then (是)
+  :分割训练集/验证集;
+endif
+
+while (epoch < epochs?) is (是)
+  :shuffle 训练数据;
+
+  while (还有 batch?) is (是)
+    :前向传播;\nnetwork(inputs) -> v_pred;
+    :MSE loss;\n(v_pred - z_target)**2;
+    :反向传播;\n参数更新;
+  endwhile (否)
+
+  if (有验证集?) then (是)
+    :eval 模式评估 val_loss;
+  endif
+
+  :记录 epoch loss;
+endwhile (否)
+
+:生成 loss 曲线图 PNG;
+:保存模型权重;
+
+stop
+@enduml

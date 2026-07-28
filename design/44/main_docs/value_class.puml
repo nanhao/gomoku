@@ -1,0 +1,67 @@
+@startuml
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,sans-serif
+title CNN v10 自对弈与训练类图
+
+package "ai.scripts" {
+  class ValueSelfPlayConfig <<dataclass>> {
+    + temperature: float = 1.0
+    + temp_steps: int = 8
+    + temp_side: str = "random"
+    + top_k: Optional[int] = None
+    + seed: Optional[int] = None
+  }
+
+  class ValueSelfPlayWorker {
+    + __init__(model_path, model_name, device, config, _model)
+    + run_games(game_indices, run_id) -> List[dict]
+    + static worker_entry(...) -> List[dict]
+  }
+  
+  ValueSelfPlayWorker --> ValueSelfPlayConfig : uses
+}
+
+package "ai.engine" {
+  class ValueOnlyAiEngine {
+    + get_move(board, current_player, strategy) -> MoveDecision
+    + after_move(x, y)
+  }
+  
+  ValueSelfPlayWorker --> ValueOnlyAiEngine : creates
+}
+
+package "ai.models.cnn_v10" {
+  class CNNV10Model {
+    + predict(board_vector) -> ModelPredict
+    + predict_batch(board_vectors) -> List[ModelPredict]
+    + save(path)
+    + load(path)
+    + move_to_device(device)
+  }
+
+  class CNNV10Trainer {
+    + __init__(model, fresh, device, lr, weight_decay, gen)
+    + train_epochs(sample_dirs, epochs, batch_size, val_split, shuffle, verbose) -> List[dict]
+    + save_model(output_path) -> str
+    + model_name -> str
+  }
+  
+  CNNV10Trainer --> CNNV10Model : trains
+}
+
+package "ai.registry" {
+  class MODEL_REGISTRY {
+    {static} "cnn_v10": RegistryEntry
+  }
+}
+
+package "ai.game_manager" {
+  class AIGameManager {
+    {static} play_single_game(engine_black, engine_white, recorder, game_num, ...)
+    {static} start_ai_vs_ai(ai1_name, ai2_name, num_games, recorder, ...)
+  }
+  
+  ValueSelfPlayWorker --> AIGameManager : uses
+}
+
+@enduml

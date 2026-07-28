@@ -96,6 +96,8 @@ src/
 │   │   ├── cnn_v8/      双头残差+FC隐藏层（策略+价值，~8.2万参）★
 │   │   ├── cnn_v9/      双头残差+48通道（策略+价值，~12.8万参）★
 │   │   └── cnn_v10/     价值头残差（仅价值，~10万参）★
+│   │       ├── model.py       CNNV10Network + CNNV10Model
+│   │       └── trainer.py     CNNV10Trainer（MSE 训练）
 │   │
 │   ├── game_manager.py    AI 对战管理（PvE + AI内战 + 温度采样编排）
 │   ├── data_recorder.py   对战数据记录
@@ -128,7 +130,10 @@ src/
 │       ├── mcts_config.py        MCTS 配置数据类
 │       ├── mcts_battle.py        MCTS 双模型对战
 │       ├── mcts_battle_worker.py MCTS 对战 Worker
-│       └── mcts_train.py         MCTS 训练
+│       ├── mcts_train.py         MCTS 训练
+│       ├── value_self_play.py    价值头自对弈（cnn_v10）
+│       ├── value_self_play_worker.py  价值头自对弈 Worker
+│       └── value_train.py        价值头训练（cnn_v10）
 │
 ├── gui/           # GUI 界面（tkinter）
 │   ├── main.py         主窗口
@@ -239,6 +244,10 @@ MCTS训练: mcts_self_play.py → create_engine(cnn_v7)
           → MCTSSearcher.search() × 800模拟/步
           → 生成 sample.json → mcts_train.py → dual_head_trainer
 
+价值头训练: value_self_play.py → create_engine(cnn_v10)
+          → play_single_game() → ValueOnlyAiEngine
+          → 枚举-评估 → 生成 sample.json → value_train.py → CNNV10Trainer
+
 MCTS对战: mcts_battle.py → create_engine(cnn_v7.10) × 2
           → MctsBattleWorker → MctsGameRunner.run
           → 输出双方胜率统计
@@ -278,5 +287,7 @@ tests/
 | MCTS 双模型对战 | `python src/ai/scripts/mcts_battle.py --model1 cnn_v8.10 --model2 cnn_v8.11 --games 100` |
 | MCTS 双模型对战（多进程） | `python src/ai/scripts/mcts_battle.py --model1 cnn_v8.10 --model2 cnn_v8.11 --games 100 --workers 4` |
 | MCTS 训练 | `python src/ai/scripts/mcts_train.py --model cnn_v7.pth --train-from-dir samples --epochs 100` |
+| 价值头自对弈 | `python src/ai/scripts/value_self_play.py --model cnn_v10.1 --games 100` |
+| 价值头训练 | `python src/ai/scripts/value_train.py --model cnn_v10.1 --train-from-dir samples --epochs 100` |
 | 迭代进化 | `python src/ai/iterative_train.py --ai1 cnn_v4.99 --ai2 cnn_v4.100 --sample_dir samples` |
 | 运行测试 | `python -m pytest tests/ -v -s` |
