@@ -37,6 +37,7 @@ desktop.ini
 *.log
 *.tmp
 temp/
+debug/
 
 tests/app/edge/_test_saves/
 tests/game/save/

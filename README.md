@@ -421,6 +421,7 @@ python src/ai/scripts/value_self_play.py --model <权重路径> --games <局数>
 # 示例
 python src/ai/scripts/value_self_play.py --model src/ai/models/cnn_v10/gen1/cnn_v10.pth --games 100
 python src/ai/scripts/value_self_play.py --model cnn_v10.pth --games 50 --output my_samples --workers 4
+python src/ai/scripts/value_self_play.py --model src/ai/models/cnn_v10/gen1/cnn_v10.pth --games 100 --output samples/10/v1 --workers 1 --temp-steps 50 --temp-side both
 ```
 
 #### 价值头训练

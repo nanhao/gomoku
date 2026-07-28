@@ -267,3 +267,8 @@ introduce batch mcts and virtual loss in mcts. But don't use multi thread.
 - 5，基于4得到的概率分布进行落子决策，贪婪和温度采样的配置不变
 
 本次暂不处理 cnn_v10 的训练。
+
+# intention_id=44
+1，新建一个脚本，用于 cnn_v10 自我对弈产生样本，可以参照 src/ai/scripts/mcts_self_play.py 的参数
+2，新建一个脚本，用于 cnn_v10 的训练，可以参照  src/ai/scripts/mcts_train.py
+3，修改 battle.py，使其能够兼容 cnn_v10
