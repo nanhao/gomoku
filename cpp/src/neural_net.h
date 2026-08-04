@@ -109,7 +109,8 @@ private:
     };
 
     std::string model_path_;
-    int batch_size_;
+    int batch_lower_bound_;  // GPU 攒批下限（队列 < 此值继续等待）
+    int batch_upper_bound_;  // GPU 攒批上限（单次最多取走这么多）
     bool use_gpu_;
 
     // LibTorch 模型模块（前向声明，实际类型为 torch::jit::Module）

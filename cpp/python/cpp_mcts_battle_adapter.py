@@ -38,6 +38,7 @@ class CppMctsBattleAdapter:
         model2_spec: str,
         num_games: int,
         config: MctsSelfPlayConfig,
+        num_workers: int = 0,
     ):
         """初始化适配器
 
@@ -49,6 +50,7 @@ class CppMctsBattleAdapter:
             model2_spec: registry spec，如 "cnn_v11.2"
             num_games: 对战局数（≥1）
             config: MCTS 自对弈/对战超参数配置
+            num_workers: 游戏线程数（0=每局一个线程，>0=限定线程数）
 
         Raises:
             FileNotFoundError: TorchScript 模型文件不存在
@@ -80,7 +82,7 @@ class CppMctsBattleAdapter:
 
         # 创建 C++ GameRunner（内部初始化全局线程池和 NeuralNet 单例）
         self._runner = cpp_mcts.GameRunner(
-            model1_pt, model2_pt, num_games, cpp_config
+            model1_pt, model2_pt, num_games, cpp_config, num_workers
         )
         self._num_games = num_games
 

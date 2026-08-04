@@ -62,6 +62,8 @@ def parse_args(argv: List[str] | None = None):
                    help="模型2 registry spec（如 cnn_v11.2）")
     p.add_argument("--games", type=int, required=True,
                    help="对战局数（≥1）")
+    p.add_argument("--workers", type=int, default=0,
+                   help="游戏工作线程数（0=每局一个线程，>0=限定线程数，默认 0）")
     p.add_argument("--simulations", type=int, default=800,
                    help="每步 MCTS 模拟次数（默认 800）")
     p.add_argument("--c-puct", type=float, default=2.0,
@@ -193,6 +195,7 @@ def run_battle(args) -> None:
             model2_spec=args.ai2,
             num_games=args.games,
             config=config,
+            num_workers=args.workers,
         )
 
         # 启动所有 C++ 游戏线程（非阻塞）

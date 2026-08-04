@@ -45,8 +45,14 @@ DIRICHLET_EPSILON: float = _get("dirichlet_epsilon", 0.25)
 # 狄利克雷分布浓度参数（α）：越小噪声越集中
 DIRICHLET_ALPHA: float = _get("dirichlet_alpha", 0.03)
 
-# GPU 推理攒批大小：推理线程攒够此数量后一次前向
+# GPU 推理攒批大小：推理线程攒够此数量后一次前向（向后兼容）
 BATCH_SIZE: int = _get("batch_size", 16)
+
+# GPU 推理攒批下限：队列少于此值时推理线程继续等待（配合 1ms 超时）
+BATCH_LOWER_BOUND: int = _get("batch_lower_bound", 16)
+
+# GPU 推理攒批上限：单次推理最多取走的请求数
+BATCH_UPPER_BOUND: int = _get("batch_upper_bound", 500)
 
 # 虚拟损失值：选择阶段对节点施加的惩罚系数
 VIRTUAL_LOSS: float = _get("virtual_loss", 3.0)

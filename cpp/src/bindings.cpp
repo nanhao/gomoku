@@ -70,6 +70,8 @@ static void load_mcts_config(py::module_& m) {
         g_mcts_config.dirichlet_epsilon = get_double("dirichlet_epsilon", 0.25);
         g_mcts_config.dirichlet_alpha   = get_double("dirichlet_alpha", 0.03);
         g_mcts_config.batch_size        = get_int("batch_size", 16);
+        g_mcts_config.batch_lower_bound = get_int("batch_lower_bound", 16);
+        g_mcts_config.batch_upper_bound = get_int("batch_upper_bound", 500);
         g_mcts_config.virtual_loss      = get_double("virtual_loss", 3.0);
         g_mcts_config.use_gpu           = get_bool("use_gpu", true);
 
@@ -181,16 +183,18 @@ PYBIND11_MODULE(cpp_mcts, m) {
         "C++ 并行对局管理器\n\n"
         "管理 N 个游戏线程，共享全局 MCTS 线程池和 GPU 推理引擎。\n"
         "通过 CppMctsBattleAdapter 包装后使用。")
-        .def(py::init<const std::string&, const std::string&, int, const GameConfig&>(),
+        .def(py::init<const std::string&, const std::string&, int, const GameConfig&, int>(),
              py::arg("model1_path"),
              py::arg("model2_path"),
              py::arg("num_games"),
              py::arg("config"),
+             py::arg("num_workers") = 0,
              "创建对局管理器\n\n"
              ":param model1_path: 模型1 TorchScript 路径\n"
              ":param model2_path: 模型2 TorchScript 路径\n"
              ":param num_games: 对战局数\n"
-             ":param config: GameConfig 配置")
+             ":param config: GameConfig 配置\n"
+             ":param num_workers: 游戏线程数（0=每局一线程，>0=限定线程数）")
         .def("start", &GameRunner::start,
              "启动所有游戏线程（非阻塞）")
         .def("get_completed_count", &GameRunner::get_completed_count,

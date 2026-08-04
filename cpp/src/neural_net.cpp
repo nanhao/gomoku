@@ -9,6 +9,8 @@
 #include <stdexcept>
 #include <string>
 
+#include "mcts_config.h"
+
 // LibTorch headers
 #include <torch/script.h>
 #include <torch/torch.h>
@@ -75,12 +77,18 @@ void NeuralNet::load_model(const std::string& model_path) {
 
 NeuralNet::NeuralNet(std::string model_path, int batch_size, bool use_gpu)
     : model_path_(std::move(model_path))
-    , batch_size_(batch_size)
+    , batch_lower_bound_(g_mcts_config.batch_lower_bound > 0
+                         ? g_mcts_config.batch_lower_bound : 16)
+    , batch_upper_bound_(g_mcts_config.batch_upper_bound > 0
+                         ? g_mcts_config.batch_upper_bound
+                         : (batch_size > 0 ? batch_size : 16))
     , use_gpu_(use_gpu)
     , module_impl_(nullptr)
 {
     std::cout << "[NeuralNet] use_gpu=" << use_gpu_
               << " cuda_avail=" << torch::cuda::is_available()
+              << " batch_range=[" << batch_lower_bound_
+              << "," << batch_upper_bound_ << "]"
               << std::endl;
 
     // 加载模型
@@ -211,11 +219,12 @@ void NeuralNet::inference_loop() {
         {
             std::unique_lock<std::mutex> lock(queue_mutex_);
 
-            // 阻塞等待：有请求到达 或 停止标志
-            queue_cv_.wait_for(lock, std::chrono::milliseconds(10),
+            // 阻塞等待：队列达到下限 或 1ms 超时 或 停止标志
+            // 超时仅 1ms，确保尾部小批次也能快速处理
+            queue_cv_.wait_for(lock, std::chrono::milliseconds(1),
                 [this]() {
                     return stop_flag_.load()
-                           || pending_requests_.size() >= static_cast<size_t>(batch_size_);
+                           || pending_requests_.size() >= static_cast<size_t>(batch_lower_bound_);
                 });
 
             if (stop_flag_ && pending_requests_.empty()) {
@@ -226,9 +235,9 @@ void NeuralNet::inference_loop() {
                 continue;
             }
 
-            // 取出一批请求（最多 batch_size_ 个）
+            // 取出一批请求：最少 lower 个，最多 upper 个
             size_t take_count = std::min(pending_requests_.size(),
-                                         static_cast<size_t>(batch_size_));
+                                         static_cast<size_t>(batch_upper_bound_));
             auto start = pending_requests_.begin();
             auto end = start + static_cast<ptrdiff_t>(take_count);
             batch.assign(

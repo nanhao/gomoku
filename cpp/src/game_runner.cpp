@@ -8,6 +8,7 @@
 #include <string>
 
 #include "board_state.h"
+#include "mcts_config.h"
 #include "mcts_searcher.h"
 #include "neural_net.h"
 #include "thread_pool.h"
@@ -19,10 +20,12 @@
 GameRunner::GameRunner(const std::string& model1_path,
                        const std::string& model2_path,
                        int num_games,
-                       const GameConfig& config)
+                       const GameConfig& config,
+                       int num_workers)
     : model1_path_(model1_path)
     , model2_path_(model2_path)
     , num_games_(num_games)
+    , num_workers_(num_workers > 0 ? num_workers : num_games)
     , config_(config)
 {
     if (num_games_ < 1) {
@@ -31,9 +34,9 @@ GameRunner::GameRunner(const std::string& model1_path,
             + std::to_string(num_games_));
     }
 
-    // 1. 初始化全局 MCTS 线程池（游戏线程数 = 对局数）
-    int pool_size = std::max(1, num_games_);
-    MctsThreadPool::initialize(pool_size);
+    // 1. 初始化全局 MCTS 线程池（使用 JSON 配置中的 num_threads，
+    //    而非对局数；call_once 保护，若已初始化则忽略）
+    MctsThreadPool::initialize(g_mcts_config.num_threads);
     std::cout << "[GameRunner] 线程池已初始化, size="
               << MctsThreadPool::instance().size() << std::endl;
 
@@ -41,6 +44,9 @@ GameRunner::GameRunner(const std::string& model1_path,
     NeuralNet::initialize(model1_path_, config_.batch_size, config_.use_gpu);
     std::cout << "[GameRunner] NeuralNet 已初始化, model="
               << model1_path_ << std::endl;
+
+    std::cout << "[GameRunner] 游戏线程数=" << num_workers_
+              << " (对局数=" << num_games_ << ")" << std::endl;
 
     // 3. 预分配结果数组（按 game_index 索引，线程安全写入）
     results_.resize(num_games_);
@@ -59,9 +65,9 @@ GameRunner::~GameRunner() {
 // =====================================================================
 
 void GameRunner::start() {
-    game_threads_.reserve(num_games_);
-    for (int i = 0; i < num_games_; ++i) {
-        game_threads_.emplace_back(&GameRunner::run_single_game, this, i);
+    game_threads_.reserve(num_workers_);
+    for (int i = 0; i < num_workers_; ++i) {
+        game_threads_.emplace_back(&GameRunner::run_worker_games, this, i);
     }
 }
 
@@ -88,6 +94,17 @@ void GameRunner::wait_completion() {
 std::vector<GameResult> GameRunner::get_results() const {
     std::lock_guard<std::mutex> lock(results_mutex_);
     return results_;
+}
+
+// =====================================================================
+// 工作线程入口：轮询分发对局
+// =====================================================================
+
+void GameRunner::run_worker_games(int worker_index) {
+    // 轮询分发：worker 0 负责 game 0, K, 2K, ...；worker 1 负责 game 1, K+1, ...
+    for (int g = worker_index; g < num_games_; g += num_workers_) {
+        run_single_game(g);
+    }
 }
 
 // =====================================================================

@@ -53,12 +53,14 @@ public:
     @param model2_path 模型2 的 TorchScript 文件路径
     @param num_games 对战局数（≥1）
     @param config 游戏配置参数
+    @param num_workers 游戏工作线程数（0=每局一个线程，向后兼容；>0=限定线程数）
     @throws std::runtime_error 若模型文件不存在或加载失败
     */
     GameRunner(const std::string& model1_path,
                const std::string& model2_path,
                int num_games,
-               const GameConfig& config);
+               const GameConfig& config,
+               int num_workers = 0);
 
     ~GameRunner();
 
@@ -89,10 +91,18 @@ private:
     std::string model1_path_;
     std::string model2_path_;
     int num_games_;
+    int num_workers_;  // 实际工作线程数（= max(1, num_workers 或 num_games_)）
     GameConfig config_;
 
-    // 游戏线程
+    // 游戏工作线程（每个线程负责多局对局）
     std::vector<std::thread> game_threads_;
+
+    /** 工作线程入口：执行分配给该 worker 的所有对局
+
+    采用轮询分发：worker w 负责对局 w, w+K, w+2K, ...（K = num_workers_）
+    @param worker_index 工作线程索引 0..num_workers_-1
+    */
+    void run_worker_games(int worker_index);
 
     // 已完成计数器（线程安全）
     std::atomic<int> completed_count_{0};
