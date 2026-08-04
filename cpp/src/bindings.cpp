@@ -98,6 +98,28 @@ PYBIND11_MODULE(cpp_mcts, m) {
         .def_readonly("root_policy", &MctsResult::root_policy,
             "根节点原始策略（狄利克雷噪声施加前）");
 
+    // ---- GpuInferenceStats 监控统计 ----
+    py::class_<GpuInferenceStats>(m, "GpuInferenceStats",
+        "GPU 推理线程运行时监控统计")
+        .def_readonly("total_batches", &GpuInferenceStats::total_batches,
+            "已处理的批次数")
+        .def_readonly("total_requests", &GpuInferenceStats::total_requests,
+            "已处理的请求总数")
+        .def_readonly("total_wait_us", &GpuInferenceStats::total_wait_us,
+            "等待攒批总耗时（微秒）")
+        .def_readonly("total_infer_us", &GpuInferenceStats::total_infer_us,
+            "GPU 推理总耗时（微秒）")
+        .def_readonly("queue_peak_size", &GpuInferenceStats::queue_peak_size,
+            "队列长度历史峰值")
+        .def_readonly("batch_size_min", &GpuInferenceStats::batch_size_min,
+            "历史最小批次大小")
+        .def_readonly("batch_size_max", &GpuInferenceStats::batch_size_max,
+            "历史最大批次大小")
+        .def("wait_ratio", &GpuInferenceStats::wait_ratio,
+            "GPU 线程等待比例 = wait/(wait+infer)，0~1")
+        .def("avg_batch_size", &GpuInferenceStats::avg_batch_size,
+            "历史平均批次大小");
+
     // MctsSearcher 主类
     py::class_<MctsSearcher>(m, "MctsSearcher",
         "多线程 MCTS 搜索器\n\n"
@@ -140,6 +162,11 @@ PYBIND11_MODULE(cpp_mcts, m) {
 
     m.def("thread_pool_size", [] { return MctsThreadPool::instance().size(); },
           "返回线程池中的工作线程数。");
+
+    // ---- GPU 推理监控 ----
+    m.def("get_gpu_stats", []() -> GpuInferenceStats {
+        return NeuralNet::instance().get_stats();
+    }, "获取 GPU 推理线程的运行时统计快照。");
 
     // ---- GameConfig 配置结构体 ----
     py::class_<GameConfig>(m, "GameConfig",

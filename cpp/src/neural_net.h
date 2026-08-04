@@ -1,7 +1,9 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
+#include <cstdint>
 #include <future>
 #include <memory>
 #include <mutex>
@@ -13,6 +15,32 @@
 struct NeuralNetResult {
     std::vector<float> policy;  // 225 维 softmax 概率分布，值域 (0, 1)，总和 ≈ 1
     float value;                // 局面价值 [-1, 1]
+};
+
+/** GPU 推理线程的运行时监控统计
+
+所有耗时以微秒为单位。由推理线程单线程更新，get_stats() 返回快照。
+*/
+struct GpuInferenceStats {
+    int64_t total_batches = 0;    // 已处理的批次数
+    int64_t total_requests = 0;   // 已处理的请求总数
+    int64_t total_wait_us = 0;    // 等待攒批的总耗时（微秒）
+    int64_t total_infer_us = 0;   // GPU 前向推理的总耗时（微秒）
+    int queue_peak_size = 0;      // 队列长度的历史峰值
+    int batch_size_min = 0;       // 历史最小批次大小
+    int batch_size_max = 0;       // 历史最大批次大小
+
+    /** GPU 线程等待比例 = wait / (wait + infer)，0~1 */
+    double wait_ratio() const {
+        int64_t total = total_wait_us + total_infer_us;
+        return total > 0 ? static_cast<double>(total_wait_us) / total : 0.0;
+    }
+
+    /** 历史平均批次大小 */
+    double avg_batch_size() const {
+        return total_batches > 0
+            ? static_cast<double>(total_requests) / total_batches : 0.0;
+    }
 };
 
 /** 神经网络推理引擎（全局单例）
@@ -84,6 +112,14 @@ public:
     */
     NeuralNetResult predict(const std::vector<float>& encoded_board);
 
+    // ---- 运行时监控 ----
+
+    /** 获取 GPU 推理线程的运行时统计（线程安全，返回快照）
+
+    @return GpuInferenceStats 当前统计快照
+    */
+    GpuInferenceStats get_stats() const;
+
     // ---- 构造/析构（保留旧接口，向后兼容）----
 
     /** 加载 TorchScript 模型并启动 GPU 推理线程
@@ -129,6 +165,11 @@ private:
 
     // 模型切换互斥锁（保护 set_model / 推理线程的 model 访问）
     std::mutex model_mutex_;
+
+    // ---- 运行时监控（仅推理线程写入，主线程读取需加锁）----
+    GpuInferenceStats stats_;
+    mutable std::mutex stats_mutex_;  // 保护 stats_ 的读取
+    int stats_log_interval_ = 100;    // 每 N 个 batch 输出一次监控日志
 
     /** GPU 推理线程主循环 */
     void inference_loop();

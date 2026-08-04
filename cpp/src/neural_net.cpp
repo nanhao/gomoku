@@ -209,18 +209,30 @@ NeuralNetResult NeuralNet::predict(
 }
 
 // =====================================================================
-// 推理线程主循环
+// 运行时监控
+// =====================================================================
+
+GpuInferenceStats NeuralNet::get_stats() const {
+    std::lock_guard<std::mutex> lock(stats_mutex_);
+    return stats_;
+}
+
+// =====================================================================
+// 推理线程主循环（含运行时监控统计）
 // =====================================================================
 
 void NeuralNet::inference_loop() {
+    using clock = std::chrono::steady_clock;
+
     while (!stop_flag_) {
         std::vector<InferenceRequest> batch;
 
+        // ---- 等待攒批（计时）----
+        auto wait_start = clock::now();
         {
             std::unique_lock<std::mutex> lock(queue_mutex_);
 
             // 阻塞等待：队列达到下限 或 1ms 超时 或 停止标志
-            // 超时仅 1ms，确保尾部小批次也能快速处理
             queue_cv_.wait_for(lock, std::chrono::milliseconds(1),
                 [this]() {
                     return stop_flag_.load()
@@ -235,6 +247,12 @@ void NeuralNet::inference_loop() {
                 continue;
             }
 
+            // 记录队列峰值
+            int qsize = static_cast<int>(pending_requests_.size());
+            if (qsize > stats_.queue_peak_size) {
+                stats_.queue_peak_size = qsize;
+            }
+
             // 取出一批请求：最少 lower 个，最多 upper 个
             size_t take_count = std::min(pending_requests_.size(),
                                          static_cast<size_t>(batch_upper_bound_));
@@ -245,8 +263,18 @@ void NeuralNet::inference_loop() {
                 std::make_move_iterator(end));
             pending_requests_.erase(start, end);
         }
+        auto wait_end = clock::now();
 
         if (batch.empty()) continue;
+
+        // ---- 更新批次大小统计 ----
+        int batch_sz = static_cast<int>(batch.size());
+        if (stats_.batch_size_min == 0 || batch_sz < stats_.batch_size_min) {
+            stats_.batch_size_min = batch_sz;
+        }
+        if (batch_sz > stats_.batch_size_max) {
+            stats_.batch_size_max = batch_sz;
+        }
 
         // 收集所有输入
         std::vector<std::vector<float>> inputs;
@@ -255,7 +283,8 @@ void NeuralNet::inference_loop() {
             inputs.push_back(std::move(req.encoded_board));
         }
 
-        // 批量前向推理
+        // ---- GPU 前向推理（计时）----
+        auto infer_start = clock::now();
         std::vector<NeuralNetResult> results;
         try {
             results = forward_batch(inputs);
@@ -266,10 +295,33 @@ void NeuralNet::inference_loop() {
             }
             continue;
         }
+        auto infer_end = clock::now();
+
+        // ---- 累加统计 ----
+        stats_.total_batches++;
+        stats_.total_requests += batch_sz;
+        stats_.total_wait_us += std::chrono::duration_cast<std::chrono::microseconds>(
+            wait_end - wait_start).count();
+        stats_.total_infer_us += std::chrono::duration_cast<std::chrono::microseconds>(
+            infer_end - infer_start).count();
 
         // 分发结果到各个 promise
         for (size_t i = 0; i < batch.size(); ++i) {
             batch[i].promise.set_value(std::move(results[i]));
+        }
+
+        // ---- 定期输出监控日志 ----
+        if (stats_.total_batches % stats_log_interval_ == 0) {
+            std::printf(
+                "[NeuralNet] batches=%lld reqs=%lld "
+                "avg_batch=%.1f wait_ratio=%.1f%% "
+                "queue_peak=%d batch_range=[%d,%d]\n",
+                static_cast<long long>(stats_.total_batches),
+                static_cast<long long>(stats_.total_requests),
+                stats_.avg_batch_size(),
+                stats_.wait_ratio() * 100.0,
+                stats_.queue_peak_size,
+                stats_.batch_size_min, stats_.batch_size_max);
         }
     }
 }
