@@ -394,6 +394,7 @@ python src/ai/scripts/mcts_battle_cpp.py --ai1 <注册名.代数> --ai2 <注册�
 | `--dirichlet-alpha` | 0.03 | 狄利克雷分布参数 |
 | `--batch-size` | 默认配置 | GPU 推理攒批大小 |
 | `--virtual-loss` | 默认配置 | virtual loss 值 |
+| `--workers` | 游戏数 | 游戏线程数（≤游戏数时轮询分发，默认每局一个线程） |
 
 **示例**：
 
@@ -403,7 +404,47 @@ python src/ai/scripts/mcts_battle_cpp.py --ai1 cnn_v11.1 --ai2 cnn_v11.1 --games
 
 # 自定义 MCTS 参数
 python src/ai/scripts/mcts_battle_cpp.py --ai1 cnn_v11.1 --ai2 cnn_v11.2 --games 50 --simulations 400 --temperature 0.5 --temp-steps 12
+
+# 限制游戏线程数（4 个 worker 轮询分发 100 局）
+python src/ai/scripts/mcts_battle_cpp.py --ai1 cnn_v11.1 --ai2 cnn_v11.2 --games 100 --workers 4
 ```
+
+#### GPU 推理攒批配置
+
+GPU 推理线程采用**动态区间攒批**机制，通过 `cpp/python/mcts_config.json` 配置：
+
+```json
+{
+    "batch_lower_bound": 16,   // 队列达到此数量才开始取走（等待下限）
+    "batch_upper_bound": 500   // 单次最多取走的请求数（上限）
+}
+```
+
+- 推理线程每 1ms 检查一次队列，达到 `batch_lower_bound` 后取走 `min(queue_size, batch_upper_bound)` 条请求
+- `batch_lower_bound` 越大 GPU 利用率越高但延迟也越大；`batch_upper_bound` 防止单次推理耗时过长
+- 修改 JSON 后重新运行脚本即生效，无需重新编译
+
+#### GPU 推理运行时监控
+
+```python
+from cpp.python.cpp_mcts_adapter import get_gpu_stats
+
+stats = get_gpu_stats()  # 获取 GpuInferenceStats 快照
+print(f"批次数: {stats.total_batches}")
+print(f"请求数: {stats.total_requests}")
+print(f"平均批次: {stats.avg_batch_size():.1f}")
+print(f"GPU 等待比例: {stats.wait_ratio() * 100:.1f}%")  # 越低 GPU 利用率越高
+print(f"队列峰值: {stats.queue_peak_size}")
+```
+
+推理线程每 100 个 batch 自动输出监控日志，示例：
+
+```
+[NeuralNet] batches=100 reqs=3200 avg_batch=32.0 wait_ratio=23.5%
+    queue_peak=128 batch_range=[16,500]
+```
+
+> **性能诊断**：`wait_ratio` 低（如 10%）表示 GPU 利用率高、攒批充分；`wait_ratio` 高（如 80%）表示 GPU 在空等，瓶颈在 MCTS 生产端。`queue_peak` 持续偏高说明请求堆积，GPU 成为瓶颈。
 
 #### MCTS 训练
 
