@@ -56,3 +56,6 @@ samples
 .iterative_lock
 mcts_log
 mcts_loss_logs
+
+# C++ LibTorch runtime DLLs (installed separately)
+cpp/python/*.dll

@@ -13,6 +13,8 @@
 
 **C++ MCTS 扩展**：C++17 / LibTorch / pybind11 / CMake — 高性能多线程 MCTS 搜索器（详见 [设计 46](../design/46/main_docs/overview.md)）
 
+**C++ MCTS 并行对战**：C++ 多线程并行运行 N 局 cnn_v11 对战，共享全局线程池和 GPU（详见 [设计 47](../design/47/main_docs/overview.md)）
+
 ---
 
 ## 总体架构
@@ -136,6 +138,7 @@ src/
 │       ├── mcts_config.py        MCTS 配置数据类
 │       ├── mcts_battle.py        MCTS 双模型对战
 │       ├── mcts_battle_worker.py MCTS 对战 Worker
+│       ├── mcts_battle_cpp.py    MCTS C++ 双模型对战（GPU 并行）
 │       ├── mcts_train.py         MCTS 训练
 │       ├── value_self_play.py    价值头自对弈（cnn_v10）
 │       ├── value_self_play_worker.py  价值头自对弈 Worker
@@ -199,15 +202,22 @@ AlphaGo Zero 风格的蒙特卡洛树搜索，支持 Batch MCTS + Virtual Loss�
 |------|------|------|
 | `BoardState` | `board_state.h/cpp` | 棋盘编码、胜负判定、相对视角编码 |
 | `MctsNode` | `mcts_node.h/cpp` | 并发安全搜索树节点（PUCT/VL/Backup） |
-| `NeuralNet` | `neural_net.h/cpp` | LibTorch 异步批量推理（生产者-消费者） |
-| `MctsSearcher` | `mcts_searcher.h/cpp` | 多线程搜索编排、Dirichlet 噪声、子树复用 |
+| `NeuralNet` | `neural_net.h/cpp` | LibTorch 异步批量推理（全局单例、GPU 共享） |
+| `MctsThreadPool` | `thread_pool.h/cpp` | 全局工作线程池（支持批次屏障 + 任务队列双模式） |
+| `MctsSearcher` | `mcts_searcher.h/cpp` | 多线程搜索编排（支持共享资源注入）、Dirichlet 噪声、子树复用 |
+| `GameRunner` | `game_runner.h/cpp` | 并行对局管理器（N 个 C++ 游戏线程共享全局资源） |
+| `GameConfig` | `game_runner.h` | 对战配置结构体（MCTS + 温度参数） |
+| `GameResult` | `game_runner.h` | 单局对战结果结构体 |
 
 **Python 桥接**：
-- `bindings.cpp` — pybind11 定义，暴露 `cpp_mcts.MctsSearcher`
-- `cpp_mcts_adapter.py` — 适配器，接口兼容 Python `MCTSSearcher`
+- `bindings.cpp` — pybind11 定义，暴露 `cpp_mcts.MctsSearcher`、`GameRunner`、`GameConfig`
+- `cpp_mcts_adapter.py` — 单搜索适配器，接口兼容 Python `MCTSSearcher`
+- `cpp_mcts_battle_adapter.py` — 并行对战适配器，包装 C++ `GameRunner` 为 Python 接口
 
-**线程模型**：N 个 MCTS 工作线程 + 1 个 GPU 推理线程（生产者-消费者模式）
-`MCTS workers → request queue → GPU thread → batch inference → wake workers`
+**线程模型**：
+- 单搜索：N 个 MCTS 工作线程 + 1 个 GPU 推理线程（生产者-消费者模式）
+- 并行对战：K 个 MCTS 工作线程（任务队列）+ N 个游戏线程 + 全局单例 NeuralNet（GPU 共享）
+  `Game threads → MctsSearcher.search() → pool.submit() → GPU thread → batch inference`
 
 ### 4. 两类 AI 引擎
 
@@ -278,6 +288,10 @@ MCTS训练: mcts_self_play.py → create_engine(cnn_v7)
 MCTS对战: mcts_battle.py → create_engine(cnn_v7.10) × 2
           → MctsBattleWorker → MctsGameRunner.run
           → 输出双方胜率统计
+
+C++ MCTS对战: mcts_battle_cpp.py → CppMctsBattleAdapter
+              → C++ GameRunner（N 个游戏线程，共享线程池+GPU）
+              → 输出双方胜率统计
 ```
 
 ---

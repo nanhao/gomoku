@@ -371,6 +371,40 @@ python src/ai/scripts/mcts_battle.py --model1 cnn_v8.10 --model2 cnn_v8.11 --gam
 python src/ai/scripts/mcts_battle.py --model1 cnn_v8.10 --model2 cnn_v8.11 --games 200 --workers 4
 ```
 
+#### MCTS C++ 双模型并行对战（设计 47）
+
+> 使用 C++ MCTS 引擎在 GPU 上并行运行 cnn_v11 模型对战。所有对局在 C++ 层面用多线程并行，共享全局 MCTS 线程池和 GPU 推理引擎。
+
+```bash
+python src/ai/scripts/mcts_battle_cpp.py --ai1 <注册名.代数> --ai2 <注册名.代数> --games <局数> [选项]
+```
+
+**选项**：
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--ai1` | **必需** | 模型1 registry spec，如 cnn_v11.1 |
+| `--ai2` | **必需** | 模型2 registry spec，如 cnn_v11.2 |
+| `--games` | **必需** | 对战局数（≥1） |
+| `--simulations` | 800 | 每步 MCTS 模拟次数 |
+| `--c-puct` | 2.0 | PUCT 探索系数 |
+| `--temp-steps` | 8 | 温度探索步数 |
+| `--temperature` | 1.0 | 温度参数 |
+| `--dirichlet-epsilon` | 0.25 | 狄利克雷噪声比例 |
+| `--dirichlet-alpha` | 0.03 | 狄利克雷分布参数 |
+| `--batch-size` | 默认配置 | GPU 推理攒批大小 |
+| `--virtual-loss` | 默认配置 | virtual loss 值 |
+
+**示例**：
+
+```bash
+# 基本对战：cnn_v11 第1代 vs 第1代（自对弈）
+python src/ai/scripts/mcts_battle_cpp.py --ai1 cnn_v11.1 --ai2 cnn_v11.1 --games 10
+
+# 自定义 MCTS 参数
+python src/ai/scripts/mcts_battle_cpp.py --ai1 cnn_v11.1 --ai2 cnn_v11.2 --games 50 --simulations 400 --temperature 0.5 --temp-steps 12
+```
+
 #### MCTS 训练
 
 > 支持所有双头模型（cnn_v7, cnn_v8, ...），根据权重路径自动选择对应的模型类和训练器。
@@ -649,13 +683,14 @@ python tests/run_tests.py
 - **模型文件**：`src/ai/models/cnn_v8/gen{i}/cnn_v8.pth`（多代模型）
 - **结构图**：[cnn_v8_architecture.puml](src/ai/models/cnn_v8/cnn_v8_architecture.puml) / [cnn_v8_architecture.png](src/ai/models/cnn_v8/cnn_v8_architecture.png)
 
-### C++ MCTS 模块（设计 46）
+### C++ MCTS 模块（设计 46 + 47）
 
 高性能 C++17 MCTS 搜索器，通过 pybind11 桥接为 Python 扩展模块，替代纯 Python 搜索逻辑。
 
-- **核心收益**：消除 Python GIL 瓶颈，支持多线程并行 MCTS + GPU 异步批量推理
+- **核心收益**：消除 Python GIL 瓶颈，支持多线程并行 MCTS + GPU 异步批量推理；支持 N 局并行对战共享全局 GPU
 - **技术栈**：C++17 / LibTorch / pybind11 / CMake
 - **目标模型**：cnn_v11（TorchScript 导出）
+- **新增（设计 47）**：`GameRunner` 并行对局管理器、`GameConfig` 对战配置、`CppMctsBattleAdapter` Python 适配器、`mcts_battle_cpp.py` CLI 脚本
 
 #### 构建
 

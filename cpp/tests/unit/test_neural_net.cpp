@@ -120,7 +120,7 @@ static void test_single_predict() {
             encoded[2 * 225 + i] = 1.0f;
         }
 
-        auto result = nn.predict(encoded).get();
+        auto result = nn.predict(encoded);
 
         // policy 长度 = 225
         ASSERT_EQ((int)result.policy.size(), 225);
@@ -160,10 +160,10 @@ static void test_batch_async_predict() {
             encoded[2 * 225 + i] = 1.0f;
         }
 
-        std::future<NeuralNetResult> f1 = nn.predict(encoded);
-        std::future<NeuralNetResult> f2 = nn.predict(encoded);
-        std::future<NeuralNetResult> f3 = nn.predict(encoded);
-        std::future<NeuralNetResult> f4 = nn.predict(encoded);
+        std::future<NeuralNetResult> f1 = nn.predict_async(encoded);
+        std::future<NeuralNetResult> f2 = nn.predict_async(encoded);
+        std::future<NeuralNetResult> f3 = nn.predict_async(encoded);
+        std::future<NeuralNetResult> f4 = nn.predict_async(encoded);
 
         auto r1 = f1.get();
         auto r2 = f2.get();
@@ -202,7 +202,7 @@ static void test_large_batch_stress() {
         futures.reserve(N);
 
         for (int i = 0; i < N; ++i) {
-            futures.push_back(nn.predict(encoded));
+            futures.push_back(nn.predict_async(encoded));
         }
 
         for (int i = 0; i < N; ++i) {
@@ -225,7 +225,7 @@ static void test_invalid_input() {
 
         // 输入长度不是 675
         std::vector<float> bad_input(100, 0.0f);
-        auto result = nn.predict(bad_input).get();
+        auto result = nn.predict(bad_input);
 
         FAIL("expected exception but none thrown");
     } catch (const std::runtime_error&) {
@@ -263,7 +263,7 @@ static void test_consistency_with_python() {
             encoded[450 + i] = 1.0f;
         }
 
-        auto result = nn.predict(encoded).get();
+        auto result = nn.predict(encoded);
 
         // 基本合理性检查（精确一致性需与 Python 逐元素比较）
         ASSERT_EQ((int)result.policy.size(), 225);

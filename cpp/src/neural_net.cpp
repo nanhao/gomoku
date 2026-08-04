@@ -5,12 +5,69 @@
 #include <cmath>
 #include <cstring>
 #include <iostream>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 
 // LibTorch headers
 #include <torch/script.h>
 #include <torch/torch.h>
+
+// =====================================================================
+// 单例管理
+// =====================================================================
+
+static std::unique_ptr<NeuralNet> s_nn_instance;
+static std::once_flag s_nn_init_flag;
+
+NeuralNet& NeuralNet::instance() {
+    std::call_once(s_nn_init_flag, [] {
+        // 使用默认参数自动初始化
+        s_nn_instance.reset(new NeuralNet(
+            "src/ai/models/cnn_v11/cnn_v11_torchscript.pt", 16, true));
+    });
+    return *s_nn_instance;
+}
+
+void NeuralNet::initialize(const std::string& model_path,
+                           int batch_size, bool use_gpu) {
+    std::call_once(s_nn_init_flag, [&] {
+        s_nn_instance.reset(new NeuralNet(model_path, batch_size, use_gpu));
+    });
+}
+
+void NeuralNet::shutdown() {
+    s_nn_instance.reset();
+}
+
+// =====================================================================
+// 内部: load_model（不加锁，由调用方保证线程安全）
+// =====================================================================
+
+void NeuralNet::load_model(const std::string& model_path) {
+    // 确定设备
+    torch::Device device(torch::kCPU);
+    if (use_gpu_ && torch::cuda::is_available()) {
+        device = torch::Device(torch::kCUDA);
+    }
+
+    // 加载 TorchScript 模型
+    torch::jit::script::Module module = torch::jit::load(model_path);
+    module.to(device);
+    module.eval();
+
+    // 释放旧模型（若存在）
+    if (module_impl_ != nullptr) {
+        auto* old_module = static_cast<torch::jit::script::Module*>(module_impl_);
+        delete old_module;
+        module_impl_ = nullptr;
+    }
+
+    // 存储新模型
+    auto* heap_module = new torch::jit::script::Module(std::move(module));
+    module_impl_ = static_cast<void*>(heap_module);
+    model_path_ = model_path;
+}
 
 // =====================================================================
 // 构造 & 析构
@@ -22,24 +79,13 @@ NeuralNet::NeuralNet(std::string model_path, int batch_size, bool use_gpu)
     , use_gpu_(use_gpu)
     , module_impl_(nullptr)
 {
-    // 确定设备
-    torch::Device device(torch::kCPU);
-    if (use_gpu_ && torch::cuda::is_available()) {
-        device = torch::Device(torch::kCUDA);
-    }
     std::cout << "[NeuralNet] use_gpu=" << use_gpu_
               << " cuda_avail=" << torch::cuda::is_available()
-              << " device=" << device.str() << std::endl;
+              << std::endl;
 
-    // 加载 TorchScript 模型
+    // 加载模型
     try {
-        torch::jit::script::Module module = torch::jit::load(model_path_);
-        module.to(device);
-        module.eval();
-
-        // 将模块存储在堆上（void* 封装避免头文件暴露 LibTorch 类型）
-        auto* heap_module = new torch::jit::script::Module(std::move(module));
-        module_impl_ = static_cast<void*>(heap_module);
+        load_model(model_path_);
     } catch (const c10::Error& e) {
         throw std::runtime_error(
             "NeuralNet: 加载 TorchScript 模型失败: " + model_path_
@@ -67,10 +113,55 @@ NeuralNet::~NeuralNet() {
 }
 
 // =====================================================================
-// 公开 API: predict
+// 公开 API: set_model
 // =====================================================================
 
-std::future<NeuralNetResult> NeuralNet::predict(
+void NeuralNet::set_model(const std::string& model_path) {
+    std::lock_guard<std::mutex> lock(model_mutex_);
+
+    // 1. 暂停推理线程
+    stop_flag_ = true;
+    queue_cv_.notify_all();
+    if (inference_thread_.joinable()) {
+        inference_thread_.join();
+    }
+
+    // 2. 清空待处理请求（旧模型已失效）
+    {
+        std::lock_guard<std::mutex> qlock(queue_mutex_);
+        for (auto& req : pending_requests_) {
+            try {
+                req.promise.set_exception(std::make_exception_ptr(
+                    std::runtime_error("NeuralNet::set_model: model switched, request cancelled")));
+            } catch (...) {}
+        }
+        pending_requests_.clear();
+    }
+
+    // 3. 加载新模型
+    try {
+        load_model(model_path);
+    } catch (const c10::Error& e) {
+        // 加载失败：尝试恢复旧模型（若旧模型还存在）
+        stop_flag_ = false;
+        inference_thread_ = std::thread(&NeuralNet::inference_loop, this);
+        throw std::runtime_error(
+            "NeuralNet::set_model: 加载模型失败: " + model_path
+            + " — " + std::string(e.what()));
+    }
+
+    // 4. 重启推理线程
+    stop_flag_ = false;
+    inference_thread_ = std::thread(&NeuralNet::inference_loop, this);
+
+    std::cout << "[NeuralNet] set_model: " << model_path << std::endl;
+}
+
+// =====================================================================
+// 公开 API: predict_async
+// =====================================================================
+
+std::future<NeuralNetResult> NeuralNet::predict_async(
     const std::vector<float>& encoded_board)
 {
     // 校验输入维度：3 通道 × 15 行 × 15 列 = 675
@@ -78,7 +169,7 @@ std::future<NeuralNetResult> NeuralNet::predict(
         auto promise = std::promise<NeuralNetResult>();
         promise.set_exception(std::make_exception_ptr(
             std::runtime_error(
-                "NeuralNet::predict: encoded_board 大小必须为 675, 实际 "
+                "NeuralNet::predict_async: encoded_board 大小必须为 675, 实际 "
                 + std::to_string(encoded_board.size()))));
         return promise.get_future();
     }
@@ -97,6 +188,16 @@ std::future<NeuralNetResult> NeuralNet::predict(
     queue_cv_.notify_one();
 
     return future;
+}
+
+// =====================================================================
+// 公开 API: predict (sync wrapper)
+// =====================================================================
+
+NeuralNetResult NeuralNet::predict(
+    const std::vector<float>& encoded_board)
+{
+    return predict_async(encoded_board).get();
 }
 
 // =====================================================================

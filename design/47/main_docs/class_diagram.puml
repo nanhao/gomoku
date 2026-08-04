@@ -1,0 +1,99 @@
+@startuml
+title cnn_v11 C++ MCTS 并行对战 — 类图
+
+package "C++ 模块 (cpp/src/)" {
+    class MctsThreadPool <<singleton>> {
+        + {static} instance() : MctsThreadPool&
+        + {static} initialize(num_threads : int) : void
+        + {static} shutdown() : void
+        + submit_task(task_fn : function) : void
+        + wait_all() : void
+        + size() : int
+    }
+
+    class NeuralNet <<singleton>> {
+        + {static} instance() : NeuralNet&
+        + {static} initialize(model_path : string, batch_size : int, use_gpu : bool) : void
+        + predict(states : vector<vector<float>>) : tuple<vector<float>, vector<float>>
+        + set_model(model_path : string) : void
+    }
+
+    class MctsSearcher {
+        + MctsSearcher(shared_pool : MctsThreadPool&, shared_nn : NeuralNet&, params...)
+        + search(state : vector<int>) : MctsResult
+        + advance_root(action : int) : bool
+    }
+
+    class GameResult {
+        + game_index : int
+        + winner : int
+        + model1_color : int
+        + model2_color : int
+        + model1_won : bool
+        + model2_won : bool
+        + move_count : int
+    }
+
+    class GameRunner {
+        + GameRunner(model1_path : string, model2_path : string, num_games : int, config : GameConfig)
+        + start() : void
+        + get_completed_count() : int
+        + get_total_count() : int
+        + is_finished() : bool
+        + wait_completion() : void
+        + get_results() : vector<GameResult>
+    }
+
+    class GameConfig {
+        + num_simulations : int
+        + c_puct : float
+        + dirichlet_epsilon : float
+        + dirichlet_alpha : float
+        + batch_size : int
+        + virtual_loss : float
+        + temperature : float
+        + temp_steps : int
+        + use_gpu : bool
+    }
+
+    GameRunner "1" --> "*" GameResult : 产出
+    GameRunner "1" --> "1" GameConfig : 使用
+    GameRunner ..> MctsThreadPool : 初始化/共享
+    GameRunner ..> NeuralNet : 初始化/共享
+    GameRunner --> "*" MctsSearcher : 每局创建
+    MctsSearcher --> "1" MctsThreadPool : 共享
+    MctsSearcher --> "1" NeuralNet : 共享
+}
+
+package "Python 适配层 (cpp/python/)" {
+    class CppMctsBattleAdapter {
+        + CppMctsBattleAdapter(model1_path : str, model2_path : str, num_games : int, config : MctsSelfPlayConfig)
+        + start() : None
+        + get_progress() : tuple[int, int]
+        + is_finished() : bool
+        + wait_completion() : None
+        + get_results() : list[CppBattleGameResult]
+    }
+
+    class CppBattleGameResult <<dataclass>> {
+        + game_index : int
+        + winner : int
+        + model1_color : int
+        + model2_color : int
+        + model1_won : bool
+        + model2_won : bool
+        + move_count : int
+    }
+}
+
+package "CLI 脚本 (src/ai/scripts/)" {
+    class MctsBattleCppScript <<script>> {
+        + main() : void
+    }
+}
+
+CppMctsBattleAdapter --> GameRunner : 封装
+CppMctsBattleAdapter ..> CppBattleGameResult : 产出
+MctsBattleCppScript --> CppMctsBattleAdapter : 使用
+
+@enduml

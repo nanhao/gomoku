@@ -10,6 +10,7 @@
 #include "board_state.h"
 #include "mcts_node.h"
 #include "neural_net.h"
+#include "thread_pool.h"
 
 /** MCTS 搜索结果
 
@@ -28,11 +29,39 @@ struct MctsResult {
 通过 pybind11 暴露为 Python cpp_mcts.MctsSearcher。
 
 线程安全：搜索树通过 MctsNode 的 atomic + mutex 保证并发安全。
-MCTS 工作线程数量由 num_threads 控制。
+
+支持两种构造方式：
+- 旧式：自建 NeuralNet + 使用全局线程池的 batch 模式（向后兼容）
+- 新式：接受外部注入的 MctsThreadPool& 和 NeuralNet&，使用 queue 模式
+  （支持多个 MctsSearcher 共享线程池和 GPU，并发搜索）
 */
 class MctsSearcher {
 public:
-    /** 创建搜索器
+    // ---- 新式构造器：共享资源注入 ----
+
+    /** 使用外部线程池和 NeuralNet 创建搜索器（推荐用于多对局场景）
+
+    @param model_path TorchScript 模型文件路径（用于 set_model 提示）
+    @param pool 外部 MCTS 线程池引用（多个搜索器共享）
+    @param nn 外部 NeuralNet 引用（多个搜索器共享 GPU 推理）
+    @param num_simulations 每次搜索的总模拟次数
+    @param c_puct PUCT 探索系数
+    @param dirichlet_epsilon 狄利克雷噪声混合比例
+    @param dirichlet_alpha 狄利克雷分布浓度参数
+    @param virtual_loss 虚拟损失值
+    */
+    MctsSearcher(const std::string& model_path,
+                 MctsThreadPool& pool,
+                 NeuralNet& nn,
+                 int num_simulations,
+                 double c_puct,
+                 double dirichlet_epsilon,
+                 double dirichlet_alpha,
+                 double virtual_loss);
+
+    // ---- 旧式构造器：自建资源（向后兼容）----
+
+    /** 创建搜索器（自建 NeuralNet + 全局线程池 batch 模式）
 
     @param model_path TorchScript 模型文件路径 (.pt)
     @param num_simulations 每次搜索的总模拟次数，默认参见 mcts_config.h
@@ -79,7 +108,12 @@ private:
     double virtual_loss_;
     bool use_gpu_;
 
-    // 神经网络推理引擎（共享）
+    // ---- 共享资源（新式构造器注入，非拥有指针）----
+    MctsThreadPool* pool_{nullptr};
+    NeuralNet* nn_{nullptr};
+    bool uses_shared_resources_{false};
+
+    // 神经网络推理引擎（旧式构造器自建，拥有所有权）
     std::unique_ptr<NeuralNet> neural_net_;
 
     // 搜索树根节点
@@ -120,8 +154,16 @@ private:
     /** 单次 MCTS simulation（在 worker 线程中执行） */
     void run_single_simulation();
 
+    /** 执行一次完整的 MCTS simulation（用于 queue 模式） */
+    void run_one_simulation();
+
     /** 从搜索结果提取最终输出 */
     MctsResult get_result();
+
+    /** 获取当前有效的 NeuralNet 引用（共享或自建） */
+    NeuralNet& nn() {
+        return uses_shared_resources_ ? *nn_ : *neural_net_;
+    }
 
     /** 将棋盘 + 玩家转为 226 维 state 向量（内部辅助） */
     static std::vector<int> make_state(const std::vector<int>& board,

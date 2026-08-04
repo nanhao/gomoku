@@ -1,0 +1,60 @@
+@startuml
+title cnn_v11 C++ MCTS 并行对战 — 主流程
+
+actor 用户
+participant "CLI 脚本\nmcts_battle_cpp.py" as CLI
+participant "CppMctsBattleAdapter\n(Python)" as Adapter
+participant "GameRunner\n(C++)" as Runner
+participant "Game线程×N\n(C++)" as GameThread
+participant "MctsSearcher\n(每局独立实例)" as Searcher
+participant "MctsThreadPool\n(全局单例)" as Pool
+participant "NeuralNet\n(全局共享GPU)" as NN
+
+用户 -> CLI: --ai1 cnn_v11.1 --ai2 cnn_v11.2 --games N
+CLI -> CLI: 解析参数，验证游戏数
+CLI -> CLI: 通过 registry 查找两个模型的 TorchScript 路径
+
+CLI -> Adapter: 创建适配器(model1_path, model2_path, games, config)
+Adapter -> Runner: 创建 C++ GameRunner(model1, model2, N, params)
+Runner -> Pool: 初始化全局线程池(若未初始化)
+Runner -> NN: 初始化全局 GPU 推理引擎(若未初始化)
+
+Runner -> GameThread: 启动 N 个游戏线程
+note right of Runner: 每个线程独立运行一局
+
+loop 每局并行
+    GameThread -> Searcher: 创建 MctsSearcher(共享 Pool + NN)
+    GameThread -> GameThread: 初始化空棋盘，黑方先手
+    
+    loop 每步
+        GameThread -> Searcher: search(state)
+        Searcher -> Pool: 提交模拟任务到线程池
+        Pool -> NN: 攒批 GPU 推理
+        NN --> Pool: 返回策略+价值
+        Pool --> Searcher: 搜索结果
+        Searcher --> GameThread: visit_counts, root_value
+        GameThread -> GameThread: 温度采样选择落子
+        GameThread -> GameThread: apply_action + 终局判定
+        GameThread -> Searcher: advance_root(action)
+    end
+    
+    GameThread -> Runner: 上报对局结果(winner, move_count)
+end
+
+Runner --> Adapter: 所有局完成，返回结果列表
+
+loop 进度轮询
+    CLI -> Adapter: get_progress()
+    Adapter -> Runner: get_completed_count()
+    Runner --> Adapter: completed / total
+    Adapter --> CLI: 实时进度
+    CLI -> CLI: 打印 "[进度] X/N"
+end
+
+CLI -> Adapter: get_results()
+Adapter --> CLI: List[BattleGameResult]
+
+CLI -> CLI: 打印每局结果
+CLI -> CLI: 打印最终统计(双方胜率)
+
+@enduml

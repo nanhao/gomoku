@@ -1,0 +1,66 @@
+@startuml
+title cnn_v11 C++ MCTS 并行对战 — 线程模型
+
+rectangle "进程边界" {
+    
+    rectangle "Python 主线程" as PyMain {
+        (CLI 入口)
+        (进度轮询)
+        (结果打印)
+    }
+
+    rectangle "C++ GameRunner" as Runner {
+        rectangle "游戏线程 0" as GT0
+        rectangle "游戏线程 1" as GT1
+        rectangle "游戏线程 N-1" as GTN
+    }
+
+    rectangle "MctsThreadPool\n(全局单例, K 个工作线程)" as Pool {
+        rectangle "Worker 0" as W0
+        rectangle "Worker 1" as W1
+        rectangle "Worker K-1" as WK
+    }
+
+    rectangle "NeuralNet\n(全局单例)" as NN {
+        rectangle "GPU 推理线程" as GPU
+    }
+}
+
+note top of PyMain
+  Python 主线程：
+  1. 创建 CppMctsBattleAdapter
+  2. 调用 start() 启动 C++ 游戏线程
+  3. 轮询 get_progress() 打印进度
+  4. 等待完成，打印统计
+end note
+
+note top of GT0
+  每个游戏线程：
+  1. 创建独立的 MctsSearcher
+  2. 运行完整对局循环
+  3. 上报结果到 GameRunner
+end note
+
+note top of Pool
+  K 个工作线程（默认 32）：
+  - 从共享任务队列取任务
+  - 执行 MCTS simulation
+  - 需要 GPU 评估时提交到 NeuralNet
+  - 线程池跨所有游戏共享
+end note
+
+note top of NN
+  GPU 推理线程：
+  - 攒批：收集来自所有游戏的评估请求
+  - 一次前向传播处理多个状态
+  - 结果分发回对应 worker
+end note
+
+PyMain --> Runner : start() / get_progress()
+GT0 --> Pool : submit simulation tasks
+GT1 --> Pool : submit simulation tasks
+GTN --> Pool : submit simulation tasks
+Pool --> NN : batch evaluation requests
+NN --> Pool : policy + value results
+
+@enduml

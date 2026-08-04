@@ -46,10 +46,12 @@ find_package(pybind11 QUIET)
 # --- MCTS 核心静态库 ---
 add_library(mcts_core STATIC
     src/board_state.cpp
+    src/mcts_config.cpp
     src/mcts_node.cpp
     src/neural_net.cpp
     src/mcts_searcher.cpp
     src/thread_pool.cpp
+    src/game_runner.cpp
 )
 
 target_include_directories(mcts_core PUBLIC
@@ -89,6 +91,9 @@ add_unit_test(test_board_state test_board_state.cpp)
 add_unit_test(test_mcts_node test_mcts_node.cpp)
 add_unit_test(test_neural_net test_neural_net.cpp)
 add_unit_test(test_mcts_searcher test_mcts_searcher.cpp)
+add_unit_test(test_thread_pool_queue test_thread_pool_queue.cpp)
+add_unit_test(test_neural_net_singleton test_neural_net_singleton.cpp)
+add_unit_test(test_mcts_searcher_injection test_mcts_searcher_injection.cpp)
 
 # --- 集成测试 ---
 function(add_integration_test test_name test_file)

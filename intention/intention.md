@@ -288,3 +288,9 @@ introduce batch mcts and virtual loss in mcts. But don't use multi thread.
 - 跟 python 使用相同的权重和网络结构
 - 使用多线程，每个 mcts 线程负责一次选择->评估->回传的周期。并且有一个 gpu 线程，负责异步的搜集一批待评估的局面，一次性发给 gpu 进行评估，然后返回给各 mcts 线程进行后续处理。mcts 线程在提交局面给 gpu 线程后，就等待直到其返回
 你帮我调研一下，然后来一起讨论一下怎么做。最后目标是产出一份调研报告 intention/cpp-report.md。可以参考 D:\projects\AlphaZeroGomoku 这个项目的实现。
+
+# intention_id=47
+本次要实现一个脚本，可以实现并行开启 n 局 cnn_v11 的自我对弈。可以指定对局双方，例如 ai1=cnn_v11.1 ai2=cnn_v11.2.
+技术上，要求 n 局游戏必须是在不同的线程中并行进行，使用 c++ 版的 mcts。所有的游戏共享一个全局的线程池。并且由 gpu 进行局面评估。
+脚本需要实时打印进度，并在最终完成后打印统计数据和双方胜率。
+脚本可以指定温度采样的参数。

@@ -1,17 +1,17 @@
 @echo off
 REM ============================================================================
-REM  C++ MCTS 模块一键构建脚本
-REM  用法:
-REM    build_cpp.bat              — 默认 Release 构建
-REM    build_cpp.bat --debug      — Debug 构建
-REM    build_cpp.bat --test       — Release 构建 + 运行 C++ 测试
-REM    build_cpp.bat --clean      — 清理 build 目录后重新构建
+REM  C++ MCTS one-click build script
+REM  Usage:
+REM    build_cpp.bat              — Default Release build
+REM    build_cpp.bat --debug      — Debug build
+REM    build_cpp.bat --test       — Release build + run C++ tests
+REM    build_cpp.bat --clean      — Clean build dir and rebuild
 REM ============================================================================
 setlocal enabledelayedexpansion
 
 cd /d "%~dp0"
 
-REM ---- 解析命令行参数 ----
+REM ---- Parse command line args ----
 set BUILD_TYPE=Release
 set RUN_TESTS=0
 set CLEAN_BUILD=0
@@ -49,6 +49,9 @@ if errorlevel 1 (
 REM ---- Detect cmake ----
 set CMAKE_EXE=
 for /f "delims=" %%i in ('python -c "import sys, os; d=os.path.join(sys.prefix,'Scripts','cmake.exe'); print(d if os.path.isfile(d) else '')" 2^>nul') do set CMAKE_EXE=%%i
+if not defined CMAKE_EXE (
+    for /f "delims=" %%i in ('python -c "import site, os; d=os.path.join(os.path.dirname(site.USER_SITE),'Scripts','cmake.exe') if site.USER_SITE else ''; print(d if d and os.path.isfile(d) else '')" 2^>nul') do set CMAKE_EXE=%%i
+)
 if not defined CMAKE_EXE (
     cmake --version >nul 2>&1
     if not errorlevel 1 (

@@ -13,6 +13,34 @@
 // 构造 & 析构
 // =====================================================================
 
+// ---- 新式构造器：共享资源注入 ----
+MctsSearcher::MctsSearcher(const std::string& model_path,
+                           MctsThreadPool& pool,
+                           NeuralNet& nn,
+                           int num_simulations,
+                           double c_puct,
+                           double dirichlet_epsilon,
+                           double dirichlet_alpha,
+                           double virtual_loss)
+    : model_path_(model_path)
+    , num_simulations_(num_simulations)
+    , c_puct_(c_puct)
+    , dirichlet_epsilon_(dirichlet_epsilon)
+    , dirichlet_alpha_(dirichlet_alpha)
+    , num_threads_(0)          // queue 模式不需要此参数
+    , virtual_loss_(virtual_loss)
+    , use_gpu_(false)          // GPU 由外部 NeuralNet 管理
+    , pool_(&pool)
+    , nn_(&nn)
+    , uses_shared_resources_(true)
+    , root_(nullptr)
+    , root_edge_n_snapshot_(225, 0)
+    , root_policy_(225, 1.0f / 225.0f)
+{
+    // 共享资源由外部管理，构造器不创建任何线程或网络
+}
+
+// ---- 旧式构造器：自建资源（向后兼容）----
 MctsSearcher::MctsSearcher(std::string model_path, int num_simulations,
                            double c_puct, double dirichlet_epsilon,
                            double dirichlet_alpha, int num_threads,
@@ -62,10 +90,20 @@ MctsResult MctsSearcher::search(const std::vector<int>& state) {
     // 重置模拟计数器
     sim_counter_ = 0;
 
-    // 启动全局线程池的 MCTS 工作线程（进程生命周期内只创建一次）
-    MctsThreadPool::instance().run_parallel([this] {
-        this->run_single_simulation();
-    });
+    if (uses_shared_resources_ && pool_ != nullptr) {
+        // Queue 模式：向线程池提交 N 个独立 simulation 任务
+        for (int i = 0; i < num_simulations_; ++i) {
+            pool_->submit([this] {
+                this->run_one_simulation();
+            });
+        }
+        pool_->wait_all();
+    } else {
+        // Batch 模式（向后兼容）：所有 worker 执行同一任务函数
+        MctsThreadPool::instance().run_parallel([this] {
+            this->run_single_simulation();
+        });
+    }
 
     // 提取结果
     return get_result();
@@ -136,7 +174,7 @@ void MctsSearcher::init_search(const std::vector<int>& state) {
 
     // 神经网络评估根状态
     std::vector<float> encoded = root_state.encode_for_network();
-    NeuralNetResult nn_result = neural_net_->predict(encoded).get();
+    NeuralNetResult nn_result = nn().predict(encoded);
 
     // 保存原始策略（噪声施加前）
     root_policy_ = nn_result.policy;
@@ -206,84 +244,87 @@ void MctsSearcher::add_dirichlet_noise(
 }
 
 // =====================================================================
-// 内部: run_single_simulation
+// 内部: run_single_simulation（batch 模式）
 // =====================================================================
 
 void MctsSearcher::run_single_simulation() {
     while (true) {
         int my_sim = sim_counter_.fetch_add(1);
         if (my_sim >= num_simulations_) break;
+        run_one_simulation();
+    }
+}
 
-        // 获取根节点和初始状态
-        MctsNode* root;
-        BoardState root_state(initial_board_, initial_player_);
-        {
-            std::lock_guard<std::mutex> lock(root_mutex_);
-            root = root_;
+// =====================================================================
+// 内部: run_one_simulation（单次 simulation，batch/queue 共用）
+// =====================================================================
+
+void MctsSearcher::run_one_simulation() {
+    // 获取根节点和初始状态
+    MctsNode* root;
+    BoardState root_state(initial_board_, initial_player_);
+    {
+        std::lock_guard<std::mutex> lock(root_mutex_);
+        root = root_;
+    }
+    if (root == nullptr) return;
+
+    // === 阶段 1: Selection（沿树下降至叶节点）===
+    // 追踪路径上的状态变化
+    MctsNode* current = root;
+    BoardState current_state = root_state;
+
+    while (true) {
+        if (current_state.is_terminal()) {
+            // 当前节点已终局 → 直接回传终局价值
+            float terminal_val = current_state.terminal_value();
+            current->backup(-terminal_val);
+            break;
         }
-        if (root == nullptr) continue;
 
-        // === 阶段 1: Selection（沿树下降至叶节点）===
-        // 追踪路径上的状态变化
-        MctsNode* current = root;
-        BoardState current_state = root_state;
+        int best_action = current->select_child(c_puct_, virtual_loss_);
+        if (best_action < 0) {
+            // 无合法动作（终局但 is_terminal 未检测到的边界情况）
+            break;
+        }
 
-        while (true) {
-            if (current_state.is_terminal()) {
-                // 当前节点已终局 → 直接回传终局价值
-                // 注意：类似 NN value，terminal_val 需取反
-                float terminal_val = current_state.terminal_value();
-                current->backup(-terminal_val);
-                break;
-            }
+        MctsNode* child = current->get_child(best_action);
 
-            int best_action = current->select_child(c_puct_, virtual_loss_);
-            if (best_action < 0) {
-                // 无合法动作（终局但 is_terminal 未检测到的边界情况）
-                break;
-            }
+        if (child->is_leaf()) {
+            // 到达叶节点（未展开）
+            BoardState child_state =
+                current_state.apply_action(best_action);
 
-            MctsNode* child = current->get_child(best_action);
+            if (child_state.is_terminal()) {
+                // 子棋盘已终局 → 不展开，直接回传
+                float terminal_val = child_state.terminal_value();
+                child->backup(-terminal_val);
+            } else {
+                // === 阶段 2: Evaluation（神经网络评估）===
+                std::vector<float> encoded =
+                    child_state.encode_for_network();
+                auto future = nn().predict_async(encoded);
+                NeuralNetResult nn_result = future.get();
 
-            if (child->is_leaf()) {
-                // 到达叶节点（未展开）
-                // 构造子棋盘状态
-                BoardState child_state =
-                    current_state.apply_action(best_action);
-
-                if (child_state.is_terminal()) {
-                    // 子棋盘已终局 → 不展开，直接回传
-                    // 注意：terminal_val 是从子状态视角的价值，需取反
-                    float terminal_val = child_state.terminal_value();
-                    child->backup(-terminal_val);
-                } else {
-                    // === 阶段 2: Evaluation（神经网络评估）===
-                    std::vector<float> encoded =
-                        child_state.encode_for_network();
-                    auto future = neural_net_->predict(encoded);
-                    NeuralNetResult nn_result = future.get();
-
-                    // === 阶段 3: Expansion（展开子节点）===
-                    std::vector<int> legal_actions =
-                        child_state.get_legal_actions();
-                    std::vector<float> priors;
-                    priors.reserve(legal_actions.size());
-                    for (int a : legal_actions) {
-                        priors.push_back(nn_result.policy[a]);
-                    }
-                    child->expand(priors, legal_actions);
-
-                    // === 阶段 4: Backup（回传更新）===
-                    // 负值传入：NN 价值来自子节点视角，需取反
-                    child->backup(-nn_result.value);
+                // === 阶段 3: Expansion（展开子节点）===
+                std::vector<int> legal_actions =
+                    child_state.get_legal_actions();
+                std::vector<float> priors;
+                priors.reserve(legal_actions.size());
+                for (int a : legal_actions) {
+                    priors.push_back(nn_result.policy[a]);
                 }
-                break;
-            }
+                child->expand(priors, legal_actions);
 
-            // 继续下降
-            current = child;
-            current_state = current_state.apply_action(best_action);
+                // === 阶段 4: Backup（回传更新）===
+                child->backup(-nn_result.value);
+            }
+            break;
         }
+
+        // 继续下降
+        current = child;
+        current_state = current_state.apply_action(best_action);
     }
 }
 

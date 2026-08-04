@@ -2,6 +2,7 @@
 #include "mcts_config.h"
 
 #include <mutex>
+#include <queue>
 
 // ---------------------------------------------------------------------------
 // Singleton management
@@ -51,7 +52,7 @@ MctsThreadPool::~MctsThreadPool() {
 }
 
 // ---------------------------------------------------------------------------
-// Public API
+// Public API — batch mode (backward compatible)
 // ---------------------------------------------------------------------------
 
 void MctsThreadPool::run_parallel(std::function<void()> task_fn) {
@@ -76,43 +77,85 @@ void MctsThreadPool::run_parallel(std::function<void()> task_fn) {
 }
 
 // ---------------------------------------------------------------------------
+// Public API — queue mode (new)
+// ---------------------------------------------------------------------------
+
+void MctsThreadPool::submit(std::function<void()> task) {
+    {
+        std::lock_guard<std::mutex> lock(mtx_);
+        task_queue_.push(std::move(task));
+        ++queue_pending_;
+    }
+    cv_start_.notify_one();
+}
+
+void MctsThreadPool::wait_all() {
+    std::unique_lock<std::mutex> lock(mtx_);
+    cv_done_.wait(lock, [this] {
+        return queue_pending_ == 0 && task_queue_.empty();
+    });
+}
+
+int MctsThreadPool::pending_count() const {
+    // queue_pending_ counts submitted-but-not-completed tasks.
+    // Since we don't have a separate "in-flight" counter,
+    // return the queue size as a conservative estimate.
+    // The actual pending count is queue_pending_ (in queue + executing).
+    return queue_pending_.load();
+}
+
+// ---------------------------------------------------------------------------
 // Worker loop
 // ---------------------------------------------------------------------------
 
 void MctsThreadPool::worker_loop() {
     while (true) {
-        // Wait for a launch token (one per worker per batch).
-        // Using launch_count_ prevents re-entering the task after
-        // completion while running_ is still true.
+        std::function<void()> task;
+        int mode = 0;  // 0=none, 1=batch, 2=queue
+
+        // Wait for work (batch launch token or queue task).
         {
             std::unique_lock<std::mutex> lock(mtx_);
             cv_start_.wait(lock, [this] {
-                return (running_ && launch_count_ > 0) || stop_;
+                return stop_
+                    || (running_ && launch_count_ > 0)
+                    || !task_queue_.empty();
             });
-        }
 
-        if (stop_) break;
+            if (stop_) break;
 
-        // Claim a token.
-        {
-            std::lock_guard<std::mutex> lock(mtx_);
-            if (launch_count_ > 0) {
+            // Priority: batch mode first (launch token)
+            if (running_ && launch_count_ > 0) {
                 --launch_count_;
+                task = current_task_;
+                mode = 1;
+            } else if (!task_queue_.empty()) {
+                task = std::move(task_queue_.front());
+                task_queue_.pop();
+                mode = 2;
             } else {
                 continue;  // spurious wakeup
             }
         }
 
         // Execute the task.
-        if (current_task_) {
-            current_task_();
+        if (task) {
+            task();
         }
 
-        // Signal completion — last worker wakes the caller.
+        // Signal completion.
         {
             std::lock_guard<std::mutex> lock(mtx_);
-            if (--pending_count_ == 0) {
-                cv_done_.notify_one();
+            if (mode == 1) {
+                // Batch mode: decrement pending count
+                if (--pending_count_ == 0) {
+                    cv_done_.notify_one();
+                }
+            } else if (mode == 2) {
+                // Queue mode: decrement queue pending
+                if (--queue_pending_ == 0 && task_queue_.empty()) {
+                    cv_done_.notify_all();
+                }
             }
         }
     }

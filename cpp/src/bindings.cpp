@@ -12,14 +12,12 @@
 
 #include <Python.h>
 
+#include "game_runner.h"
 #include "mcts_config.h"
 #include "mcts_searcher.h"
 #include "thread_pool.h"
 
 namespace py = pybind11;
-
-/// 全局运行时配置实例（定义在此处，mcts_config.h 中为 extern 声明）
-MctsConfig g_mcts_config;
 
 /** 将 MctsResult 转换为 Python tuple
  *
@@ -140,4 +138,69 @@ PYBIND11_MODULE(cpp_mcts, m) {
 
     m.def("thread_pool_size", [] { return MctsThreadPool::instance().size(); },
           "返回线程池中的工作线程数。");
+
+    // ---- GameConfig 配置结构体 ----
+    py::class_<GameConfig>(m, "GameConfig",
+        "MCTS 对战配置参数")
+        .def(py::init<>())
+        .def_readwrite("num_simulations", &GameConfig::num_simulations,
+            "每步 MCTS 模拟次数")
+        .def_readwrite("c_puct", &GameConfig::c_puct,
+            "PUCT 探索系数")
+        .def_readwrite("dirichlet_epsilon", &GameConfig::dirichlet_epsilon,
+            "狄利克雷噪声混合比例")
+        .def_readwrite("dirichlet_alpha", &GameConfig::dirichlet_alpha,
+            "狄利克雷分布浓度参数")
+        .def_readwrite("batch_size", &GameConfig::batch_size,
+            "GPU 推理攒批大小")
+        .def_readwrite("virtual_loss", &GameConfig::virtual_loss,
+            "Virtual loss 值")
+        .def_readwrite("temperature", &GameConfig::temperature,
+            "温度参数（τ）")
+        .def_readwrite("temp_steps", &GameConfig::temp_steps,
+            "温度探索步数")
+        .def_readwrite("use_gpu", &GameConfig::use_gpu,
+            "是否使用 GPU 推理");
+
+    // ---- GameResult 结果结构体 ----
+    py::class_<GameResult>(m, "GameResult",
+        "单局对战结果")
+        .def_readonly("game_index", &GameResult::game_index,
+            "局编号 0..N-1")
+        .def_readonly("winner", &GameResult::winner,
+            "0=平局, 1=黑胜, 2=白胜")
+        .def_readonly("model1_color", &GameResult::model1_color,
+            "model1 执方 1=黑, 2=白")
+        .def_readonly("model2_color", &GameResult::model2_color,
+            "model2 执方")
+        .def_readonly("move_count", &GameResult::move_count,
+            "本局总步数");
+
+    // ---- GameRunner 对局管理器 ----
+    py::class_<GameRunner>(m, "GameRunner",
+        "C++ 并行对局管理器\n\n"
+        "管理 N 个游戏线程，共享全局 MCTS 线程池和 GPU 推理引擎。\n"
+        "通过 CppMctsBattleAdapter 包装后使用。")
+        .def(py::init<const std::string&, const std::string&, int, const GameConfig&>(),
+             py::arg("model1_path"),
+             py::arg("model2_path"),
+             py::arg("num_games"),
+             py::arg("config"),
+             "创建对局管理器\n\n"
+             ":param model1_path: 模型1 TorchScript 路径\n"
+             ":param model2_path: 模型2 TorchScript 路径\n"
+             ":param num_games: 对战局数\n"
+             ":param config: GameConfig 配置")
+        .def("start", &GameRunner::start,
+             "启动所有游戏线程（非阻塞）")
+        .def("get_completed_count", &GameRunner::get_completed_count,
+             "返回已完成局数")
+        .def("get_total_count", &GameRunner::get_total_count,
+             "返回总局数")
+        .def("is_finished", &GameRunner::is_finished,
+             "所有对局是否已完成")
+        .def("wait_completion", &GameRunner::wait_completion,
+             "阻塞直到所有对局完成")
+        .def("get_results", &GameRunner::get_results,
+             "获取所有对局结果列表");
 }
