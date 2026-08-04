@@ -392,7 +392,6 @@ python src/ai/scripts/mcts_battle_cpp.py --ai1 <注册名.代数> --ai2 <注册�
 | `--temperature` | 1.0 | 温度参数 |
 | `--dirichlet-epsilon` | 0.25 | 狄利克雷噪声比例 |
 | `--dirichlet-alpha` | 0.03 | 狄利克雷分布参数 |
-| `--batch-size` | 默认配置 | GPU 推理攒批大小 |
 | `--virtual-loss` | 默认配置 | virtual loss 值 |
 | `--workers` | 游戏数 | 游戏线程数（≤游戏数时轮询分发，默认每局一个线程） |
 
