@@ -19,7 +19,6 @@
 import os
 from typing import List, Tuple
 
-from ai.registry import get_model
 from ai.scripts.mcts_config import MctsSelfPlayConfig
 from cpp.python.cpp_battle_game_result import CppBattleGameResult
 
@@ -91,11 +90,8 @@ class CppMctsBattleAdapter:
     def _resolve_torchscript_path(spec: str) -> str:
         """从 registry spec 解析 TorchScript 模型文件路径
 
-        输入 spec "cnn_v11.1" →
-          registry.get_model("cnn_v11.1") 获取模型实例 →
-          从 model.DEFAULT_MODEL_PATH 获取 .pth 路径 →
-          同目录下查找 {模型名}_torchscript.pt →
-          返回 .pt 绝对路径
+        使用 registry 的 _parse_model_spec + _import_class（不实例化模型，避免
+        依赖 .pth 文件），从类属性 DEFAULT_MODEL_PATH 推导 TorchScript 路径。
 
         Args:
             spec: registry spec，如 "cnn_v11.1"
@@ -104,24 +100,47 @@ class CppMctsBattleAdapter:
             TorchScript 模型文件绝对路径
 
         Raises:
-            FileNotFoundError: TorchScript 文件不存在
+            FileNotFoundError: TorchScript 文件不存在或模型非神经网络类型
             ValueError: registry spec 无效
         """
-        # 通过 registry 加载模型以获取 DEFAULT_MODEL_PATH
-        # （gen 参数会使 DEFAULT_MODEL_PATH 自动指向 gen{i}/ 子目录）
-        model = get_model(spec)
+        from ai.registry import (
+            MODEL_REGISTRY, _parse_model_spec, _is_multi_gen_model, _import_class,
+        )
 
-        # 检查模型是否支持 TorchScript（非神经网络模型无 DEFAULT_MODEL_PATH）
-        if not hasattr(model, "DEFAULT_MODEL_PATH") or model.DEFAULT_MODEL_PATH is None:
+        parsed = _parse_model_spec(spec)
+        model_name = parsed.name
+        gen = parsed.gen
+
+        # 1. 校验模型名是否在注册表中
+        if model_name not in MODEL_REGISTRY:
+            raise ValueError(f"未知的模型: '{model_name}'")
+
+        # 2. 校验 gen 参数合法性
+        if gen is not None and not _is_multi_gen_model(model_name):
+            raise ValueError("非多代模型不能指定代数")
+        if gen is None and _is_multi_gen_model(model_name):
+            raise ValueError(f"多代模型必须指定代数，如 {model_name}.1")
+
+        # 3. 导入模型类（不实例化，避免触发 .pth 文件存在性检查）
+        model_class_path = MODEL_REGISTRY[model_name].model_class_path
+        model_cls = _import_class(model_class_path)
+
+        # 4. 检查模型类是否支持 TorchScript
+        if not hasattr(model_cls, "DEFAULT_MODEL_PATH") or model_cls.DEFAULT_MODEL_PATH is None:
             raise FileNotFoundError(
                 f"模型 {spec} 不支持 TorchScript 导出（非神经网络模型）\n"
                 f"  TorchScript 对战仅支持神经网络模型"
             )
 
-        model_dir = os.path.dirname(model.DEFAULT_MODEL_PATH)
+        # 5. 从类属性 DEFAULT_MODEL_PATH 推导目录
+        default_path = model_cls.DEFAULT_MODEL_PATH
+        model_dir = os.path.dirname(default_path)
 
-        # 在同目录下查找 {模型名}_torchscript.pt
-        model_name = model.name
+        # 6. 如果指定了 gen，调整到 gen{i}/ 子目录
+        if gen is not None:
+            model_dir = os.path.join(model_dir, f"gen{gen}")
+
+        # 7. 构造 TorchScript 文件名（使用注册表名称，即模型类 name 属性值）
         ts_filename = f"{model_name}_torchscript.pt"
         ts_path = os.path.join(model_dir, ts_filename)
 
