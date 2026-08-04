@@ -28,6 +28,26 @@ from cpp.python.cpp_mcts_battle_adapter import CppMctsBattleAdapter
 from config.mcts import MCTS_BATCH_SIZE, MCTS_VIRTUAL_LOSS
 
 
+def _print_gpu_stats() -> None:
+    """打印 GPU 推理线程运行时监控统计"""
+    try:
+        import cpp_mcts  # type: ignore[import-not-found]
+        stats = cpp_mcts.get_gpu_stats()
+        if stats.total_batches == 0:
+            return  # 没有推理发生，跳过
+
+        print(f"\n=== GPU 推理监控 ===")
+        print(f"总批次数: {stats.total_batches}")
+        print(f"总请求数: {stats.total_requests}")
+        print(f"平均批次大小: {stats.avg_batch_size():.1f}")
+        print(f"批次范围: [{stats.batch_size_min}, {stats.batch_size_max}]")
+        print(f"队列峰值: {stats.queue_peak_size}")
+        print(f"GPU 等待比例: {stats.wait_ratio() * 100:.1f}%  "
+              f"({'GPU 利用率高' if stats.wait_ratio() < 0.3 else 'GPU 空等较多，瓶颈在 MCTS 生产端' if stats.wait_ratio() > 0.6 else '正常'})")
+    except Exception:
+        pass  # cpp_mcts 不可用时静默跳过
+
+
 # ---------- 常量 ----------
 
 # 中断标志位，由信号处理器设置
@@ -228,6 +248,9 @@ def run_battle(args) -> None:
             _print_statistics(model1_display, model2_display, results)
 
         print(f"\n[完成] 共 {len(results)} 局，耗时 {elapsed:.1f}s")
+
+        # 打印 GPU 推理监控统计
+        _print_gpu_stats()
 
     except (FileNotFoundError, ValueError) as e:
         print(f"[错误] {e}", file=sys.stderr)
