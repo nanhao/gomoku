@@ -69,14 +69,13 @@ public:
     @param dirichlet_epsilon 狄利克雷噪声混合比例，默认参见 mcts_config.h
     @param dirichlet_alpha 狄利克雷分布浓度参数，默认参见 mcts_config.h
     @param num_threads MCTS 工作线程数，默认参见 mcts_config.h
-    @param batch_size GPU 推理攒批大小，默认参见 mcts_config.h
     @param virtual_loss 虚拟损失值，默认参见 mcts_config.h
     @param use_gpu 是否使用 GPU 推理，默认参见 mcts_config.h
     */
     MctsSearcher(std::string model_path, int num_simulations,
                  double c_puct, double dirichlet_epsilon,
                  double dirichlet_alpha, int num_threads,
-                 int batch_size, double virtual_loss, bool use_gpu);
+                 double virtual_loss, bool use_gpu);
 
     ~MctsSearcher();
 

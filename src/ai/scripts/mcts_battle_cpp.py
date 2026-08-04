@@ -25,7 +25,7 @@ if _proj_root not in sys.path:
 from ai.scripts.mcts_config import MctsSelfPlayConfig
 from cpp.python.cpp_battle_game_result import CppBattleGameResult
 from cpp.python.cpp_mcts_battle_adapter import CppMctsBattleAdapter
-from config.mcts import MCTS_BATCH_SIZE, MCTS_VIRTUAL_LOSS
+from config.mcts import MCTS_VIRTUAL_LOSS
 
 
 def _print_gpu_stats() -> None:
@@ -96,8 +96,6 @@ def parse_args(argv: List[str] | None = None):
                    help="狄利克雷噪声比例（默认 0.25）")
     p.add_argument("--dirichlet-alpha", type=float, default=0.03,
                    help="狄利克雷分布参数（默认 0.03）")
-    p.add_argument("--batch-size", type=int, default=None,
-                   help="GPU 推理攒批大小（默认读取 MCTS_BATCH_SIZE 配置）")
     p.add_argument("--virtual-loss", type=float, default=None,
                    help="virtual loss 值（默认读取 MCTS_VIRTUAL_LOSS 配置）")
     return p.parse_args(argv)
@@ -114,7 +112,6 @@ def _build_config(args) -> MctsSelfPlayConfig:
     Returns:
         MctsSelfPlayConfig 实例
     """
-    batch_size = args.batch_size if args.batch_size is not None else MCTS_BATCH_SIZE
     virtual_loss = args.virtual_loss if args.virtual_loss is not None else MCTS_VIRTUAL_LOSS
 
     return MctsSelfPlayConfig(
@@ -124,7 +121,6 @@ def _build_config(args) -> MctsSelfPlayConfig:
         temperature=args.temperature,
         dirichlet_epsilon=args.dirichlet_epsilon,
         dirichlet_alpha=args.dirichlet_alpha,
-        batch_size=batch_size,
         virtual_loss=virtual_loss,
         use_prior=True,
     )
@@ -195,7 +191,7 @@ def run_battle(args) -> None:
     print(f"[超参数] simulations={config.simulations}, c_puct={config.c_puct}, "
           f"temperature={config.temperature}, temp_steps={config.temp_steps}, "
           f"dirichlet_epsilon={config.dirichlet_epsilon}, "
-          f"batch_size={config.batch_size}, virtual_loss={config.virtual_loss}")
+          f"virtual_loss={config.virtual_loss}")
 
     # 模型名称直接使用 spec 字符串用于显示
     model1_display = args.ai1

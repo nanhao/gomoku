@@ -73,7 +73,6 @@ class CppMctsBattleAdapter:
         cpp_config.c_puct = config.c_puct
         cpp_config.dirichlet_epsilon = config.dirichlet_epsilon
         cpp_config.dirichlet_alpha = config.dirichlet_alpha
-        cpp_config.batch_size = config.batch_size
         cpp_config.virtual_loss = config.virtual_loss
         cpp_config.temperature = config.temperature
         cpp_config.temp_steps = config.temp_steps

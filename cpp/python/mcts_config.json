@@ -4,7 +4,6 @@
     "c_puct": 2.0,
     "dirichlet_epsilon": 0.25,
     "dirichlet_alpha": 0.03,
-    "batch_size": 16,
     "batch_lower_bound": 16,
     "batch_upper_bound": 500,
     "virtual_loss": 3.0,

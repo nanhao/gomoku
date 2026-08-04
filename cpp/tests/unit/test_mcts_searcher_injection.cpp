@@ -60,7 +60,7 @@ static void test_new_constructor() {
     std::string path = get_model_path();
 
     try {
-        NeuralNet nn(path, 16, false);
+        NeuralNet nn(path, false);
         MctsThreadPool::initialize(4);
         MctsThreadPool& pool = MctsThreadPool::instance();
 
@@ -88,7 +88,7 @@ static void test_search_with_submit() {
     std::string path = get_model_path();
 
     try {
-        NeuralNet nn(path, 16, false);
+        NeuralNet nn(path, false);
         MctsThreadPool::initialize(4);
         MctsThreadPool& pool = MctsThreadPool::instance();
 
@@ -125,7 +125,7 @@ static void test_legacy_constructor_still_works() {
         // 旧构造器（自建 NeuralNet + 全局线程池）
         MctsSearcher searcher(
             path, 50, 2.0, 0.25, 0.03,
-            g_mcts_config.num_threads, 16, 3.0, false);
+            g_mcts_config.num_threads, 3.0, false);
 
         std::vector<int> board(225, 0);
         board[112] = 1;
@@ -154,7 +154,7 @@ static void test_legacy_uses_run_parallel() {
         // 验证旧构造器仍然走 run_parallel 代码路径
         MctsSearcher searcher(
             path, 30, 2.0, 0.25, 0.03,
-            g_mcts_config.num_threads, 16, 0.0, false);
+            g_mcts_config.num_threads, 0.0, false);
 
         std::vector<int> board(225, 0);
         std::vector<int> state = board;
@@ -179,7 +179,7 @@ static void test_advance_root_with_new_ctor() {
     std::string path = get_model_path();
 
     try {
-        NeuralNet nn(path, 16, false);
+        NeuralNet nn(path, false);
         MctsThreadPool::initialize(4);
         MctsThreadPool& pool = MctsThreadPool::instance();
 

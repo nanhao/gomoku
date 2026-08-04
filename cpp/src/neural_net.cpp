@@ -26,15 +26,14 @@ NeuralNet& NeuralNet::instance() {
     std::call_once(s_nn_init_flag, [] {
         // 使用默认参数自动初始化
         s_nn_instance.reset(new NeuralNet(
-            "src/ai/models/cnn_v11/cnn_v11_torchscript.pt", 16, true));
+            "src/ai/models/cnn_v11/cnn_v11_torchscript.pt", true));
     });
     return *s_nn_instance;
 }
 
-void NeuralNet::initialize(const std::string& model_path,
-                           int batch_size, bool use_gpu) {
+void NeuralNet::initialize(const std::string& model_path, bool use_gpu) {
     std::call_once(s_nn_init_flag, [&] {
-        s_nn_instance.reset(new NeuralNet(model_path, batch_size, use_gpu));
+        s_nn_instance.reset(new NeuralNet(model_path, use_gpu));
     });
 }
 
@@ -75,13 +74,12 @@ void NeuralNet::load_model(const std::string& model_path) {
 // 构造 & 析构
 // =====================================================================
 
-NeuralNet::NeuralNet(std::string model_path, int batch_size, bool use_gpu)
+NeuralNet::NeuralNet(std::string model_path, bool use_gpu)
     : model_path_(std::move(model_path))
     , batch_lower_bound_(g_mcts_config.batch_lower_bound > 0
                          ? g_mcts_config.batch_lower_bound : 16)
     , batch_upper_bound_(g_mcts_config.batch_upper_bound > 0
-                         ? g_mcts_config.batch_upper_bound
-                         : (batch_size > 0 ? batch_size : 16))
+                         ? g_mcts_config.batch_upper_bound : 16)
     , use_gpu_(use_gpu)
     , module_impl_(nullptr)
 {

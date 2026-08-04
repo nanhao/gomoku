@@ -70,11 +70,11 @@ static void test_singleton_initialize() {
 
     // 使用 try-catch：模型不存在时跳过
     try {
-        NeuralNet::initialize(path, 16, false);
+        NeuralNet::initialize(path, false);
         NeuralNet& nn = NeuralNet::instance();
 
         // 再次 initialize 应不生效（call_once）
-        NeuralNet::initialize("different_path.pt", 8, true);
+        NeuralNet::initialize("different_path.pt", true);
         NeuralNet& nn2 = NeuralNet::instance();
 
         // 两次获取应为同一实例
@@ -94,7 +94,7 @@ static void test_predict_async() {
     std::string path = get_model_path();
 
     try {
-        NeuralNet::initialize(path, 16, false);
+        NeuralNet::initialize(path, false);
         NeuralNet& nn = NeuralNet::instance();
 
         std::vector<float> encoded(675, 0.0f);
@@ -129,7 +129,7 @@ static void test_predict_sync() {
     std::string path = get_model_path();
 
     try {
-        NeuralNet::initialize(path, 16, false);
+        NeuralNet::initialize(path, false);
         NeuralNet& nn = NeuralNet::instance();
 
         std::vector<float> encoded(675, 0.0f);
@@ -157,7 +157,7 @@ static void test_set_model() {
     std::string path = get_model_path();
 
     try {
-        NeuralNet::initialize(path, 16, false);
+        NeuralNet::initialize(path, false);
         NeuralNet& nn = NeuralNet::instance();
 
         // 先用当前模型推理一次
@@ -190,7 +190,7 @@ static void test_set_model_invalid() {
     std::string path = get_model_path();
 
     try {
-        NeuralNet::initialize(path, 16, false);
+        NeuralNet::initialize(path, false);
         NeuralNet& nn = NeuralNet::instance();
 
         try {
@@ -215,7 +215,7 @@ static void test_legacy_constructor() {
 
     try {
         // 使用旧式构造器创建独立实例
-        NeuralNet nn(path, 16, false);
+        NeuralNet nn(path, false);
 
         std::vector<float> encoded(675, 0.0f);
         for (int i = 0; i < 225; ++i) {

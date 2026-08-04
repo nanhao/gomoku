@@ -25,7 +25,6 @@ MCTSSearcher 兼容的接口，供 PolicyValueAiEngine 直接使用。
 from typing import List, Optional, Tuple
 
 from cpp.python.mcts_config import (
-    BATCH_SIZE,
     C_PUCT,
     DIRICHLET_ALPHA,
     DIRICHLET_EPSILON,
@@ -51,7 +50,6 @@ class CppMctsAdapter:
         dirichlet_epsilon: float = DIRICHLET_EPSILON,
         dirichlet_alpha: float = DIRICHLET_ALPHA,
         num_threads: int = NUM_THREADS,
-        batch_size: int = BATCH_SIZE,
         virtual_loss: float = VIRTUAL_LOSS,
         use_gpu: bool = USE_GPU,
     ):
@@ -64,9 +62,11 @@ class CppMctsAdapter:
             dirichlet_epsilon: 狄利克雷噪声混合比例，默认来自 mcts_config
             dirichlet_alpha: 狄利克雷分布浓度参数，默认来自 mcts_config
             num_threads: MCTS 工作线程数，默认来自 mcts_config
-            batch_size: GPU 推理攒批大小，默认来自 mcts_config
             virtual_loss: 虚拟损失值，默认来自 mcts_config
             use_gpu: 是否使用 GPU 推理，默认来自 mcts_config
+
+        GPU 攒批参数（batch_lower_bound / batch_upper_bound）从 mcts_config.json
+        读取，无需在构造时传入。
         """
         import cpp_mcts  # type: ignore[import-not-found]
 
@@ -83,7 +83,6 @@ class CppMctsAdapter:
             dirichlet_epsilon=dirichlet_epsilon,
             dirichlet_alpha=dirichlet_alpha,
             num_threads=num_threads,
-            batch_size=batch_size,
             virtual_loss=virtual_loss,
             use_gpu=use_gpu,
         )

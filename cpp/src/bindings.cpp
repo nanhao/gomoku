@@ -69,7 +69,6 @@ static void load_mcts_config(py::module_& m) {
         g_mcts_config.c_puct            = get_double("c_puct", 2.0);
         g_mcts_config.dirichlet_epsilon = get_double("dirichlet_epsilon", 0.25);
         g_mcts_config.dirichlet_alpha   = get_double("dirichlet_alpha", 0.03);
-        g_mcts_config.batch_size        = get_int("batch_size", 16);
         g_mcts_config.batch_lower_bound = get_int("batch_lower_bound", 16);
         g_mcts_config.batch_upper_bound = get_int("batch_upper_bound", 500);
         g_mcts_config.virtual_loss      = get_double("virtual_loss", 3.0);
@@ -127,14 +126,13 @@ PYBIND11_MODULE(cpp_mcts, m) {
         "对应 Python 端 MCTSSearcher。")
         .def(py::init<
                 std::string, int, double, double, double,
-                int, int, double, bool>(),
+                int, double, bool>(),
              py::arg("model_path"),
              py::arg("num_simulations")   = g_mcts_config.num_simulations,
              py::arg("c_puct")            = g_mcts_config.c_puct,
              py::arg("dirichlet_epsilon") = g_mcts_config.dirichlet_epsilon,
              py::arg("dirichlet_alpha")   = g_mcts_config.dirichlet_alpha,
              py::arg("num_threads")       = g_mcts_config.num_threads,
-             py::arg("batch_size")        = g_mcts_config.batch_size,
              py::arg("virtual_loss")      = g_mcts_config.virtual_loss,
              py::arg("use_gpu")           = g_mcts_config.use_gpu,
              "Multi-threaded MCTS Searcher with GPU batch inference")
@@ -180,8 +178,6 @@ PYBIND11_MODULE(cpp_mcts, m) {
             "狄利克雷噪声混合比例")
         .def_readwrite("dirichlet_alpha", &GameConfig::dirichlet_alpha,
             "狄利克雷分布浓度参数")
-        .def_readwrite("batch_size", &GameConfig::batch_size,
-            "GPU 推理攒批大小")
         .def_readwrite("virtual_loss", &GameConfig::virtual_loss,
             "Virtual loss 值")
         .def_readwrite("temperature", &GameConfig::temperature,

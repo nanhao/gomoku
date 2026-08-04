@@ -106,7 +106,7 @@ static void test_full_tree_near_terminal() {
     TEST("TC-IX-02 full tree near terminal");
     std::string path = get_model_path();
     try {
-        MctsSearcher searcher(path, 50, 2.0, 0.0, 0.03, 2, 16, 0.0, false);
+        MctsSearcher searcher(path, 50, 2.0, 0.0, 0.03, 2, 0.0, false);
 
         // 四连棋盘
         std::vector<int> board(225, 0);
@@ -139,7 +139,7 @@ static void test_multi_thread_no_deadlock() {
     try {
         // 使用较多线程和模拟数
         MctsSearcher searcher(path, 200, 2.0, 0.25, 0.03,
-                              8, 16, 3.0, false);
+                              8, 3.0, false);
 
         std::vector<int> board(225, 0);
         // 中心有少量棋子
@@ -167,7 +167,7 @@ static void test_advance_root_memory_safety() {
     std::string path = get_model_path();
     try {
         MctsSearcher searcher(path, 30, 2.0, 0.25, 0.03,
-                              2, 16, 3.0, false);
+                              2, 3.0, false);
 
         std::vector<int> board(225, 0);
         std::vector<int> state = board;

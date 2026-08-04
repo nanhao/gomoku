@@ -40,8 +40,8 @@ GameRunner::GameRunner(const std::string& model1_path,
     std::cout << "[GameRunner] 线程池已初始化, size="
               << MctsThreadPool::instance().size() << std::endl;
 
-    // 2. 初始化全局 NeuralNet 单例（先用 model1 加载）
-    NeuralNet::initialize(model1_path_, config_.batch_size, config_.use_gpu);
+    // 2. 初始化全局 NeuralNet 单例（先用 model1 加载，攒批参数从 JSON 读取）
+    NeuralNet::initialize(model1_path_, config_.use_gpu);
     std::cout << "[GameRunner] NeuralNet 已初始化, model="
               << model1_path_ << std::endl;
 

@@ -19,7 +19,6 @@ struct MctsConfig {
     double c_puct = 2.0;
     double dirichlet_epsilon = 0.25;
     double dirichlet_alpha = 0.03;
-    int batch_size = 16;          // （向后兼容）旧式单一批量大小
     int batch_lower_bound = 16;   // GPU 攒批下限（低于此值继续等待）
     int batch_upper_bound = 500;  // GPU 攒批上限（单次最多取走）
     double virtual_loss = 3.0;

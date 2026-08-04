@@ -76,7 +76,7 @@ static void test_empty_board_search() {
     TEST("TC-MS-01 empty board search");
     std::string path = get_model_path();
     try {
-        MctsSearcher searcher(path, 100, 2.0, 0.25, 0.03, 4, 16, 3.0, false);
+        MctsSearcher searcher(path, 100, 2.0, 0.25, 0.03, 4, 3.0, false);
         std::vector<int> board(225, 0);
         auto state = make_state(board, 1);
 
@@ -108,7 +108,7 @@ static void test_near_win_search() {
     TEST("TC-MS-02 near win search");
     std::string path = get_model_path();
     try {
-        MctsSearcher searcher(path, 100, 2.0, 0.25, 0.03, 4, 16, 3.0, false);
+        MctsSearcher searcher(path, 100, 2.0, 0.25, 0.03, 4, 3.0, false);
 
         // 黑子四连 [0,1,2,3]，[4] 为空可五连
         std::vector<int> board(225, 0);
@@ -139,7 +139,7 @@ static void test_terminal_state_search() {
     TEST("TC-MS-03 terminal state search");
     std::string path = get_model_path();
     try {
-        MctsSearcher searcher(path, 10, 2.0, 0.25, 0.03, 1, 16, 0.0, false);
+        MctsSearcher searcher(path, 10, 2.0, 0.25, 0.03, 1, 0.0, false);
 
         // 黑子已五连 [0,1,2,3,4]
         std::vector<int> board(225, 0);
@@ -163,7 +163,7 @@ static void test_advance_root_success() {
     TEST("TC-MS-04 advance_root success");
     std::string path = get_model_path();
     try {
-        MctsSearcher searcher(path, 50, 2.0, 0.25, 0.03, 2, 16, 3.0, false);
+        MctsSearcher searcher(path, 50, 2.0, 0.25, 0.03, 2, 3.0, false);
 
         std::vector<int> board(225, 0);
         auto state = make_state(board, 1);
@@ -199,7 +199,7 @@ static void test_advance_root_fail() {
     TEST("TC-MS-05 advance_root not exist");
     std::string path = get_model_path();
     try {
-        MctsSearcher searcher(path, 10, 2.0, 0.25, 0.03, 1, 16, 0.0, false);
+        MctsSearcher searcher(path, 10, 2.0, 0.25, 0.03, 1, 0.0, false);
 
         std::vector<int> board(225, 0);
         board[0] = 1;  // 位置已被占用
@@ -227,7 +227,7 @@ static void test_subtree_reuse_incremental_n() {
     TEST("TC-MS-06 subtree reuse incremental N");
     std::string path = get_model_path();
     try {
-        MctsSearcher searcher(path, 30, 2.0, 0.25, 0.03, 2, 16, 3.0, false);
+        MctsSearcher searcher(path, 30, 2.0, 0.25, 0.03, 2, 3.0, false);
 
         std::vector<int> board(225, 0);
         auto state = make_state(board, 1);
@@ -275,7 +275,7 @@ static void test_multi_thread_correctness() {
     TEST("TC-MS-07 multi-thread correctness");
     std::string path = get_model_path();
     try {
-        MctsSearcher searcher(path, 400, 2.0, 0.25, 0.03, 8, 16, 3.0, false);
+        MctsSearcher searcher(path, 400, 2.0, 0.25, 0.03, 8, 3.0, false);
 
         std::vector<int> board(225, 0);
         auto state = make_state(board, 1);
@@ -296,7 +296,7 @@ static void test_dirichlet_noise_effect() {
     TEST("TC-MS-08 Dirichlet noise effect");
     std::string path = get_model_path();
     try {
-        MctsSearcher searcher(path, 20, 2.0, 0.25, 0.03, 1, 16, 0.0, false);
+        MctsSearcher searcher(path, 20, 2.0, 0.25, 0.03, 1, 0.0, false);
 
         std::vector<int> board(225, 0);
         auto state = make_state(board, 1);
@@ -323,7 +323,7 @@ static void test_virtual_loss_zero() {
     TEST("TC-MS-09 virtual loss zero");
     std::string path = get_model_path();
     try {
-        MctsSearcher searcher(path, 50, 2.0, 0.0, 0.03, 4, 16, 0.0, false);
+        MctsSearcher searcher(path, 50, 2.0, 0.0, 0.03, 4, 0.0, false);
 
         std::vector<int> board(225, 0);
         auto state = make_state(board, 1);
@@ -344,7 +344,7 @@ static void test_gpu_cpu_consistency() {
     TEST("TC-MS-10 GPU/CPU consistency");
     std::string path = get_model_path();
     try {
-        MctsSearcher searcher_cpu(path, 20, 2.0, 0.0, 0.03, 1, 1, 0.0, false);
+        MctsSearcher searcher_cpu(path, 20, 2.0, 0.0, 0.03, 1, 0.0, false);
 
         std::vector<int> board(225, 0);
         auto state = make_state(board, 1);

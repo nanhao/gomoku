@@ -80,7 +80,7 @@ static void test_model_load_success() {
         return;
     }
     try {
-        NeuralNet nn(path, 16, false);
+        NeuralNet nn(path, false);
         PASS();
     } catch (const std::exception& e) {
         FAIL(e.what());
@@ -91,7 +91,7 @@ static void test_model_load_success() {
 static void test_model_file_not_found() {
     TEST("TC-NN-02 model file not found");
     try {
-        NeuralNet nn("nonexistent_file.pt", 16, false);
+        NeuralNet nn("nonexistent_file.pt", false);
         FAIL("expected exception but none thrown");
     } catch (const std::runtime_error& e) {
         // 预期行为：加载失败抛 runtime_error
@@ -111,7 +111,7 @@ static void test_single_predict() {
         return;
     }
     try {
-        NeuralNet nn(path, 16, false);
+        NeuralNet nn(path, false);
 
         // 构造一个简单的编码输入（全零 + 颜色指示器）
         std::vector<float> encoded(675, 0.0f);
@@ -152,7 +152,7 @@ static void test_batch_async_predict() {
         return;
     }
     try {
-        NeuralNet nn(path, 4, false);
+        NeuralNet nn(path, false);
 
         // 提交 4 个请求
         std::vector<float> encoded(675, 0.0f);
@@ -190,7 +190,7 @@ static void test_large_batch_stress() {
         return;
     }
     try {
-        NeuralNet nn(path, 32, false);
+        NeuralNet nn(path, false);
 
         std::vector<float> encoded(675, 0.0f);
         for (int i = 0; i < 225; ++i) {
@@ -221,7 +221,7 @@ static void test_large_batch_stress() {
 static void test_invalid_input() {
     TEST("TC-NN-06 invalid input dimension");
     try {
-        NeuralNet nn(get_model_path(), 16, false);
+        NeuralNet nn(get_model_path(), false);
 
         // 输入长度不是 675
         std::vector<float> bad_input(100, 0.0f);
@@ -247,7 +247,7 @@ static void test_consistency_with_python() {
         return;
     }
     try {
-        NeuralNet nn(path, 1, false);
+        NeuralNet nn(path, false);
 
         // 构造一个非平凡输入（棋盘上有若干棋子）
         std::vector<float> encoded(675, 0.0f);

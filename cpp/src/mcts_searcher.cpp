@@ -44,7 +44,7 @@ MctsSearcher::MctsSearcher(const std::string& model_path,
 MctsSearcher::MctsSearcher(std::string model_path, int num_simulations,
                            double c_puct, double dirichlet_epsilon,
                            double dirichlet_alpha, int num_threads,
-                           int batch_size, double virtual_loss, bool use_gpu)
+                           double virtual_loss, bool use_gpu)
     : model_path_(std::move(model_path))
     , num_simulations_(num_simulations)
     , c_puct_(c_puct)
@@ -57,9 +57,9 @@ MctsSearcher::MctsSearcher(std::string model_path, int num_simulations,
     , root_edge_n_snapshot_(225, 0)
     , root_policy_(225, 1.0f / 225.0f)
 {
-    // 创建共享的神经网络推理引擎
+    // 创建共享的神经网络推理引擎（攒批参数从 mcts_config.json 读取）
     neural_net_ = std::make_unique<NeuralNet>(
-        model_path_, batch_size, use_gpu_);
+        model_path_, use_gpu_);
 }
 
 MctsSearcher::~MctsSearcher() {

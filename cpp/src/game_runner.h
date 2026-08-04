@@ -16,7 +16,6 @@ struct GameConfig {
     double c_puct = 2.0;
     double dirichlet_epsilon = 0.25;
     double dirichlet_alpha = 0.03;
-    int batch_size = 16;
     double virtual_loss = 3.0;
     double temperature = 1.0;
     int temp_steps = 8;

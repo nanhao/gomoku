@@ -69,11 +69,9 @@ public:
     /** 显式初始化全局单例（call_once 保护，仅首次生效）
 
     @param model_path TorchScript 模型文件路径 (.pt)
-    @param batch_size GPU 推理攒批大小
     @param use_gpu 是否使用 GPU 推理
     */
-    static void initialize(const std::string& model_path,
-                           int batch_size, bool use_gpu);
+    static void initialize(const std::string& model_path, bool use_gpu);
 
     /** 关闭全局单例，等待推理线程退出 */
     static void shutdown();
@@ -124,11 +122,12 @@ public:
 
     /** 加载 TorchScript 模型并启动 GPU 推理线程
 
+    攒批参数从 mcts_config.json 读取（batch_lower_bound / batch_upper_bound）。
+
     @param model_path TorchScript 模型文件路径 (.pt)
-    @param batch_size GPU 推理攒批大小，默认 16
     @param use_gpu 是否使用 GPU 推理，true=GPU, false=CPU
     */
-    NeuralNet(std::string model_path, int batch_size, bool use_gpu);
+    NeuralNet(std::string model_path, bool use_gpu);
 
     /** 停止推理线程并等待其退出 */
     ~NeuralNet();
