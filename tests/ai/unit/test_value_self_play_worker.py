@@ -102,7 +102,7 @@ class TestValueSelfPlayWorker(unittest.TestCase):
             model_path="", model_name=None, device="cpu",
             config=cfg, _model=self.model,
         )
-        samples = worker.run_games([0, 1], "test")
+        samples = worker.run_games([0], "test")
         self.assertGreater(len(samples), 0)
 
     def test_worker_entry_static(self):

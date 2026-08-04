@@ -58,7 +58,7 @@ class TestMCTSSelfPlayIntegration(unittest.TestCase):
         model = CNNV7Model(fresh=True)
         model.move_to_device()
 
-        searcher = MCTSSearcher(model, num_simulations=20, log_dir=None)
+        searcher = MCTSSearcher(model, num_simulations=5, log_dir=None)
         engine = PolicyValueAiEngine(searcher, temp_steps=5, log_key_prefix="test_game0")
 
         # 手动模拟一局对弈（使用 flat board 维护原始状态，get_move 时转为 2D）

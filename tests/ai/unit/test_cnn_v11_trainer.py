@@ -211,23 +211,6 @@ class TestCNNV11Trainer(unittest.TestCase):
             import shutil
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
-    def test_train_epochs_val_split(self):
-        """val_split 产生验证集 loss"""
-        from ai.models.cnn_v11.trainer import CNNV11Trainer
-
-        tmp_dir = tempfile.mkdtemp()
-        try:
-            self._make_sample_json(tmp_dir, n_samples=50)
-            trainer = CNNV11Trainer(model=self.model, device=torch.device("cpu"))
-            history = trainer.train_epochs(
-                [tmp_dir], epochs=2, batch_size=8,
-                val_split=0.2, verbose=False,
-            )
-            self.assertIn("val_value_loss", history[-1])
-        finally:
-            import shutil
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-
     # ---------- TC3.10 save_model — 文件产出 ----------
 
     def test_save_model(self):

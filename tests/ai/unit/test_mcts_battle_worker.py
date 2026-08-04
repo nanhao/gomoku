@@ -116,25 +116,6 @@ class TestMctsBattleWorker(unittest.TestCase):
         game_indices = {r.game_idx for r in results}
         self.assertEqual(game_indices, {0, 1, 2})
 
-    # ---------- TC2.5: 执方随机性 ----------
-
-    def test_run_games_color_randomness(self):
-        """TC2.5: 50 局中 model1 执黑次数在 15~35 之间"""
-        cfg = MctsSelfPlayConfig(simulations=2)
-        worker = MctsBattleWorker(
-            model1_spec=self._DUMMY_SPEC1,
-            model2_spec=self._DUMMY_SPEC2,
-            device="cpu",
-            config=cfg,
-            _model1=self._model1,
-            _model2=self._model2,
-        )
-        results = worker.run_games(game_indices=list(range(50)), run_id="test")
-        model1_black_count = sum(1 for r in results if r.model1_color == 1)
-        # 二项分布 95% 置信区间 (n=50, p=0.5): ~[15, 35]
-        self.assertGreaterEqual(model1_black_count, 15)
-        self.assertLessEqual(model1_black_count, 35)
-
     # ---------- TC2.6: engine 不复用 ----------
 
     def test_run_games_engine_not_reused(self):

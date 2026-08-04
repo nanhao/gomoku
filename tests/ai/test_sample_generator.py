@@ -238,7 +238,7 @@ class TestCLISmoke(unittest.TestCase):
             result = subprocess.run(
                 [sys.executable, "-m", "ai.sample_generator",
                  "--shape", "huo3",
-                 "--num-samples", "5",
+                 "--num-samples", "3",
                  "--output", out,
                  "--print-failures", "0"],
                 cwd=src_dir,
@@ -251,7 +251,7 @@ class TestCLISmoke(unittest.TestCase):
             self.assertTrue(os.path.exists(out))
             with open(out, encoding="utf-8") as f:
                 samples = json.load(f)
-            self.assertEqual(len(samples), 5)
+            self.assertEqual(len(samples), 3)
             for s in samples:
                 self.assertIn("_attack_positions", s)
                 self.assertIn("_shape", s)

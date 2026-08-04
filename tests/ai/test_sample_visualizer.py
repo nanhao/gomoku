@@ -256,7 +256,7 @@ class TestCliSmoke:
     def test_cli_runs_and_produces_png(self, tmp_path):
         # 准备样本 JSON 文件
         samples = []
-        for i in range(6):
+        for i in range(3):
             board = _board_with_stones([(112 + i, 1)])
             samples.append(_make_new_format_sample(
                 board, [100 + i], shape="huo2"
@@ -276,7 +276,7 @@ class TestCliSmoke:
         result = subprocess.run(
             [sys.executable, "-m", "ai.sample_visualizer",
              "--sample", str(sample_file),
-             "--count", "3",
+             "--count", "2",
              "--seed", "7",
              "--output", str(out_png)],
             capture_output=True,

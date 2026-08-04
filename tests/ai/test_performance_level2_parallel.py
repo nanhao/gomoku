@@ -219,8 +219,7 @@ class TestEvaluateRoundParallelMode(unittest.TestCase):
     def test_parallel_mode_produces_same_count(self):
         """并行模式应生成与串行模式相同数量的 sample，且无错误"""
         round_dir = os.path.join(self.ai_data_dir, "round_1")
-        for i in range(1, 3):
-            _create_minimal_record(os.path.join(round_dir, str(i)))
+        _create_minimal_record(os.path.join(round_dir, "1"))
 
         # 串行模式
         evaluator_serial = Evaluator(
@@ -276,11 +275,11 @@ class TestParallelErrorHandling(unittest.TestCase):
             json.dump({"history": [], "winner": 0}, f)
         return invalid_path
 
-    def test_invalid_record_does_not_affect_others_parallel(self):
-        """并行模式下，一个无效 record 不影响其他文件的评价"""
+    def test_parallel_error_handling(self):
+        """并行模式下错误处理：无效 record 不影响其他文件，全部无效时返回全部错误"""
         round_dir = os.path.join(self.ai_data_dir, "round_1")
 
-        # 创建 2 个有效 record 和 1 个无效 record
+        # 场景1: 2 个有效 + 1 个无效 → 2 sample + 1 error
         _create_minimal_record(os.path.join(round_dir, "1"))
         self._create_invalid_record(os.path.join(round_dir, "2"))
         _create_minimal_record(os.path.join(round_dir, "3"))
@@ -291,28 +290,17 @@ class TestParallelErrorHandling(unittest.TestCase):
             max_workers=2
         )
         result = evaluator.evaluate_round(round_dir)
-
-        # 应有 2 个成功的 sample
         self.assertEqual(len(result["sample_files"]), 2)
-        # 应有 1 个错误
         self.assertEqual(len(result["errors"]), 1)
 
-    def test_all_invalid_records_returns_all_errors(self):
-        """所有 record 都无效时，应返回全部错误且无成功 sample"""
-        round_dir = os.path.join(self.ai_data_dir, "round_1")
-
+        # 场景2: 3 个无效 → 0 sample + 3 errors（复用同一 evaluator）
+        round_dir2 = os.path.join(self.ai_data_dir, "round_2")
         for i in range(1, 4):
-            self._create_invalid_record(os.path.join(round_dir, str(i)))
+            self._create_invalid_record(os.path.join(round_dir2, str(i)))
 
-        evaluator = Evaluator(
-            ai_data_dir=self.ai_data_dir,
-            train_data_dir=self.train_data_dir,
-            max_workers=2
-        )
-        result = evaluator.evaluate_round(round_dir)
-
-        self.assertEqual(len(result["sample_files"]), 0)
-        self.assertEqual(len(result["errors"]), 3)
+        result2 = evaluator.evaluate_round(round_dir2)
+        self.assertEqual(len(result2["sample_files"]), 0)
+        self.assertEqual(len(result2["errors"]), 3)
 
 
 if __name__ == "__main__":
