@@ -1,0 +1,111 @@
+@startuml
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title CNN v11 — 类关系图
+
+' --- 新增类 ---
+
+class "CNNV11Network\n(model.py)" as Network {
+    + forward(x: Tensor) -> (policy, value)
+    - conv1, bn1, relu1
+    - conv2~conv15 (14 层), bn2~bn15 (14 层), relu2~relu15 (14 层)
+    - conv_out(256→2), policy_bn, policy_relu, policy_fc(450→225)
+    - value_conv_out(256→1), value_bn, value_relu1, value_fc1(225→256), value_relu2, value_fc2(256→1)
+    - log_softmax, value_tanh
+}
+
+class "CNNV11Model\n(model.py)" as Model {
+    + name: str = "cnn_v11"
+    + DEFAULT_MODEL_PATH: str
+    + predict(board_vector) -> ModelPredict
+    + predict_batch(board_vectors) -> List[ModelPredict]
+    + save(model_path) -> str
+    + load(model_path)
+    + move_to_device(device) -> device
+    + full_name: str
+    - _create_network() -> CNNV11Network
+    - _prepare_input(board_vector, device) -> Tensor
+}
+
+class "CNNV11Trainer\n(trainer.py)" as Trainer {
+    + model_name: str = "cnn_v11"
+    + train_epochs(sample_dirs, epochs, batch_size, val_split, shuffle, verbose) -> List[Dict]
+    + save_model(output_path) -> str
+    - _create_model(fresh) -> CNNV11Model
+    - _convert_inputs(states) -> Tensor
+}
+
+' --- 现有基础设施（不修改） ---
+
+abstract class "NeuralNetworkModel\n(base_model.py)" as NNModel {
+    + predict(board_vector) -> ModelPredict
+    + save(model_path) -> str
+    + load(model_path)
+    + move_to_device(device) -> device
+    + {abstract} _create_network() -> nn.Module
+    + {abstract} _prepare_input(board_vector, device) -> Tensor
+}
+
+abstract class "DualHeadTrainer\n(dual_head_trainer.py)" as DualTrainer {
+    + __init__(model, fresh, device, lr, weight_decay, gen, value_loss_weight, policy_loss_weight)
+    + train_epochs(sample_dirs, epochs, batch_size, val_split, shuffle, verbose) -> List[Dict]
+    + save_model(output_path) -> str
+    + {abstract} _create_model(fresh) -> BaseModel
+    + {abstract} _convert_inputs(inputs) -> Tensor
+    + {abstract} model_name -> str
+    - _train_step(inputs, pi_targets, z_targets) -> Dict
+    - _load_samples(sample_dirs) -> tuple
+    - _evaluate_val(val_inputs, val_pi, val_z) -> Dict
+    - _plot_loss_curve(history) -> str
+}
+
+class "ModelPredict\n(base_model.py)" as Predict {
+    + policy: Optional[List[float]]
+    + value: Optional[float]
+    + type: str
+    + TYPE_POLICY_VALUE = "policy_value"
+}
+
+class "PolicyValueAiEngine\n(engine/policy_value.py)" as Engine {
+    + get_move(board, current_player, strategy) -> MoveDecision
+    + after_move(x, y)
+    + {static} compute_prob_from_n(visit_counts, tau) -> List[float]
+}
+
+class "MCTSSearcher\n(mcts/searcher.py)" as Searcher {
+    + search(state, log_key) -> (visit_counts, root_value, root_policy)
+    + advance_root(action) -> bool
+}
+
+class "AIEngineBuilder\n(engine/builder.py)" as Builder {
+    + {static} build_policy_value(model, ...) -> PolicyValueAiEngine
+}
+
+class "create_engine\n(engine/builder.py)" as CreateEngine {
+    + (ai_name: str) -> AIEngine
+}
+
+class "MODEL_REGISTRY\n(registry.py)" as Registry {
+    + "cnn_v11": RegistryEntry("CNNV11Model", "CNNV11Trainer", True)
+}
+
+' --- 继承关系 ---
+
+NNModel <|-- Model
+DualTrainer <|-- Trainer
+Network --* Model : 持有
+Model --* Trainer : 持有
+
+' --- 引用关系 ---
+
+Model ..> Predict : predict() 返回
+Builder ..> Searcher : 创建
+Builder ..> Engine : 创建
+Engine o-- Searcher : 持有
+CreateEngine ..> Model : get_model() 加载
+CreateEngine ..> Builder : 路由到 build_policy_value()
+Registry ..> Model : 懒加载注册
+Registry ..> Trainer : 懒加载注册
+
+@enduml

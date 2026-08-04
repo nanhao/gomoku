@@ -1,0 +1,68 @@
+@startuml
+!theme plain
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title CNN v11 网络前向传播流程
+
+participant "调用方" as Caller
+participant "CNNV11Network.forward()" as Forward
+participant "共享卷积体" as Body
+participant "策略头" as PolicyHead
+participant "价值头" as ValueHead
+
+== 输入 ==
+
+Caller -> Forward: x (batch, 3, 15, 15)
+
+== 共享卷积体（256 通道） ==
+
+Forward -> Body: Conv1(3→256, 3×3, p=1)
+Body -> Body: BN1(256) → ReLU
+note right: (batch, 256, 15, 15)
+
+Forward -> Body: 残差块 1
+Body -> Body: Conv2(256→256, 3×3, p=1) → BN2 → ReLU
+Body -> Body: Conv3(256→256, 3×3, p=1) → BN3
+Body -> Body: + shortcut (identity)
+Body -> Body: ReLU
+
+Forward -> Body: 残差块 2
+Body -> Body: Conv4(256→256, 3×3, p=1) → BN4 → ReLU
+Body -> Body: Conv5(256→256, 3×3, p=1) → BN5
+Body -> Body: + shortcut (identity)
+Body -> Body: ReLU
+
+Forward -> Body: ...（残差块 3~6，同残差块 1 结构）
+note right: Conv6~13, BN6~13
+
+Forward -> Body: 残差块 7
+Body -> Body: Conv14(256→256, 3×3, p=1) → BN14 → ReLU
+Body -> Body: Conv15(256→256, 3×3, p=1) → BN15
+Body -> Body: + shortcut (identity)
+Body -> Body: ReLU
+note right: 共享特征 (batch, 256, 15, 15)\n共 15 层 Conv + 7 残差块
+
+== 双头分流 ==
+
+Forward -> PolicyHead: conv_out(256→2, 1×1, p=0)
+PolicyHead -> PolicyHead: BN(2) → ReLU
+note right: (batch, 2, 15, 15)
+PolicyHead -> PolicyHead: Flatten → (batch, 450)
+PolicyHead -> PolicyHead: FC(450→225)
+PolicyHead -> PolicyHead: LogSoftmax
+note right: policy (batch, 225)
+
+Forward -> ValueHead: value_conv_out(256→1, 1×1, p=0)
+ValueHead -> ValueHead: BN(1) → ReLU
+note right: (batch, 1, 15, 15)
+ValueHead -> ValueHead: Flatten → (batch, 225)
+ValueHead -> ValueHead: FC(225→256) → ReLU
+ValueHead -> ValueHead: FC(256→1)
+ValueHead -> ValueHead: Tanh
+note right: value (batch, 1), 值域 [-1, 1]
+
+== 输出 ==
+
+Forward -> Caller: (policy, value)
+
+@enduml

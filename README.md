@@ -71,7 +71,7 @@ python src/ai/battle.py --ai1 <AI指定> --ai2 <AI指定> [--games <局数>] [�
 | `--temp-side` | 温度采样作用方：`black` / `white` / `both` / `random` | `both` |
 | `--temp-seed` | 温度采样随机种子（用于复现对战结果） | None（不可复现） |
 
-**可用 AI：** `random` / `fc_v1` / `cnn_v1` / `cnn_v2` / `cnn_v3.1` / `cnn_v4.1` / `cnn_v5.1` / `cnn_v6.1` / `cnn_v7.1` / `cnn_v8.1` / `cnn_v9.1` / `cnn_v10.1` ...
+**可用 AI：** `random` / `fc_v1` / `cnn_v1` / `cnn_v2` / `cnn_v3.1` / `cnn_v4.1` / `cnn_v5.1` / `cnn_v6.1` / `cnn_v7.1` / `cnn_v8.1` / `cnn_v9.1` / `cnn_v10.1` / `cnn_v11.1` ...
 
 > **多代模型说明**：`cnn_v3` 支持多代模型，使用 `模型名.代数` 格式指定（如 `cnn_v3.1`、`cnn_v3.2`），不同代数的模型权重存储在 `src/ai/models/cnn_v3/gen{i}/` 目录下。非多代模型（如 `fc_v1`、`cnn_v1`）直接使用模型名称。
 

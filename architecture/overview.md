@@ -95,9 +95,12 @@ src/
 │   │   ├── cnn_v7/      双头残差（策略+价值，~4.0万参）★AlphaGo Zero
 │   │   ├── cnn_v8/      双头残差+FC隐藏层（策略+价值，~8.2万参）★
 │   │   ├── cnn_v9/      双头残差+48通道（策略+价值，~12.8万参）★
-│   │   └── cnn_v10/     价值头残差（仅价值，~10万参）★
-│   │       ├── model.py       CNNV10Network + CNNV10Model
-│   │       └── trainer.py     CNNV10Trainer（MSE 训练）
+│   │   ├── cnn_v10/     价值头残差（仅价值，~10万参）★
+│   │   │   ├── model.py       CNNV10Network + CNNV10Model
+│   │   │   └── trainer.py     CNNV10Trainer（MSE 训练）
+│   │   └── cnn_v11/     双头残差（策略+价值，~843万参）★
+│   │       ├── model.py       CNNV11Network + CNNV11Model
+│   │       └── trainer.py     CNNV11Trainer（MSE+CrossEntropy）
 │   │
 │   ├── game_manager.py    AI 对战管理（PvE + AI内战 + 温度采样编排）
 │   ├── data_recorder.py   对战数据记录
@@ -188,7 +191,7 @@ AlphaGo Zero 风格的蒙特卡洛树搜索，支持 Batch MCTS + Virtual Loss�
 | 引擎 | 适用模型 | 决策方式 | 用途 |
 |------|---------|---------|------|
 | `SinglePolicyAiEngine` | random, fc_v1, cnn_v1~v6 | 模型 softmax → argmax/sampling | 传统 AI、PvE |
-| `PolicyValueAiEngine` | cnn_v7, cnn_v8, cnn_v9 | MCTS 搜索 → 温度采样 | AlphaGo Zero 训练 |
+| `PolicyValueAiEngine` | cnn_v7, cnn_v8, cnn_v9, cnn_v11 | MCTS 搜索 → 温度采样 | AlphaGo Zero 训练 |
 | `ValueOnlyAiEngine` | cnn_v10 | 枚举候选+模型评估+softmax → argmax/sampling | 价值头模型对战 |
 
 ### 5. 模型层次结构
@@ -205,12 +208,13 @@ BaseModel (ABC)
     ├── CNNV7Model                  # 双头: LogSoftmax(225) + Tanh(1) ★
     │   └── CNNV8Model              # 双头+FC隐藏层: LogSoftmax(225) + Tanh(1) ★
     │       └── CNNV9Model          # 双头+48通道: LogSoftmax(225) + Tanh(1) ★
+    │           └── CNNV11Model     # 双头+256通道+7残差块: LogSoftmax(225) + Tanh(1) ★
     └── CNNV10Model                 # 价值头: Tanh(1) ★
 ```
 
 输入编码差异：
 - **CNN v1~v6**：绝对视角（通道=黑棋/白棋/当前方颜色指示）
-- **CNN v7/v8/v9/v10**：相对视角（通道=我方/对方/我方颜色），保证颜色互换不变性
+- **CNN v7/v8/v9/v10/v11**：相对视角（通道=我方/对方/我方颜色），保证颜色互换不变性
 
 ### 6. 训练体系
 
