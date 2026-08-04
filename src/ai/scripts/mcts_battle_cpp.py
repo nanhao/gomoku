@@ -224,6 +224,7 @@ def run_battle(args) -> None:
 
         # 轮询进度并实时打印
         last_print_time = 0.0
+        last_gpu_print = 0.0
         while not adapter.is_finished():
             if _interrupted:
                 break
@@ -233,6 +234,10 @@ def run_battle(args) -> None:
             if now - last_print_time >= 1.0:
                 print(f"[进度] {completed}/{total}")
                 last_print_time = now
+            # 每 5 秒打印一次 GPU 实时统计
+            if now - last_gpu_print >= 5.0:
+                _print_gpu_stats()
+                last_gpu_print = now
             time.sleep(0.1)
 
         # 等待所有进行中的对局完成
