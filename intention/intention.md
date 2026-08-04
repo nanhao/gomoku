@@ -272,3 +272,19 @@ introduce batch mcts and virtual loss in mcts. But don't use multi thread.
 1，新建一个脚本，用于 cnn_v10 自我对弈产生样本，可以参照 src/ai/scripts/mcts_self_play.py 的参数
 2，新建一个脚本，用于 cnn_v10 的训练，可以参照  src/ai/scripts/mcts_train.py
 3，修改 battle.py，使其能够兼容 cnn_v10
+
+顺便改了回放功能，使其支持 cnn_v10.
+结果一训练，还是策略崩溃，根本连随机都完全打不过。分析了原因发现 value 被放大
+
+# intention_id=45
+新增 cnn_v11，回到双头结构。cnn_v11 是在 cnn_v9 的基础上，做以下变动：
+- 把残差塔的高度增加到7（目前是2）
+- 把卷积层的通道数增加到 256
+- 策略头改为 cnnv_out(2通道, size=1) -> bn -> relu -> flatten -> fc-linear(输出为15*15) -> logsoftmax
+- 价值头改为 value_cnnv_out(1通道,size=1) -> bn -> relu -> flatten -> fc-linear(输出为256) -> relu -> fc-linear(256->1) -> tanh
+
+# intention_id=46
+我希望在 cpp 目录下，用 C++ 实现一个 mcts 的版本。有几个技术要点：
+- 跟 python 使用相同的权重和网络结构
+- 使用多线程，每个 mcts 线程负责一次选择->评估->回传的周期。并且有一个 gpu 线程，负责异步的搜集一批待评估的局面，一次性发给 gpu 进行评估，然后返回给各 mcts 线程进行后续处理。mcts 线程在提交局面给 gpu 线程后，就等待直到其返回
+你帮我调研一下，然后来一起讨论一下怎么做。最后目标是产出一份调研报告 intention/cpp-report.md。可以参考 D:\projects\AlphaZeroGomoku 这个项目的实现。
