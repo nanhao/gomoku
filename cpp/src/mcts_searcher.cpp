@@ -7,6 +7,8 @@
 #include <random>
 #include <stdexcept>
 
+#include "thread_pool.h"
+
 // =====================================================================
 // 构造 & 析构
 // =====================================================================
@@ -60,17 +62,10 @@ MctsResult MctsSearcher::search(const std::vector<int>& state) {
     // 重置模拟计数器
     sim_counter_ = 0;
 
-    // 启动 MCTS 工作线程
-    std::vector<std::thread> workers;
-    workers.reserve(num_threads_);
-    for (int i = 0; i < num_threads_; ++i) {
-        workers.emplace_back(&MctsSearcher::run_single_simulation, this);
-    }
-
-    // 等待所有工作线程完成
-    for (auto& w : workers) {
-        w.join();
-    }
+    // 启动全局线程池的 MCTS 工作线程（进程生命周期内只创建一次）
+    MctsThreadPool::instance().run_parallel([this] {
+        this->run_single_simulation();
+    });
 
     // 提取结果
     return get_result();

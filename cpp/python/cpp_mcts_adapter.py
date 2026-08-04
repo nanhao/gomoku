@@ -3,14 +3,17 @@
 提供 CppMctsAdapter 类，将 C++ cpp_mcts.MctsSearcher 包装为与现有 Python
 MCTSSearcher 兼容的接口，供 PolicyValueAiEngine 直接使用。
 
+默认参数来自 cpp.python.mcts_config，可覆盖。
+
 使用示例:
     from cpp.python.cpp_mcts_adapter import CppMctsAdapter
+    from cpp.python.mcts_config import NUM_SIMULATIONS, NUM_THREADS
     from ai.engine.policy_value import PolicyValueAiEngine
 
     searcher = CppMctsAdapter(
         model_path="src/ai/models/cnn_v11/cnn_v11_torchscript.pt",
-        num_simulations=200,
-        num_threads=64,
+        num_simulations=NUM_SIMULATIONS,
+        num_threads=NUM_THREADS,
         batch_size=32,
         use_gpu=True,
     )
@@ -20,6 +23,17 @@ MCTSSearcher 兼容的接口，供 PolicyValueAiEngine 直接使用。
 """
 
 from typing import List, Optional, Tuple
+
+from cpp.python.mcts_config import (
+    BATCH_SIZE,
+    C_PUCT,
+    DIRICHLET_ALPHA,
+    DIRICHLET_EPSILON,
+    NUM_SIMULATIONS,
+    NUM_THREADS,
+    USE_GPU,
+    VIRTUAL_LOSS,
+)
 
 
 class CppMctsAdapter:
@@ -32,29 +46,35 @@ class CppMctsAdapter:
     def __init__(
         self,
         model_path: str,
-        num_simulations: int = 200,
-        c_puct: float = 2.0,
-        dirichlet_epsilon: float = 0.25,
-        dirichlet_alpha: float = 0.03,
-        num_threads: int = 4,
-        batch_size: int = 16,
-        virtual_loss: float = 3.0,
-        use_gpu: bool = True,
+        num_simulations: int = NUM_SIMULATIONS,
+        c_puct: float = C_PUCT,
+        dirichlet_epsilon: float = DIRICHLET_EPSILON,
+        dirichlet_alpha: float = DIRICHLET_ALPHA,
+        num_threads: int = NUM_THREADS,
+        batch_size: int = BATCH_SIZE,
+        virtual_loss: float = VIRTUAL_LOSS,
+        use_gpu: bool = USE_GPU,
     ):
         """创建 C++ MCTS 搜索器适配器
 
         Args:
             model_path: TorchScript 模型文件路径 (.pt)
-            num_simulations: 每次搜索的总模拟次数，默认 200
-            c_puct: PUCT 探索系数，默认 2.0
-            dirichlet_epsilon: 狄利克雷噪声混合比例，默认 0.25
-            dirichlet_alpha: 狄利克雷分布浓度参数，默认 0.03
-            num_threads: MCTS 工作线程数，默认 4
-            batch_size: GPU 推理攒批大小，默认 16
-            virtual_loss: 虚拟损失值，默认 3.0
-            use_gpu: 是否使用 GPU 推理，默认 True
+            num_simulations: 每次搜索的总模拟次数，默认来自 mcts_config
+            c_puct: PUCT 探索系数，默认来自 mcts_config
+            dirichlet_epsilon: 狄利克雷噪声混合比例，默认来自 mcts_config
+            dirichlet_alpha: 狄利克雷分布浓度参数，默认来自 mcts_config
+            num_threads: MCTS 工作线程数，默认来自 mcts_config
+            batch_size: GPU 推理攒批大小，默认来自 mcts_config
+            virtual_loss: 虚拟损失值，默认来自 mcts_config
+            use_gpu: 是否使用 GPU 推理，默认来自 mcts_config
         """
         import cpp_mcts  # type: ignore[import-not-found]
+
+        # Ensure the global thread pool is initialized before first search.
+        # call_once on the C++ side makes this idempotent across adapters.
+        cpp_mcts.init_thread_pool(num_threads)
+        actual_pool_size = cpp_mcts.thread_pool_size()
+        print(f"[CppMctsAdapter] 线程池已初始化: {actual_pool_size} 个线程 (请求 {num_threads})")
 
         self._cpp_searcher = cpp_mcts.MctsSearcher(
             model_path,

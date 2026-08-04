@@ -8,6 +8,29 @@ from typing import Optional
 
 from ai.mcts.searcher import _LOG_UNSET  # 哨兵：与 MCTSSearcher 共用同一对象实例
 
+# MCTS 默认参数（统一配置源）
+try:
+    from cpp.python.mcts_config import (
+        BATCH_SIZE,
+        C_PUCT,
+        DIRICHLET_ALPHA,
+        DIRICHLET_EPSILON,
+        NUM_SIMULATIONS,
+        NUM_THREADS,
+        USE_GPU,
+        VIRTUAL_LOSS,
+    )
+except ImportError:
+    # C++ 模块未配置时使用硬编码回退值
+    NUM_SIMULATIONS = 800
+    NUM_THREADS = 32
+    C_PUCT = 2.0
+    DIRICHLET_EPSILON = 0.25
+    DIRICHLET_ALPHA = 0.03
+    BATCH_SIZE = 16
+    VIRTUAL_LOSS = 3.0
+    USE_GPU = True
+
 
 class AIEngineBuilder:
     """AI 引擎工厂类
@@ -191,13 +214,18 @@ def create_engine(ai_name: str):
 
     # 4. 根据类型智能路由
     if result.type == ModelPredict.TYPE_POLICY_VALUE:
-        # 双头模型 → 创建 PolicyValueAiEngine（使用默认 MCTS 参数）
+        # 双头模型 → 优先 C++ MCTS（cnn_v11 且 TorchScript 模型可用时），回退到 Python MCTS
+        cpp_engine = _try_create_cpp_engine(model, ai_name)
+        if cpp_engine is not None:
+            return cpp_engine
+
+        # Python MCTS（回退 / 非 cnn_v11 模型）
         return AIEngineBuilder.build_policy_value(
             model,
-            num_simulations=800,
-            c_puct=2.0,
-            dirichlet_epsilon=0.25,
-            dirichlet_alpha=0.03,
+            num_simulations=NUM_SIMULATIONS,
+            c_puct=C_PUCT,
+            dirichlet_epsilon=DIRICHLET_EPSILON,
+            dirichlet_alpha=DIRICHLET_ALPHA,
             temperature=1.0,
             temp_steps=8,
             log_key_prefix=None,
@@ -209,3 +237,50 @@ def create_engine(ai_name: str):
     else:
         # 单头模型（TYPE_POLICY_ONLY）→ 创建 SinglePolicyAiEngine
         return AIEngineBuilder.build_single_policy(ai_name)
+
+
+# ---------- C++ MCTS 自动路由辅助 ----------
+
+def _try_create_cpp_engine(model, ai_name: str):
+    """尝试为 cnn_v11 模型创建 C++ MCTS 引擎。
+
+    检测条件：
+    1. 模型名称为 "cnn_v11"
+    2. 对应目录下存在 TorchScript 模型文件（.pt）
+    3. cpp_mcts 模块可导入
+
+    Args:
+        model: 已加载的 Python 模型实例
+        ai_name: AI 名称，如 "cnn_v11.1"
+
+    Returns:
+        PolicyValueAiEngine 实例（使用 CppMctsAdapter），失败时返回 None
+    """
+    import os
+
+    # 仅 cnn_v11 模型尝试 C++ MCTS
+    if model.name != "cnn_v11":
+        return None
+
+    # 查找 TorchScript 模型文件（与 .pth 同目录）
+    if not hasattr(model, 'DEFAULT_MODEL_PATH'):
+        return None
+
+    model_dir = os.path.dirname(model.DEFAULT_MODEL_PATH)
+    ts_path = os.path.join(model_dir, "cnn_v11_torchscript.pt")
+    if not os.path.isfile(ts_path):
+        return None
+
+    # 尝试导入 C++ 模块并创建适配器
+    try:
+        from cpp.python.cpp_mcts_adapter import CppMctsAdapter
+        from ai.engine.policy_value import PolicyValueAiEngine
+
+        searcher = CppMctsAdapter(ts_path)
+        return PolicyValueAiEngine(
+            searcher,
+            temperature=1.0,
+            temp_steps=8,
+        )
+    except (ImportError, RuntimeError):
+        return None

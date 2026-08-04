@@ -65,6 +65,9 @@ class GomokuGUI:
             ai_player=ai_player,
         )
 
+        # 打印进程 ID，方便在任务管理器中定位
+        print(f"[GomokuGUI] PID={os.getpid()}, ai_model={ai_model}")
+
         # 创建 GUI 辅助对象
         self.helper = GUIHelper(self.controller, self.session)
 

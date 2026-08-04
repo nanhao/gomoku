@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstring>
+#include <iostream>
 #include <stdexcept>
 #include <string>
 
@@ -26,6 +27,9 @@ NeuralNet::NeuralNet(std::string model_path, int batch_size, bool use_gpu)
     if (use_gpu_ && torch::cuda::is_available()) {
         device = torch::Device(torch::kCUDA);
     }
+    std::cout << "[NeuralNet] use_gpu=" << use_gpu_
+              << " cuda_avail=" << torch::cuda::is_available()
+              << " device=" << device.str() << std::endl;
 
     // 加载 TorchScript 模型
     try {

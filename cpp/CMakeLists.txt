@@ -4,9 +4,41 @@ project(cpp_mcts LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# MSVC: 强制 UTF-8 编码（否则中文注释/字符串会报 C2001/C4819）
+if(MSVC)
+    add_compile_options(/utf-8 /wd4267 /wd4819)
+endif()
+
 # --- Find LibTorch ---
-# 用户需设置 Torch_DIR 环境变量或通过 -DCMAKE_PREFIX_PATH 传入
-find_package(Torch REQUIRED)
+# 手动设置路径以绕过 CUDA Toolkit 依赖（使用 pip 安装的 PyTorch）
+# 若需使用 find_package(Torch)，需安装 CUDA Toolkit
+if(NOT DEFINED TORCH_ROOT)
+    # 自动检测：通过 Python 获取 torch 安装路径
+    execute_process(
+        COMMAND python -c "import torch, os; print(os.path.dirname(torch.__file__))"
+        OUTPUT_VARIABLE _TORCH_ROOT
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    if(_TORCH_ROOT)
+        set(TORCH_ROOT "${_TORCH_ROOT}")
+    else()
+        message(FATAL_ERROR "Cannot detect PyTorch. Set -DTORCH_ROOT=... or install torch.")
+    endif()
+endif()
+message(STATUS "Using Torch root: ${TORCH_ROOT}")
+set(TORCH_INCLUDE_DIRS "${TORCH_ROOT}/include" "${TORCH_ROOT}/include/torch/csrc/api/include")
+set(TORCH_LIB_DIR "${TORCH_ROOT}/lib")
+
+# 链接必要的 LibTorch 库（CPU 推理仅需这些）
+set(TORCH_LIBRARIES
+    "${TORCH_LIB_DIR}/torch.lib"
+    "${TORCH_LIB_DIR}/torch_cpu.lib"
+    "${TORCH_LIB_DIR}/c10.lib"
+)
+
+# 添加 DLL 搜索路径（运行时需要）
+link_directories(${TORCH_LIB_DIR})
 
 # --- Find pybind11 (optional, only needed for Python extension) ---
 find_package(pybind11 QUIET)
@@ -17,6 +49,7 @@ add_library(mcts_core STATIC
     src/mcts_node.cpp
     src/neural_net.cpp
     src/mcts_searcher.cpp
+    src/thread_pool.cpp
 )
 
 target_include_directories(mcts_core PUBLIC

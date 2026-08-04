@@ -35,14 +35,14 @@ public:
     /** 创建搜索器
 
     @param model_path TorchScript 模型文件路径 (.pt)
-    @param num_simulations 每次搜索的总模拟次数，默认 200
-    @param c_puct PUCT 探索系数，默认 2.0
-    @param dirichlet_epsilon 狄利克雷噪声混合比例，默认 0.25
-    @param dirichlet_alpha 狄利克雷分布浓度参数，默认 0.03
-    @param num_threads MCTS 工作线程数，默认 4
-    @param batch_size GPU 推理攒批大小，默认 16
-    @param virtual_loss 虚拟损失值，默认 3.0
-    @param use_gpu 是否使用 GPU 推理，默认 true
+    @param num_simulations 每次搜索的总模拟次数，默认参见 mcts_config.h
+    @param c_puct PUCT 探索系数，默认参见 mcts_config.h
+    @param dirichlet_epsilon 狄利克雷噪声混合比例，默认参见 mcts_config.h
+    @param dirichlet_alpha 狄利克雷分布浓度参数，默认参见 mcts_config.h
+    @param num_threads MCTS 工作线程数，默认参见 mcts_config.h
+    @param batch_size GPU 推理攒批大小，默认参见 mcts_config.h
+    @param virtual_loss 虚拟损失值，默认参见 mcts_config.h
+    @param use_gpu 是否使用 GPU 推理，默认参见 mcts_config.h
     */
     MctsSearcher(std::string model_path, int num_simulations,
                  double c_puct, double dirichlet_epsilon,
