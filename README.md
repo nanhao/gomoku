@@ -659,6 +659,17 @@ python tests/run_tests.py
 
 #### 构建
 
+> **一键构建（推荐）**：项目根目录下运行 `build_cpp.bat`，自动检测 LibTorch/pybind11、
+> 配置 CMake、编译并复制 `.pyd` 到 `cpp/python/`。
+> ```cmd
+> build_cpp.bat              # 默认 Release 构建
+> build_cpp.bat --debug      # Debug 构建
+> build_cpp.bat --test       # 构建 + 运行 C++ 测试
+> build_cpp.bat --clean      # 清理后重新构建
+> ```
+
+手动构建（备选）：
+
 ```bash
 cd cpp
 mkdir build && cd build
@@ -674,8 +685,8 @@ from ai.engine.policy_value import PolicyValueAiEngine
 
 searcher = CppMctsAdapter(
     model_path="src/ai/models/cnn_v11/cnn_v11_torchscript.pt",
-    num_simulations=200,
-    num_threads=64,
+    num_simulations=800,
+    num_threads=32,
     batch_size=32,
     use_gpu=True,
 )
