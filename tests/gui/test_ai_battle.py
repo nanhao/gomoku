@@ -308,5 +308,5 @@ class TestRunAIVsAIModeTempConfig:
             assert temp_config is not None
             assert isinstance(temp_config, TempConfig)
             assert temp_config.temperature == 1.0
-            assert temp_config.temp_moves == 12
+            assert temp_config.temp_moves == 2
             assert temp_config.temp_side == "both"

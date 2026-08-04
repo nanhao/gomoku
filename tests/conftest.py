@@ -1,6 +1,7 @@
 """pytest 全局配置
 
 在 pytest 收集测试之前执行环境初始化：
+- 设置 matplotlib 非交互后端，避免 headless 环境产生 RuntimeWarning
 - 设置测试专用的 loss 日志目录，避免污染真实数据
 - 安装写入保护 hook，禁止测试向受保护目录写入文件
 - 配置 sys.path 确保项目根目录可导入
@@ -12,6 +13,11 @@ import tempfile
 import shutil
 import builtins
 import io as _io_module
+
+# 设置 matplotlib 非交互后端，避免在 headless 测试环境产生 RuntimeWarning
+# 必须在导入任何使用 matplotlib 的模块之前设置
+import matplotlib
+matplotlib.use('Agg')
 
 # 设置测试专用的 loss 日志目录，避免污染真实数据
 # 必须在导入任何 ai 模块之前设置，因为 ai/constants.py 在导入时就读取此环境变量
@@ -116,6 +122,12 @@ def pytest_configure(config):
     _io_module.open = _guarded_open
     config.addinivalue_line(
         "markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')"
+    )
+    # 过滤 loss_logger 的 matplotlib RuntimeWarning（headless 环境字体缺失等），
+    # matplotlib 已在 loss_logger 中设置为 Agg 后端，绘图降级是预期行为
+    config.addinivalue_line(
+        "filterwarnings",
+        "ignore::RuntimeWarning:ai.loss_logger"
     )
 
 

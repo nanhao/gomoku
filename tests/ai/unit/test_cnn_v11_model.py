@@ -64,24 +64,30 @@ class TestCNNV11Model(unittest.TestCase):
 
     def test_constructor_gen(self):
         """gen=1 加载 gen1 目录下的权重"""
-        # 创建 gen1 目录和假权重
-        import os
-        model_dir = os.path.dirname(self.ModelCls.DEFAULT_MODEL_PATH)
-        gen1_dir = os.path.join(model_dir, "gen1")
+        # 使用临时目录避免污染真实 model 目录
+        import shutil
+        temp_dir = tempfile.mkdtemp()
+        gen1_dir = os.path.join(temp_dir, "gen1")
         os.makedirs(gen1_dir, exist_ok=True)
         pth_path = os.path.join(gen1_dir, "cnn_v11.pth")
+        # DEFAULT_MODEL_PATH 设置为 temp_dir 下的路径（不含 gen1），
+        # NeuralNetworkModel.__init__ 在 gen=1 时会自动追加 gen1/ 子目录
+        fake_default_path = os.path.join(temp_dir, "cnn_v11.pth")
 
         try:
-            # 保存模型到 gen1 目录
             model = self.ModelCls(fresh=True)
-            model.save(pth_path)
-            # gen=1 加载
-            model2 = self.ModelCls(gen=1)
-            self.assertEqual(model2.gen, 1)
-            self.assertEqual(model2.full_name, "cnn_v11.1")
+            original_path = self.ModelCls.DEFAULT_MODEL_PATH
+            self.ModelCls.DEFAULT_MODEL_PATH = fake_default_path
+            try:
+                model.save(pth_path)
+                # gen=1 加载（DEFAULT_MODEL_PATH/gen1/cnn_v11.pth → 临时文件）
+                model2 = self.ModelCls(gen=1)
+                self.assertEqual(model2.gen, 1)
+                self.assertEqual(model2.full_name, "cnn_v11.1")
+            finally:
+                self.ModelCls.DEFAULT_MODEL_PATH = original_path
         finally:
-            import shutil
-            shutil.rmtree(gen1_dir, ignore_errors=True)
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
     # ---------- TC2.5 predict — 空棋盘输出 ----------
 

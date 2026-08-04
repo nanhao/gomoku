@@ -46,6 +46,8 @@ tests/app/primary/_test_saves/
 .qoder/repowiki/
 
 *.pth
+# TorchScript 模型文件由 .pth 导出，不纳入版本管理
+*.pt
 src/ai/merge_samples2/
 src/ai/merge_samples3/
 
