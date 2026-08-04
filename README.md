@@ -18,6 +18,16 @@ gomoku/
 │   ├── visualization/    # 热力图等可视化算法（无 UI 依赖）
 │   └── tools/            # 验收与辅助工具
 ├── tests/                # 测试脚本
+├── cpp/                  # C++ MCTS 模块（高性能多线程搜索器）
+│   ├── src/              # C++ 源代码
+│   │   ├── board_state.* # 棋盘状态与胜负判定
+│   │   ├── mcts_node.*   # MCTS 搜索树节点
+│   │   ├── neural_net.*  # LibTorch GPU 异步推理引擎
+│   │   ├── mcts_searcher.* # 多线程 MCTS 搜索器
+│   │   └── bindings.cpp  # pybind11 Python 桥接
+│   ├── tests/            # C++ 单元测试和集成测试
+│   ├── python/           # Python 适配层
+│   └── CMakeLists.txt    # CMake 构建配置
 ├── design/               # 设计文档
 └── temp/                 # 临时分析脚本等
 ```
@@ -638,6 +648,51 @@ python tests/run_tests.py
 - **训练方式**：AlphaGo Zero MCTS 自我对弈 + MSE(价值) + CrossEntropy(策略) + AdamW 正则化
 - **模型文件**：`src/ai/models/cnn_v8/gen{i}/cnn_v8.pth`（多代模型）
 - **结构图**：[cnn_v8_architecture.puml](src/ai/models/cnn_v8/cnn_v8_architecture.puml) / [cnn_v8_architecture.png](src/ai/models/cnn_v8/cnn_v8_architecture.png)
+
+### C++ MCTS 模块（设计 46）
+
+高性能 C++17 MCTS 搜索器，通过 pybind11 桥接为 Python 扩展模块，替代纯 Python 搜索逻辑。
+
+- **核心收益**：消除 Python GIL 瓶颈，支持多线程并行 MCTS + GPU 异步批量推理
+- **技术栈**：C++17 / LibTorch / pybind11 / CMake
+- **目标模型**：cnn_v11（TorchScript 导出）
+
+#### 构建
+
+```bash
+cd cpp
+mkdir build && cd build
+cmake .. -DCMAKE_PREFIX_PATH="$(python -c 'import torch; print(torch.utils.cmake_prefix_path)')"
+cmake --build . --config Release
+```
+
+#### 使用
+
+```python
+from cpp.python.cpp_mcts_adapter import CppMctsAdapter
+from ai.engine.policy_value import PolicyValueAiEngine
+
+searcher = CppMctsAdapter(
+    model_path="src/ai/models/cnn_v11/cnn_v11_torchscript.pt",
+    num_simulations=200,
+    num_threads=64,
+    batch_size=32,
+    use_gpu=True,
+)
+engine = PolicyValueAiEngine(searcher, temperature=1.0, temp_steps=8)
+move = engine.get_move(board, current_player, strategy="sampling")
+```
+
+#### 运行测试
+
+```bash
+# C++ 单元测试
+cd cpp/build && ctest --output-on-failure
+
+# Python 集成测试
+python -m pytest tests/integration/test_cpp_mcts_bridge.py -v
+python -m pytest tests/integration/test_cpp_mcts_e2e.py -v
+```
 
 ---
 

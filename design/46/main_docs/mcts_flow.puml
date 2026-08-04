@@ -1,0 +1,54 @@
+@startuml
+!theme plain
+
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title MCTS 单次 Simulation 流程 (Select → Evaluate → Backup)
+
+participant "MCTS 工作线程" as Worker
+participant "搜索树 (MctsNode)" as Tree
+participant "NeuralNet" as NN
+participant "GPU" as GPU
+
+== 阶段1: Selection (PUCT 选择 + Virtual Loss) ==
+
+Worker -> Tree: ① 从根节点开始
+loop 沿树下降直至叶节点
+    Worker -> Tree: ② select_child(c_puct, c_virtual_loss)
+    Tree --> Worker: action 索引
+    note right of Tree
+        PUCT: Q + c_puct * P * sqrt(ΣN) / (1+N)
+        VL 施加: N+=VL, W-=VL
+    end note
+    Worker -> Tree: ③ 进入子节点
+end
+
+alt 叶节点是终局状态
+    Worker -> Worker: ④ 终局 value = 1.0/-1.0/0.0
+    note right of Worker: 胜=1.0, 负=-1.0, 平=0.0
+    Worker -> Tree: ⑤ backup(value)
+    note right of Tree: 沿路径回传，每层取反
+else 叶节点非终局
+    == 阶段2: Evaluation (神经网络评估) ==
+    Worker -> Worker: ⑥ 编码棋盘 → 3×15×15 张量
+    Worker -> NN: ⑦ predict(encoded_board)
+    note right of NN: 异步入队，立即返回 future
+    NN -> GPU: ⑧ 攒批后 GPU forward
+    GPU --> NN: ⑨ (policy, value)
+    NN --> Worker: ⑩ future.get() 返回结果
+
+    == 阶段3: Expansion (展开子节点) ==
+    Worker -> Tree: ⑪ expand(action_priors, legal_actions)
+    note right of Tree: 为所有合法动作创建子节点
+
+    == 阶段4: Backup (回传更新) ==
+    Worker -> Tree: ⑫ backup(-value)
+    note right of Tree
+        每层取反 value
+        撤销 Virtual Loss
+        更新 N += 1, W += v, Q = W/N
+    end note
+end
+
+@enduml

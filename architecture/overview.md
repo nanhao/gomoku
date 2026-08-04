@@ -7,8 +7,11 @@
 - CLI 和 GUI 双界面
 - AlphaGo Zero 风格的 MCTS 强化学习训练体系
 - 多代 CNN/FC 神经网络模型，支持迭代进化
+- C++ MCTS 高性能推理引擎（多线程 + GPU 异步推理）
 
 **技术栈**：Python 3.8+ / PyTorch / tkinter / numpy / matplotlib / Flask
+
+**C++ MCTS 扩展**：C++17 / LibTorch / pybind11 / CMake — 高性能多线程 MCTS 搜索器（详见 [设计 46](../design/46/main_docs/overview.md)）
 
 ---
 
@@ -185,6 +188,26 @@ AlphaGo Zero 风格的蒙特卡洛树搜索，支持 Batch MCTS + Virtual Loss�
 - **Backup**：沿路径回传，每层价值取反；VL 撤销后执行真实回传
 - **Dirichlet 噪声**：根节点施加 \(\alpha=0.03, \epsilon=0.25\)
 - **子树复用**：`advance_root` 推进根节点复用搜索树
+
+### C++ MCTS 引擎（`cpp/`）
+
+基于 C++17/LibTorch 的高性能 MCTS 实现，通过 pybind11 桥接为 Python 扩展（详见 [设计 46](../design/46/main_docs/overview.md)）。
+
+**核心模块**：
+
+| 模块 | 文件 | 职责 |
+|------|------|------|
+| `BoardState` | `board_state.h/cpp` | 棋盘编码、胜负判定、相对视角编码 |
+| `MctsNode` | `mcts_node.h/cpp` | 并发安全搜索树节点（PUCT/VL/Backup） |
+| `NeuralNet` | `neural_net.h/cpp` | LibTorch 异步批量推理（生产者-消费者） |
+| `MctsSearcher` | `mcts_searcher.h/cpp` | 多线程搜索编排、Dirichlet 噪声、子树复用 |
+
+**Python 桥接**：
+- `bindings.cpp` — pybind11 定义，暴露 `cpp_mcts.MctsSearcher`
+- `cpp_mcts_adapter.py` — 适配器，接口兼容 Python `MCTSSearcher`
+
+**线程模型**：N 个 MCTS 工作线程 + 1 个 GPU 推理线程（生产者-消费者模式）
+`MCTS workers → request queue → GPU thread → batch inference → wake workers`
 
 ### 4. 两类 AI 引擎
 

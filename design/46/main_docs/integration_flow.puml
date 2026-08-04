@@ -1,0 +1,65 @@
+@startuml
+!theme plain
+
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title Python → C++ MCTS 完整调用链路
+
+participant "训练脚本\n(mcts_self_play.py)" as Script
+participant "PolicyValueAiEngine\n(Python)" as Engine
+participant "CppMctsAdapter\n(Python)" as Adapter
+participant "MctsSearcher\n(C++ pybind11)" as Searcher
+participant "NeuralNet\n(C++)" as NN
+participant "LibTorch / GPU" as GPU
+
+== 引擎初始化 ==
+
+Script -> Engine: ① create_engine("cnn_v11")
+Engine -> Adapter: ② CppMctsAdapter(model_path, ...)
+Adapter -> Searcher: ③ new MctsSearcher(...)
+note right of Searcher
+    加载 TorchScript 模型
+    启动 N 个 MCTS 线程
+    启动 1 个 GPU 推理线程
+end note
+
+== 每步落子决策 ==
+
+Script -> Engine: ④ get_move(board, current_player, "sampling")
+Engine -> Engine: ⑤ board_to_vector → 226 维状态
+Engine -> Adapter: ⑥ search(state)
+Adapter -> Searcher: ⑦ search(state)
+note right of Searcher
+    N 线程并行 MCTS × num_simulations 次
+    每次 simulation: Select → GPU Eval → Backup
+end note
+Searcher --> Adapter: ⑧ MctsResult
+note right: (visit_counts, root_value, root_policy)
+Adapter --> Engine: ⑨ (visit_counts, root_value, root_policy)
+
+Engine -> Engine: ⑩ 温度采样选择 action
+Engine -> Engine: ⑪ action → (x, y) 坐标
+Engine --> Script: ⑫ MoveDecision(x, y, mcts_visit_counts)
+
+== 子树复用 ==
+
+Script -> Engine: ⑬ after_move(x, y)
+Engine -> Adapter: ⑭ advance_root(x * 15 + y)
+Adapter -> Searcher: ⑮ advance_root(action)
+note right of Searcher
+    提升子节点为新根
+    释放兄弟子树
+end note
+Searcher --> Adapter: ⑯ bool (成功/失败)
+Adapter --> Engine: ⑰ bool
+
+== 循环至对局结束 ==
+
+loop 直至终局
+    Script -> Engine: ④ get_move(...)
+    Engine -> Engine: ⑤-⑥-⑦-⑧-⑨
+    Engine -> Engine: ⑩-⑪-⑫ 落子 + ⑬-⑰ 复用
+end
+
+@enduml

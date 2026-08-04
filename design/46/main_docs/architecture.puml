@@ -1,0 +1,85 @@
+@startuml
+!theme plain
+
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam classFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+package "C++ MCTS 核心模块" {
+  class MctsSearcher {
+    + MctsSearcher(model_path, num_simulations, c_puct, dirichlet_epsilon, dirichlet_alpha, num_threads, batch_size, virtual_loss, use_gpu)
+    + search(state: vector<int>) : MctsResult
+    + advance_root(action: int) : bool
+  }
+
+  class MctsNode {
+    + MctsNode(parent: MctsNode*, prior_prob: double)
+    + select_child(c_puct: double, c_virtual_loss: double) : int
+    + expand(action_priors: vector<float>, legal_actions: vector<int>)
+    + backup(leaf_value: float)
+    + is_leaf() : bool
+    + get_visit_counts() : vector<int>
+    + get_root_value() : float
+    + get_root_policy() : vector<float>
+  }
+
+  class NeuralNet {
+    + NeuralNet(model_path: string, batch_size: int, use_gpu: bool)
+    + ~NeuralNet()
+    + predict(encoded_board: vector<float>) : future<NeuralNetResult>
+  }
+
+  class BoardState {
+    + BoardState(board: vector<int>, current_player: int)
+    + has_winner() : bool
+    + get_winner() : int
+    + is_full() : bool
+    + is_terminal() : bool
+    + terminal_value() : float
+    + get_board() : const vector<int>&
+    + get_legal_actions() : vector<int>
+    + apply_action(action: int) : BoardState
+    + encode_for_network() : vector<float>
+  }
+
+  struct MctsResult {
+    + visit_counts: vector<int>
+    + root_value: float
+    + root_policy: vector<float>
+  }
+
+  struct NeuralNetResult {
+    + policy: vector<float>
+    + value: float
+  }
+}
+
+package "LibTorch 依赖" {
+  class torch_jit_Module <<external>> {
+  }
+}
+
+package "Python 层" {
+  class CppMctsAdapter {
+    + __init__(model_path, ...)
+    + search(state, log_key=None)
+    + advance_root(action)
+  }
+  class PolicyValueAiEngine {
+    + get_move(board, current_player, strategy)
+    + after_move(x, y)
+  }
+}
+
+' --- 关系 ---
+MctsSearcher "1" --> "1" NeuralNet : 拥有并调用推理
+MctsSearcher "1" --> "*" MctsNode : 管理搜索树
+MctsSearcher ..> MctsResult : 返回
+MctsSearcher ..> BoardState : 使用终局检测
+MctsNode "1" --> "*" MctsNode : 父子树结构
+NeuralNet ..> torch_jit_Module : 使用 LibTorch
+NeuralNet ..> NeuralNetResult : 返回
+
+CppMctsAdapter --> MctsSearcher : 构造并委托
+PolicyValueAiEngine --> CppMctsAdapter : 依赖注入
+
+@enduml

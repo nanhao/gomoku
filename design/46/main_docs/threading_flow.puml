@@ -1,0 +1,46 @@
+@startuml
+!theme plain
+
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title 多线程 MCTS + GPU 推理协作流程
+
+participant "主线程" as Main
+participant "MCTS 线程 T1..Tn" as Workers
+participant "GPU 推理线程" as GPUThread
+participant "GPU" as GPU
+
+== 初始化 ==
+Main -> GPUThread: 1. 启动 GPU 推理线程
+Main -> Workers: 2. 分配 N 个 simulation 任务到线程池
+
+== 并行执行 ==
+Workers -> Workers: 3. 各线程并发执行 Select (PUCT + VL)
+note right of Workers: Virtual Loss 保证路径多样化
+
+Workers -> GPUThread: 4. 投递局面编码到请求队列
+note right of GPUThread: MCTS 线程阻塞等待 future
+
+== GPU 攒批推理 ==
+GPUThread -> GPUThread: 5. 收集 batch_size 个请求
+GPUThread -> GPU: 6. torch::cat 合并为 batch → forward
+GPU --> GPUThread: 7. 返回 (policy_batch, value_batch)
+
+== 分发结果 ==
+GPUThread --> Workers: 8. future.set_value 逐线程唤醒
+
+== Expand + Backup ==
+Workers -> Workers: 9. 各线程: Expand 创建子节点
+Workers -> Workers: 10. 各线程: Backup 沿路径回传更新
+note right of Workers
+    expand: 创建子节点（需锁）
+    backup: 沿路径回传, 取反 value,
+    撤销 VL, 原子更新 N/W/Q
+end note
+
+== 汇总 ==
+Main <- Workers: 11. 所有 simulation 完成
+Main -> Main: 12. 从根节点统计 visit_counts, 组装 MctsResult
+
+@enduml
