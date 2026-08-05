@@ -172,6 +172,7 @@ def main() -> None:
         mcts_config=mcts_config,
         lr=args.lr,
         weight_decay=args.weight_decay,
+        device=args.device,
     )
 
     # 执行训练

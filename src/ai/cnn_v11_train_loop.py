@@ -57,6 +57,7 @@ class CnnV11TrainLoop:
         mcts_config: MctsSelfPlayConfig,
         lr: float = 0.001,
         weight_decay: float = 1e-4,
+        device: str = "cuda",
     ):
         """初始化训练循环
 
@@ -73,6 +74,7 @@ class CnnV11TrainLoop:
             mcts_config: MCTS 对战超参数配置
             lr: 学习率
             weight_decay: AdamW 权重衰减
+            device: 训练设备（"cuda" 或 "cpu"）
 
         Raises:
             ValueError: 模型不存在或 spec 无效
@@ -89,6 +91,9 @@ class CnnV11TrainLoop:
             model_spec, lr=lr, weight_decay=weight_decay
         )
 
+        # 设置训练设备
+        self._trainer.device = torch.device(device)
+
         # Checkpoint 临时目录
         self._checkpoint_dir: str = os.path.join("temp", "train_checkpoint")
         os.makedirs(self._checkpoint_dir, exist_ok=True)
@@ -96,9 +101,6 @@ class CnnV11TrainLoop:
         # 导出 best TorchScript（缓存，后续评估复用）
         self._best_ts_path: str = os.path.join(self._checkpoint_dir, "best.pt")
         self._export_torchscript(self._trainer.model.network, self._best_ts_path)
-
-        # 保存 best pth 路径用于最终对比
-        self._best_pth_path: str = self._trainer.model.DEFAULT_MODEL_PATH
 
         # 创建组件
         self._reader: SampleBufferReader = SampleBufferReader(buffer_dir)
@@ -111,6 +113,9 @@ class CnnV11TrainLoop:
         self._updates_per_checkpoint: int = updates_per_checkpoint
         self._eval_games: int = eval_games
         self._max_consecutive_failures: int = max_consecutive_failures
+
+        # 密集日志步数计数器（独立于 total_updates，从 1 开始）
+        self._step_counter: int = 0
 
     # ---------- 公开方法 ----------
 
@@ -244,12 +249,13 @@ class CnnV11TrainLoop:
 
         total_loss = float(result["total_loss"])
 
-        # 记录日志
+        # 记录日志（使用独立步数计数器，不受 checkpoint 刷新影响）
         grad_norm = 0.0
         if result.get("grad_norms"):
             grad_norm = sum(result["grad_norms"].values())
+        self._step_counter += 1
         self._loss_logger.log_dense(
-            self._loss_logger._read_entries().__len__() + 1,
+            self._step_counter,
             total_loss,
             grad_norm,
         )

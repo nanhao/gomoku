@@ -99,6 +99,7 @@ def test_defaults_applied():
     assert call_kwargs["max_consecutive_failures"] == 3
     assert call_kwargs["lr"] == 0.001
     assert call_kwargs["weight_decay"] == 1e-4
+    assert call_kwargs["device"] == "cuda"
 
 
 # ========== TC-CLI-05: 全部自定义参数 ==========
@@ -120,6 +121,7 @@ def test_all_params_custom():
         "--c-puct", "1.5",
         "--lr", "0.0005",
         "--weight-decay", "0.01",
+        "--device", "cpu",
     ]
     with patch.object(sys, "argv", test_args):
         with patch("ai.scripts.mcts_train_cnn_v11.CnnV11TrainLoop") as mock_loop:
@@ -143,6 +145,7 @@ def test_all_params_custom():
     assert call_kwargs["max_consecutive_failures"] == 5
     assert call_kwargs["lr"] == 0.0005
     assert call_kwargs["weight_decay"] == 0.01
+    assert call_kwargs["device"] == "cpu"
     # 验证 MCTS 配置
     assert call_kwargs["mcts_config"].simulations == 400
     assert call_kwargs["mcts_config"].c_puct == 1.5
