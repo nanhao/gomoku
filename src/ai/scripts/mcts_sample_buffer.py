@@ -40,26 +40,6 @@ from cpp.python.cpp_sample_buffer_adapter import CppMctsSampleBufferAdapter
 from config.mcts import MCTS_VIRTUAL_LOSS
 
 
-def _print_gpu_stats() -> None:
-    """打印 GPU 推理线程运行时监控统计"""
-    try:
-        import cpp_mcts  # type: ignore[import-not-found]
-        stats = cpp_mcts.get_gpu_stats()
-        if stats.total_batches == 0:
-            return  # 没有推理发生，跳过
-
-        print(f"\n=== GPU 推理监控 ===")
-        print(f"总批次数: {stats.total_batches}")
-        print(f"总请求数: {stats.total_requests}")
-        print(f"平均批次大小: {stats.avg_batch_size():.1f}")
-        print(f"批次范围: [{stats.batch_size_min}, {stats.batch_size_max}]")
-        print(f"队列峰值: {stats.queue_peak_size}")
-        print(f"GPU 等待比例: {stats.wait_ratio() * 100:.1f}%  "
-              f"({'GPU 利用率高' if stats.wait_ratio() < 0.3 else 'GPU 空等较多，瓶颈在 MCTS 生产端' if stats.wait_ratio() > 0.6 else '正常'})")
-    except Exception:
-        pass  # cpp_mcts 不可用时静默跳过
-
-
 # ---------- 中断处理 ----------
 
 _interrupted = False
@@ -176,8 +156,6 @@ def _print_statistics(adapter: CppMctsSampleBufferAdapter, elapsed: float) -> No
 
     print(f"\n[耗时] 总耗时 {elapsed:.1f}s")
 
-    _print_gpu_stats()
-
     print(f"\n[完成] 缓冲区状态: {summary['total_samples']} 样本, "
           f"{summary['chunk_count']} chunk, 目录: {adapter._buffer._buffer_dir}")
 
@@ -226,7 +204,6 @@ def run_sample_buffer(args) -> None:
 
         # 轮询进度并实时打印
         last_print_time = 0.0
-        last_gpu_print = 0.0
         global _interrupted
 
         while not adapter.is_finished():
@@ -245,10 +222,6 @@ def run_sample_buffer(args) -> None:
                       f"{stats['buffer_chunks']} chunk | "
                       f"淘汰: {stats['evicted_samples']}")
                 last_print_time = now
-            # 每 5 秒打印一次 GPU 实时统计
-            if now - last_gpu_print >= 5.0:
-                _print_gpu_stats()
-                last_gpu_print = now
             time.sleep(0.1)
 
         # 等待所有进行中的对局完成并落盘
