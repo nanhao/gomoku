@@ -12,6 +12,10 @@
 
 #include <Python.h>
 
+#ifdef _WIN32
+#include <Windows.h>
+#endif
+
 #include "game_runner.h"
 #include "mcts_config.h"
 #include "mcts_searcher.h"
@@ -83,6 +87,12 @@ static void load_mcts_config(py::module_& m) {
 
 PYBIND11_MODULE(cpp_mcts, m) {
     m.doc() = "C++ MCTS 搜索器核心模块 — 多线程 + GPU 异步批量推理";
+
+    // Windows 控制台默认 GBK(936) code page，std::cout 输出 UTF-8 字面量会乱码。
+    // 设置为 UTF-8(65001) 使中文输出正常显示。
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+#endif
 
     // ---- 加载运行时配置（必须在绑定定义之前，因为绑定使用配置值）----
     load_mcts_config(m);

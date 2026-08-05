@@ -17,10 +17,20 @@ import sys
 import time
 from typing import List
 
-# 确保项目根在 sys.path 中
-_proj_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if _proj_root not in sys.path:
-    sys.path.insert(0, _proj_root)
+# 确保项目根、src 和 cpp\python 在 sys.path 中
+# 脚本路径: src/ai/scripts/mcts_battle_cpp.py，4 层 dirname 到项目根
+_proj_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+_src_dir = os.path.join(_proj_root, 'src')
+_cpp_py_dir = os.path.join(_proj_root, 'cpp', 'python')
+for _p in (_proj_root, _src_dir, _cpp_py_dir):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+# 将 torch\lib 加入 PATH（必须在导入 cpp_mcts 之前，否则无法加载 CUDA DLL）
+import torch  # noqa: E402
+_torch_lib_dir = os.path.join(os.path.dirname(os.path.dirname(torch.__file__)), 'lib')
+if _torch_lib_dir not in os.environ.get('PATH', ''):
+    os.environ['PATH'] = _torch_lib_dir + os.pathsep + os.environ.get('PATH', '')
 
 from ai.scripts.mcts_config import MctsSelfPlayConfig
 from cpp.python.cpp_battle_game_result import CppBattleGameResult
@@ -50,15 +60,11 @@ def _print_gpu_stats() -> None:
 
 # ---------- 常量 ----------
 
-# 中断标志位，由信号处理器设置
-_interrupted = False
-
 
 def _signal_handler(signum, frame):
-    """SIGINT 信号处理器 — 设置中断标志"""
-    global _interrupted
-    _interrupted = True
-    print("\n[中断] 收到 Ctrl+C，正在等待进行中的对局完成...")
+    """SIGINT 信号处理器 — 直接终止进程"""
+    print("\n[中断] 收到 Ctrl+C，立即终止进程")
+    os._exit(0)
 
 
 # ---------- 参数解析 ----------
@@ -198,9 +204,7 @@ def run_battle(args) -> None:
     model2_display = args.ai2
     print(f"[模型] model1={model1_display}, model2={model2_display}")
 
-    # 注册 SIGINT 信号处理器
-    global _interrupted
-    _interrupted = False
+    # 注册 SIGINT 信号处理器（直接终止，不等待）
     original_handler = signal.signal(signal.SIGINT, _signal_handler)
 
     adapter = None
@@ -222,8 +226,6 @@ def run_battle(args) -> None:
         last_print_time = 0.0
         last_gpu_print = 0.0
         while not adapter.is_finished():
-            if _interrupted:
-                break
             completed, total = adapter.get_progress()
             now = time.time()
             # 每秒最多打印一次进度
