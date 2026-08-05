@@ -449,6 +449,44 @@ python src/ai/scripts/mcts_sample_buffer.py --model cnn_v11.1 --games 500 --work
 python src/ai/scripts/mcts_sample_buffer.py --model cnn_v11.1 --games 2000 --output-dir my_buffer
 ```
 
+#### CNN v11 样本缓冲区训练（设计 50）
+
+> 从持续运行的样本缓冲区中随机抽取 mini-batch 进行增量训练，每 N 步产生 checkpoint，通过 C++ MCTS 对战评估决定是否晋升。
+
+```bash
+python src/ai/scripts/mcts_train_cnn_v11.py --model <注册名.代数> [选项]
+```
+
+**选项**：
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--model` | **必需** | 初始模型 spec（如 cnn_v11.1），同时作为初始 best |
+| `--buffer-dir` | `sample_buffer` | 样本缓冲区目录 |
+| `--batch-size` | 512 | 每个 mini-batch 的样本数 |
+| `--updates-per-checkpoint` | 50 | 多少步后触发 checkpoint 评估 |
+| `--eval-games` | 50 | checkpoint 评估对战局数 |
+| `--max-failures` | 3 | 连续评估失败上限 |
+| `--simulations` | 800 | 评估时每步 MCTS 模拟次数 |
+| `--c-puct` | 2.0 | PUCT 探索系数 |
+| `--lr` | 0.001 | 学习率 |
+| `--weight-decay` | 1e-4 | AdamW 权重衰减 |
+| `--device` | `cuda` | 训练设备 |
+
+> **训练闭环**：随机 mini-batch → checkpoint 保存 → TorchScript 导出 → C++ MCTS 对战评估。
+> 胜率 ≥ 55% 晋升到 gen{N+1} 并停止；连续 3 次评估失败也停止。
+> 损失函数：MSE(价值) + CrossEntropy(策略)，AdamW 优化器。
+
+**示例**：
+
+```bash
+# 基本训练：从样本缓冲区训练 cnn_v11.1
+python src/ai/scripts/mcts_train_cnn_v11.py --model cnn_v11.1 --buffer-dir sample_buffer
+
+# 自定义参数
+python src/ai/scripts/mcts_train_cnn_v11.py --model cnn_v11.3 --batch-size 256 --eval-games 30 --max-failures 5
+```
+
 #### GPU 推理攒批配置
 
 GPU 推理线程采用**动态区间攒批**机制，通过 `cpp/python/mcts_config.json` 配置：

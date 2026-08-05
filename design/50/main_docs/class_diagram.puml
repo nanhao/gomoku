@@ -1,0 +1,155 @@
+@startuml
+title CNN v11 训练脚本 — 类图与依赖关系
+
+' ============ 新增类 ============
+
+class CnnV11TrainLoop {
+    + __init__(model_spec, buffer_dir, batch_size, updates_per_checkpoint, eval_games, max_consecutive_failures, mcts_config, lr, weight_decay)
+    + run() : TrainLoopResult
+}
+
+class SampleBufferReader {
+    + __init__(buffer_dir: str)
+    + random_sample(n: int) : List[dict]
+    + refresh() : int
+    + total_samples() : int
+}
+
+class CheckpointEvaluator {
+    + __init__(mcts_config: MctsSelfPlayConfig)
+    + evaluate(checkpoint_ts_path: str, best_ts_path: str, num_games: int, temp_steps: int) : float
+}
+
+class TrainLoopResult <<dataclass>> {
+    + stopped_by : str
+    + promoted_to : Optional[str]
+    + total_updates : int
+    + checkpoints_evaluated : int
+    + best_win_rate : float
+    + loss_history : List[float]
+}
+
+' ============ 复用类（不改动） ============
+
+class DualHeadTrainer <<abstract>> {
+    + _train_step(inputs, pi_targets, z_targets) : Dict[str, float]
+    + save_model(output_path: str) : str
+    + model : NeuralNetworkModel
+    + optimizer : AdamW
+}
+
+class CNNV11Trainer {
+    + model_name : str
+    + _create_model(fresh: bool) : CNNV11Model
+    + _convert_inputs(inputs: List) : Tensor
+}
+
+class CNNV11Model {
+    + network : CNNV11Network
+    + save(path: str) : str
+}
+
+class CNNV11Network <<torch.nn.Module>> {
+    + forward(x) : (Tensor, Tensor)
+}
+
+class CppMctsBattleAdapter {
+    + __init__(model1_spec, model2_spec, num_games, config, num_workers)
+    + start() : None
+    + is_finished() : bool
+    + wait_completion() : None
+    + get_results() : List[CppBattleGameResult]
+    + get_progress() : Tuple[int, int]
+}
+
+class CppBattleGameResult <<dataclass>> {
+    + game_index : int
+    + winner : int
+    + model1_color : int
+    + model2_color : int
+    + model1_won : bool
+    + model2_won : bool
+    + move_count : int
+}
+
+class MctsSelfPlayConfig <<dataclass>> {
+    + simulations : int
+    + c_puct : float
+    + temp_steps : int
+    + temperature : float
+    + dirichlet_epsilon : float
+    + dirichlet_alpha : float
+    + virtual_loss : float
+    + use_prior : bool
+}
+
+class LossLogger {
+    + __init__(model_name, log_dir, session_dir, ...)
+    + log(epoch, loss, grad_norm) : None
+    + log_dense(step, loss, grad_norm) : None
+    + flush() : None
+    + plot(output_path) : str
+}
+
+class SampleBufferManager {
+    + __init__(buffer_dir, max_size, chunk_games)
+    + ingest(game_start, game_end, samples) : int
+    + get_total_samples() : int
+    + get_summary() : dict
+}
+
+' ============ 关系 ============
+
+CnnV11TrainLoop --> CNNV11Trainer : 持有，调用 _train_step
+CnnV11TrainLoop --> SampleBufferReader : 持有，调用 random_sample / refresh
+CnnV11TrainLoop --> CheckpointEvaluator : 持有，调用 evaluate
+CnnV11TrainLoop --> LossLogger : 持有，记录训练指标
+CnnV11TrainLoop ..> TrainLoopResult : 返回
+
+CNNV11Trainer --|> DualHeadTrainer : 继承
+CNNV11Trainer --> CNNV11Model : _create_model 创建
+CNNV11Model --> CNNV11Network : 持有 network
+
+CheckpointEvaluator --> CppMctsBattleAdapter : 创建并调用
+CheckpointEvaluator --> MctsSelfPlayConfig : 配置
+
+CppMctsBattleAdapter ..> CppBattleGameResult : 返回对战结果
+
+SampleBufferReader --> SampleBufferManager : 读取 manifest + chunk（只读）
+SampleBufferReader ..> "sample_buffer/ chunk JSON" : 读取
+
+' 布局分组
+together {
+    rectangle "新增模块" as NewModules #LightGreen {
+        CnnV11TrainLoop
+        SampleBufferReader
+        CheckpointEvaluator
+        TrainLoopResult
+    }
+}
+
+together {
+    rectangle "复用 AI 模块（不改动）" as AIModules #LightBlue {
+        DualHeadTrainer
+        CNNV11Trainer
+        CNNV11Model
+        CNNV11Network
+    }
+}
+
+together {
+    rectangle "复用 C++ MCTS 模块（不改动）" as CppModules #LightYellow {
+        CppMctsBattleAdapter
+        CppBattleGameResult
+        MctsSelfPlayConfig
+    }
+}
+
+Together {
+    rectangle "复用工具模块（不改动）" as UtilModules #LightGray {
+        LossLogger
+        SampleBufferManager
+    }
+}
+
+@enduml

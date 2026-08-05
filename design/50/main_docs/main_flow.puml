@@ -1,0 +1,91 @@
+@startuml
+title CNN v11 训练脚本 — 关键流程交互
+
+actor User
+
+participant "mcts_train_cnn_v11.py\n(CLI入口)" as CLI
+participant "CnnV11TrainLoop\n(训练编排)" as Loop
+participant "SampleBufferReader\n(样本读取)" as Reader
+participant "CNNV11Trainer\n(DualHeadTrainer)" as Trainer
+participant "CheckpointEvaluator\n(评估器)" as Evaluator
+participant "CppMctsBattleAdapter\n(C++ MCTS对战)" as Battle
+participant "GPU\n(LibTorch推理)" as GPU
+database "sample_buffer/\n(chunk JSON)" as BufferDB
+database "src/ai/models/cnn_v11/\ngen{N}/" as ModelDir
+
+== 初始化 ==
+
+User -> CLI : --model cnn_v11.1 --buffer-dir sample_buffer
+CLI -> Loop : 创建 CnnV11TrainLoop(model_spec, buffer_dir, ...)
+
+Loop -> ModelDir : 加载初始模型 cnn_v11.1
+ModelDir --> Loop : best_model (pth)
+
+Loop -> Loop : 导出 best TorchScript → best.pt
+
+Loop -> Reader : 创建 SampleBufferReader(buffer_dir)
+Reader -> BufferDB : 读取 manifest.json + 所有 chunk
+BufferDB --> Reader : 全部样本列表
+Reader --> Loop : reader 就绪
+
+Loop -> Evaluator : 创建 CheckpointEvaluator(mcts_config)
+
+== 训练循环 ==
+
+loop 每轮 checkpoint（N 次 mini-batch）
+    Loop -> Loop : 刷新缓冲区（refresh）
+
+    loop 50 次 mini-batch
+        Loop -> Reader : random_sample(512)
+        Reader --> Loop : 512 条样本 [{state, pi, z}, ...]
+
+        Loop -> Trainer : _convert_inputs(states)
+        Trainer --> Loop : inputs_tensor (512, 3, 15, 15)
+
+        Loop -> Trainer : _train_step(inputs, pi_targets, z_targets)
+        Trainer -> GPU : 前向传播 (512, 3, 15, 15)
+        GPU --> Trainer : p_log (512, 225), v (512, 1)
+        Trainer -> Trainer : loss = MSE(v, z) + CE(p_log, pi)
+        Trainer -> GPU : 反向传播 + optimizer.step()
+        GPU --> Trainer : 权重更新完成
+
+        Trainer --> Loop : {value_loss, policy_loss, total_loss}
+        Loop -> Loop : 记录 loss，打印日志
+    end
+
+    == Checkpoint 评估 ==
+
+    Loop -> Loop : 保存 checkpoint → temp/checkpoint.pth
+    Loop -> Loop : 导出 checkpoint TorchScript → temp/checkpoint.pt
+
+    Loop -> Evaluator : evaluate(checkpoint.pt, best.pt, games=50, temp_steps=2)
+    Evaluator -> Battle : CppMctsBattleAdapter(checkpoint, best, 50, config)
+    Battle -> GPU : 50 局并行 MCTS 搜索（共享线程池 + GPU）
+    GPU --> Battle : 推理结果
+
+    Battle --> Evaluator : 50 局对战结果
+    Evaluator -> Evaluator : 计算 checkpoint 胜率
+    Evaluator --> Loop : win_rate (0.0 ~ 1.0)
+
+    alt win_rate >= 55% (晋升)
+        Loop -> ModelDir : 移动 checkpoint → gen{N+1}/cnn_v11.pth
+        Loop -> ModelDir : 移动 checkpoint TorchScript → gen{N+1}/cnn_v11_torchscript.pt
+        Loop -> Loop : 生成 loss 曲线图
+        Loop --> CLI : TrainLoopResult(stopped_by="promoted", promoted_to="cnn_v11.N+1")
+        CLI --> User : [晋升] checkpoint 胜率 XX%，晋升为 cnn_v11.N+1
+
+    else win_rate < 55% (失败)
+        Loop -> Loop : consecutive_failures += 1
+        Loop -> Loop : 打印评估结果
+
+        alt consecutive_failures >= 3
+            Loop -> Loop : 生成 loss 曲线图
+            Loop --> CLI : TrainLoopResult(stopped_by="max_failures")
+            CLI --> User : [停止] 连续 3 次评估失败，训练终止
+        else 继续训练
+            Loop -> Loop : 从 working model 继续
+        end
+    end
+end
+
+@enduml

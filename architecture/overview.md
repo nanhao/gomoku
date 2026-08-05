@@ -79,6 +79,9 @@ src/
 │   ├── registry.py        统一模型注册表（懒加载 + 多代支持）
 │   ├── constants.py       常量（路径、策略名）
 │   ├── sample_buffer_manager.py  样本缓冲区管理器（FIFO+chunk管理）
+│   ├── sample_buffer_reader.py   样本缓冲区读取器（随机抽样）
+│   ├── checkpoint_evaluator.py   checkpoint MCTS 对战评估器
+│   ├── cnn_v11_train_loop.py     CNN v11 训练-评估循环编排器
 │   │
 │   ├── engine/            AI 引擎层——统一落子接口
 │   │   ├── ai_engine.py      AIEngine 抽象基类 + MoveDecision
@@ -147,6 +150,7 @@ src/
 │       ├── value_self_play.py    价值头自对弈（cnn_v10）
 │       ├── value_self_play_worker.py  价值头自对弈 Worker
 │       └── value_train.py        价值头训练（cnn_v10）
+│       └── mcts_train_cnn_v11.py  CNN v11 样本缓冲区训练
 │
 ├── gui/           # GUI 界面（tkinter）
 │   ├── main.py         主窗口
@@ -304,6 +308,13 @@ C++ MCTS样本生成: mcts_sample_buffer.py → CppMctsSampleBufferAdapter
                   → C++ GameRunner（自对弈模式，D4增强）
                   → SampleBufferManager（FIFO 缓冲区，每10局chunk落盘）
                   → 输出 sample_buffer/ 目录下的 chunk JSON 文件
+
+CNN v11 缓冲区训练: mcts_train_cnn_v11.py → CnnV11TrainLoop
+                  → SampleBufferReader（随机抽样）
+                  → CNNV11Trainer._train_step（MSE+CrossEntropy）
+                  → CheckpointEvaluator（C++ MCTS 对战评估）
+                  → 胜率 ≥ 55% → 晋升 gen{N+1}
+                  → 连续 3 次失败 → 停止
 ```
 
 ---
@@ -345,4 +356,5 @@ tests/
 | 价值头自对弈 | `python src/ai/scripts/value_self_play.py --model cnn_v10.1 --games 100` |
 | 价值头训练 | `python src/ai/scripts/value_train.py --model cnn_v10.1 --train-from-dir samples --epochs 100` |
 | 迭代进化 | `python src/ai/iterative_train.py --ai1 cnn_v4.99 --ai2 cnn_v4.100 --sample_dir samples` |
+| CNN v11 缓冲区训练 | `python src/ai/scripts/mcts_train_cnn_v11.py --model cnn_v11.1 --buffer-dir sample_buffer` |
 | 运行测试 | `python -m pytest tests/ -v -s` |
