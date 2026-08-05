@@ -52,6 +52,44 @@ GameRunner::GameRunner(const std::string& model1_path,
     results_.resize(num_games_);
 }
 
+
+GameRunner::GameRunner(const std::string& model_path,
+                       int num_games,
+                       const GameConfig& config,
+                       int num_workers,
+                       bool collect_samples)
+    : model1_path_(model_path)
+    , model2_path_(model_path)  // 自对弈：双方用同一模型
+    , num_games_(num_games)
+    , num_workers_(num_workers > 0 ? num_workers : num_games)
+    , config_(config)
+    , is_self_play_(true)
+    , collect_samples_(collect_samples)
+{
+    if (num_games_ < 1) {
+        throw std::runtime_error(
+            "GameRunner: num_games must be >= 1, got "
+            + std::to_string(num_games_));
+    }
+
+    // 初始化全局资源（与对战模式相同）
+    MctsThreadPool::initialize(g_mcts_config.num_threads);
+    std::cout << "[GameRunner] 线程池已初始化, size="
+              << MctsThreadPool::instance().size() << std::endl;
+
+    NeuralNet::initialize(model_path, config_.use_gpu);
+    std::cout << "[GameRunner] NeuralNet 已初始化, model="
+              << model_path << std::endl;
+
+    std::cout << "[GameRunner] 自对弈模式, 游戏线程数=" << num_workers_
+              << " (对局数=" << num_games_
+              << ", 采集样本=" << (collect_samples ? "是" : "否") << ")"
+              << std::endl;
+
+    results_.resize(num_games_);
+}
+
+
 GameRunner::~GameRunner() {
     // 确保所有游戏线程已退出
     wait_completion();
@@ -112,19 +150,35 @@ void GameRunner::run_worker_games(int worker_index) {
 // =====================================================================
 
 void GameRunner::run_single_game(int game_index) {
-    // 1. 随机确定 model1 执方（1=黑/2=白），model2 执相反方
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<int> color_dist(1, 2);
-    int model1_color = color_dist(gen);
-    int model2_color = 3 - model1_color;  // 1↔2
+    // 1. 确定执方
+    //    对战模式：随机分配；自对弈模式：交替分配
+    int model1_color;
+    int model2_color;
+
+    if (is_self_play_) {
+        // 自对弈交替模式：game_index 偶数 → model1 执黑
+        if (game_index % 2 == 0) {
+            model1_color = 1;  // 黑
+            model2_color = 2;  // 白
+        } else {
+            model1_color = 2;  // 白
+            model2_color = 1;  // 黑
+        }
+    } else {
+        // 随机确定 model1 执方（1=黑/2=白），model2 执相反方
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<int> color_dist(1, 2);
+        model1_color = color_dist(gen);
+        model2_color = 3 - model1_color;  // 1↔2
+    }
 
     // 2. 获取共享资源
     MctsThreadPool& pool = MctsThreadPool::instance();
     NeuralNet& nn = NeuralNet::instance();
 
     // 3. 创建两个 MctsSearcher（共享线程池和 GPU）
-    // 注意：两个 searcher 使用同一 NeuralNet，搜索前需调用 set_model
+    //    自对弈模式下 model1_path == model2_path，两个 searcher 使用同一模型
     MctsSearcher searcher1(
         model1_path_, pool, nn,
         config_.num_simulations, config_.c_puct,
@@ -148,6 +202,14 @@ void GameRunner::run_single_game(int game_index) {
     int move_count = 0;
     int winner = 0;  // 0=未决出
 
+    // 样本采集：存储原始样本三元组 (state_float, visit_counts, current_player)
+    struct RawSampleRecord {
+        std::vector<float> state_float;   // 226 维
+        std::vector<int> visit_counts;    // 225 维
+        int player;                       // 落子方 1=黑 2=白
+    };
+    std::vector<RawSampleRecord> raw_samples;
+
     // 5. 对局主循环
     std::string last_model_path;  // 追踪上次加载的模型路径，避免重复切换
     while (move_count < 225) {
@@ -169,8 +231,25 @@ void GameRunner::run_single_game(int game_index) {
             last_model_path = current_model_path;
         }
 
+        // 若开启样本采集，记录落子前的状态
+        if (collect_samples_) {
+            RawSampleRecord rec;
+            // 将 state 转为 float（226 维）
+            for (int v : state) {
+                rec.state_float.push_back(static_cast<float>(v));
+            }
+            rec.player = current_player;
+            rec.visit_counts.resize(225, 0);  // 稍后填充
+            raw_samples.push_back(std::move(rec));
+        }
+
         // MCTS 搜索
         MctsResult mcts_result = current_searcher->search(state);
+
+        // 若开启样本采集，保存 visit_counts
+        if (collect_samples_ && !raw_samples.empty()) {
+            raw_samples.back().visit_counts = mcts_result.visit_counts;
+        }
 
         // 温度采样选动作
         int action = sample_action(mcts_result.visit_counts, move_count, config_);
@@ -199,7 +278,46 @@ void GameRunner::run_single_game(int game_index) {
         state.push_back(current_player);
     }
 
-    // 6. 记录结果
+    // 6. 样本生成（仅在 collect_samples 且非平局时）
+    std::vector<GameSample> game_samples;
+    if (collect_samples_ && winner != 0) {
+        for (auto& rec : raw_samples) {
+            // 计算 z：若 winner == rec.player 则 +1，否则 -1
+            float z = (winner == rec.player) ? 1.0f : -1.0f;
+
+            // 归一化 pi：pi[i] = N[i] / ΣN
+            int total_visits = 0;
+            for (int v : rec.visit_counts) {
+                total_visits += v;
+            }
+
+            GameSample raw_sample;
+            raw_sample.state = std::move(rec.state_float);
+            raw_sample.pi.resize(225);
+            if (total_visits > 0) {
+                for (int i = 0; i < 225; ++i) {
+                    raw_sample.pi[i] = static_cast<float>(rec.visit_counts[i])
+                                     / static_cast<float>(total_visits);
+                }
+            } else {
+                // 退化：所有合法位置均分
+                float uniform = 1.0f / 225.0f;
+                for (int i = 0; i < 225; ++i) {
+                    raw_sample.pi[i] = uniform;
+                }
+            }
+            raw_sample.z = z;
+
+            // D4 增强：每条原始样本产生 8 条变体
+            std::vector<GameSample> augmented =
+                SampleAugmentor::augment(raw_sample);
+            for (auto& aug : augmented) {
+                game_samples.push_back(std::move(aug));
+            }
+        }
+    }
+
+    // 7. 记录结果
     {
         GameResult result;
         result.game_index = game_index;
@@ -207,12 +325,13 @@ void GameRunner::run_single_game(int game_index) {
         result.model1_color = model1_color;
         result.model2_color = model2_color;
         result.move_count = move_count;
+        result.samples = std::move(game_samples);
 
         std::lock_guard<std::mutex> lock(results_mutex_);
-        results_[game_index] = result;
+        results_[game_index] = std::move(result);
     }
 
-    // 7. 更新完成计数
+    // 8. 更新完成计数
     completed_count_.fetch_add(1);
 }
 

@@ -17,6 +17,7 @@
 #endif
 
 #include "game_runner.h"
+#include "game_sample.h"
 #include "mcts_config.h"
 #include "mcts_searcher.h"
 #include "thread_pool.h"
@@ -96,6 +97,16 @@ PYBIND11_MODULE(cpp_mcts, m) {
 
     // ---- 加载运行时配置（必须在绑定定义之前，因为绑定使用配置值）----
     load_mcts_config(m);
+
+    // ---- GameSample 训练样本结构体 ----
+    py::class_<GameSample>(m, "GameSample",
+        "单条 AGZ 格式训练样本")
+        .def_readonly("state", &GameSample::state,
+            "226 维棋盘状态（225 board + 1 player）")
+        .def_readonly("pi", &GameSample::pi,
+            "225 维 MCTS 概率分布")
+        .def_readonly("z", &GameSample::z,
+            "终局标签（+1=当前玩家胜, -1=负, 0=平局）");
 
     // MctsResult 结构体（仅用于文档，实际 search 返回 tuple）
     py::class_<MctsResult>(m, "MctsResult",
@@ -217,7 +228,9 @@ PYBIND11_MODULE(cpp_mcts, m) {
         .def_readonly("model2_color", &GameResult::model2_color,
             "model2 执方")
         .def_readonly("move_count", &GameResult::move_count,
-            "本局总步数");
+            "本局总步数")
+        .def_readonly("samples", &GameResult::samples,
+            "本局训练样本列表");
 
     // ---- GameRunner 对局管理器 ----
     py::class_<GameRunner>(m, "GameRunner",
@@ -236,6 +249,18 @@ PYBIND11_MODULE(cpp_mcts, m) {
              ":param num_games: 对战局数\n"
              ":param config: GameConfig 配置\n"
              ":param num_workers: 游戏线程数（0=每局一线程，>0=限定线程数）")
+        .def(py::init<const std::string&, int, const GameConfig&, int, bool>(),
+             py::arg("model_path"),
+             py::arg("num_games"),
+             py::arg("config"),
+             py::arg("num_workers"),
+             py::arg("collect_samples"),
+             "创建自对弈管理器（单模型对战模式）\n\n"
+             ":param model_path: 模型 TorchScript 路径\n"
+             ":param num_games: 对战局数\n"
+             ":param config: GameConfig 配置\n"
+             ":param num_workers: 游戏线程数\n"
+             ":param collect_samples: 是否开启样本采集")
         .def("start", &GameRunner::start,
              "启动所有游戏线程（非阻塞）")
         .def("get_completed_count", &GameRunner::get_completed_count,

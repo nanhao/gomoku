@@ -1,0 +1,74 @@
+@startuml
+title cnn_v11 自对弈样本缓冲区 — 主流程
+
+actor 用户
+participant "CLI 脚本\nmcts_sample_buffer.py" as CLI
+participant "CppMctsSampleBufferAdapter\n(Python)" as Adapter
+participant "SampleBufferManager\n(Python)" as Buffer
+participant "GameRunner\n(C++)" as Runner
+participant "Game线程×N\n(C++)" as GameThread
+participant "SampleAugmentor\n(C++)" as Augmentor
+participant "MctsThreadPool\n(全局单例)" as Pool
+participant "NeuralNet\n(全局共享GPU)" as NN
+
+用户 -> CLI: --model cnn_v11.1 --games 1000
+CLI -> CLI: 解析参数
+CLI -> CLI: 通过 registry 查找 TorchScript 路径
+
+CLI -> Adapter: 创建适配器(model_spec, games, config)
+Adapter -> Adapter: 解析 TorchScript 路径
+Adapter -> Buffer: 创建 SampleBufferManager("sample_buffer/", max=80000)
+Adapter -> Runner: 创建 C++ GameRunner(model, games, config, collect_samples=true)
+Runner -> Pool: 初始化全局线程池(若未初始化)
+Runner -> NN: 初始化全局 GPU 推理引擎(若未初始化)
+
+Runner -> GameThread: 启动 N 个游戏线程
+
+loop 每局并行
+    GameThread -> GameThread: 初始化棋盘，确定执方(交替模式)
+
+    loop 每步
+        GameThread -> GameThread: 记录 state(落子前)
+        note right of GameThread: state = board + current_player (226维)
+        GameThread -> Pool: MCTS 搜索 → submit 模拟任务
+        Pool -> NN: 攒批 GPU 推理
+        NN --> Pool: 返回策略+价值
+        Pool --> GameThread: visit_counts
+        GameThread -> GameThread: 保存 (state, visit_counts, current_player)
+        GameThread -> GameThread: 温度采样选动作 → 落子 → 终局判定
+    end
+
+    GameThread -> GameThread: 对局结束，若 winner != 0:
+    GameThread -> GameThread: 遍历每步：计算 z(±1)，归一化 pi
+    GameThread -> Augmentor: augment(raw_sample) × 每步
+    Augmentor --> GameThread: 8 条增强变体
+    GameThread -> Runner: 上报 GameResult(含 samples)
+end
+
+loop 进度轮询 (Python 主线程)
+    CLI -> Adapter: poll progress
+    Adapter -> Runner: get_completed_count()
+    Runner --> Adapter: completed / total
+
+    alt 新完成 >= chunk_games(10) 局
+        Adapter -> Runner: get_results()
+        Runner --> Adapter: List[GameResult]
+        Adapter -> Adapter: 提取新增对局的 samples
+        Adapter -> Buffer: ingest(game_start, game_end, samples)
+
+        alt buffer 总样本 >= 80000
+            Buffer -> Buffer: 淘汰最旧 chunk(删除文件+更新 manifest)
+        end
+
+        Buffer --> Adapter: evicted_count
+        Adapter --> CLI: 进度 + 缓冲区状态
+    end
+end
+
+Runner --> Adapter: 所有局完成
+Adapter -> Buffer: 最后一批样本落盘
+
+CLI -> CLI: 打印最终统计
+CLI -> CLI: 打印 GPU 监控统计
+
+@enduml
