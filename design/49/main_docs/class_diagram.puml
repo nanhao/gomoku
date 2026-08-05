@@ -1,0 +1,133 @@
+@startuml
+title cnn_v11 自对弈样本缓冲区 — 类图与依赖关系
+
+package "C++ 模块 (cpp/src/)" {
+    class GameSample {
+        + state : vector<float>
+        + pi : vector<float>
+        + z : float
+    }
+
+    class SampleAugmentor <<utility>> {
+        + {static} augment(sample : GameSample) : vector<GameSample>
+        + {static} transform_225(vec : vector<float>, tid : int) : vector<float>
+        + {static} transform_index(idx : int, tid : int) : int
+    }
+
+    class GameResult {
+        + game_index : int
+        + winner : int
+        + model1_color : int
+        + model2_color : int
+        + move_count : int
+        + samples : vector<GameSample>
+    }
+
+    class GameConfig {
+        + num_simulations : int
+        + c_puct : float
+        + dirichlet_epsilon : float
+        + dirichlet_alpha : float
+        + virtual_loss : float
+        + temperature : float
+        + temp_steps : int
+        + use_gpu : bool
+    }
+
+    class GameRunner {
+        .. 对战模式构造器 ..
+        + GameRunner(model1_path : string, model2_path : string, num_games : int, config : GameConfig, num_workers : int)
+        .. 自对弈模式构造器 ..
+        + GameRunner(model_path : string, num_games : int, config : GameConfig, num_workers : int, collect_samples : bool)
+        + start() : void
+        + get_completed_count() : int
+        + get_total_count() : int
+        + is_finished() : bool
+        + wait_completion() : void
+        + get_results() : vector<GameResult>
+    }
+
+    class MctsThreadPool <<singleton>> {
+        + {static} instance() : MctsThreadPool&
+        + {static} initialize(num_threads : int) : void
+        + submit(task_fn : function) : void
+        + wait_all() : void
+    }
+
+    class NeuralNet <<singleton>> {
+        + {static} instance() : NeuralNet&
+        + predict(states : vector<vector<float>>) : tuple
+        + set_model(model_path : string) : void
+    }
+
+    class MctsSearcher {
+        + MctsSearcher(model_path, pool, nn, params...)
+        + search(state : vector<int>) : MctsResult
+        + advance_root(action : int) : bool
+    }
+
+    GameRunner --> "1" GameConfig : 使用
+    GameRunner ..> MctsThreadPool : 初始化/共享
+    GameRunner ..> NeuralNet : 初始化/共享
+    GameRunner --> "*" MctsSearcher : 每局创建
+    GameRunner --> "*" GameResult : 产出
+    GameRunner --> SampleAugmentor : 调用增强
+    GameResult "1" --> "*" GameSample : 包含
+    SampleAugmentor --> GameSample : 创建变体
+    MctsSearcher --> "1" MctsThreadPool : 共享
+    MctsSearcher --> "1" NeuralNet : 共享
+}
+
+package "Python 适配层" {
+    package "cpp/python/" {
+        class CppMctsSampleBufferAdapter {
+            + CppMctsSampleBufferAdapter(model_spec : str, num_games : int, config : MctsSelfPlayConfig, num_workers : int, buffer_dir : str, buffer_max_size : int, chunk_games : int)
+            + start() : None
+            + get_progress() : tuple[int, int]
+            + get_sample_stats() : dict
+            + is_finished() : bool
+            + wait_completion() : None
+            + get_buffer_summary() : dict
+        }
+    }
+
+    package "src/ai/" {
+        class SampleBufferManager {
+            + SampleBufferManager(buffer_dir : str, max_size : int, chunk_games : int)
+            + ingest(game_start : int, game_end : int, samples : list[dict]) : int
+            + get_total_samples() : int
+            + get_chunk_count() : int
+            + get_summary() : dict
+        }
+    }
+
+    class MctsSelfPlayConfig <<dataclass>> {
+        + simulations : int
+        + c_puct : float
+        + temp_steps : int
+        + temperature : float
+        + dirichlet_epsilon : float
+        + dirichlet_alpha : float
+        + virtual_loss : float
+        + use_prior : bool
+    }
+}
+
+package "CLI 脚本 (src/ai/scripts/)" {
+    class MctsSampleBufferScript <<script>> {
+        + parse_args(argv : list[str]) : Namespace
+        + run_sample_buffer(args : Namespace) : None
+    }
+}
+
+CppMctsSampleBufferAdapter --> GameRunner : 封装
+CppMctsSampleBufferAdapter --> SampleBufferManager : 管理
+CppMctsSampleBufferAdapter ..> MctsSelfPlayConfig : 使用
+CppMctsSampleBufferAdapter ..> GameResult : 读取样本
+MctsSampleBufferScript --> CppMctsSampleBufferAdapter : 使用
+MctsSampleBufferScript ..> MctsSelfPlayConfig : 构建配置
+
+SampleBufferManager ..> "manifest.json" : 读写
+SampleBufferManager ..> "chunk_*.json" : 写入/删除
+
+@enduml

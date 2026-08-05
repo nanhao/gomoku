@@ -6,6 +6,8 @@
 #include <thread>
 #include <vector>
 
+#include "game_sample.h"
+
 /** 游戏配置参数
 
 所有 MCTS 搜索参数 + 温度采样参数集中管理。
@@ -24,7 +26,8 @@ struct GameConfig {
 
 /** 单局对战结果
 
-数据结构由 C++ 游戏线程填充，Python 端通过 pybind11 读取。\nmodel1_won / model2_won 由 Python 端根据 winner 和执方计算。
+数据结构由 C++ 游戏线程填充，Python 端通过 pybind11 读取。
+model1_won / model2_won 由 Python 端根据 winner 和执方计算。
 */
 struct GameResult {
     int game_index;       // 局编号 0..N-1
@@ -32,6 +35,7 @@ struct GameResult {
     int model1_color;     // model1 执方 1=黑, 2=白
     int model2_color;     // model2 执方
     int move_count;       // 本局总步数
+    std::vector<GameSample> samples;  // 本局产生的训练样本（已 D4 增强）
 };
 
 /** 并行对局管理器
@@ -60,6 +64,24 @@ public:
                int num_games,
                const GameConfig& config,
                int num_workers = 0);
+
+    /** 创建自对弈管理器（单模型对战模式）
+
+    model1_path == model2_path，双方使用同一模型。
+    执方分配为交替模式：game_index 为偶数时 model1 执黑，奇数时执白。
+
+    @param model_path 模型 TorchScript 文件路径
+    @param num_games 对战局数（≥1）
+    @param config 游戏配置参数
+    @param num_workers 游戏工作线程数（0=每局一个线程，向后兼容）
+    @param collect_samples 是否开启样本采集（含 D4 增强）
+    @throws std::runtime_error 若模型文件不存在或加载失败
+    */
+    GameRunner(const std::string& model_path,
+               int num_games,
+               const GameConfig& config,
+               int num_workers,
+               bool collect_samples);
 
     ~GameRunner();
 
@@ -109,6 +131,10 @@ private:
     // 结果存储（线程安全：start 前 resize，各线程写入不同索引）
     std::vector<GameResult> results_;
     mutable std::mutex results_mutex_;
+
+    // 自对弈模式标志
+    bool is_self_play_ = false;
+    bool collect_samples_ = false;
 
     /** 单局对局主循环（由游戏线程执行）
 

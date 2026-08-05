@@ -15,6 +15,8 @@
 
 **C++ MCTS 并行对战**：C++ 多线程并行运行 N 局 cnn_v11 对战，共享全局线程池和 GPU（详见 [设计 47](../design/47/main_docs/overview.md)）
 
+**C++ MCTS 自对弈样本缓冲区**：C++ 多线程自对弈持续产出训练样本，D4 增强 + FIFO 滑动窗口缓冲区管理（详见 [设计 49](../design/49/main_docs/overview.md)）
+
 ---
 
 ## 总体架构
@@ -76,6 +78,7 @@ src/
 │   ├── base_trainer.py    训练器抽象基类（Trainer → NeuralNetworkTrainer）
 │   ├── registry.py        统一模型注册表（懒加载 + 多代支持）
 │   ├── constants.py       常量（路径、策略名）
+│   ├── sample_buffer_manager.py  样本缓冲区管理器（FIFO+chunk管理）
 │   │
 │   ├── engine/            AI 引擎层——统一落子接口
 │   │   ├── ai_engine.py      AIEngine 抽象基类 + MoveDecision
@@ -139,6 +142,7 @@ src/
 │       ├── mcts_battle.py        MCTS 双模型对战
 │       ├── mcts_battle_worker.py MCTS 对战 Worker
 │       ├── mcts_battle_cpp.py    MCTS C++ 双模型对战（GPU 并行）
+│       ├── mcts_sample_buffer.py MCTS C++ 自对弈样本缓冲区（D4增强+FIFO）
 │       ├── mcts_train.py         MCTS 训练
 │       ├── value_self_play.py    价值头自对弈（cnn_v10）
 │       ├── value_self_play_worker.py  价值头自对弈 Worker
@@ -205,14 +209,17 @@ AlphaGo Zero 风格的蒙特卡洛树搜索，支持 Batch MCTS + Virtual Loss�
 | `NeuralNet` | `neural_net.h/cpp` | LibTorch 异步批量推理（全局单例、GPU 共享） |
 | `MctsThreadPool` | `thread_pool.h/cpp` | 全局工作线程池（支持批次屏障 + 任务队列双模式） |
 | `MctsSearcher` | `mcts_searcher.h/cpp` | 多线程搜索编排（支持共享资源注入）、Dirichlet 噪声、子树复用 |
-| `GameRunner` | `game_runner.h/cpp` | 并行对局管理器（N 个 C++ 游戏线程共享全局资源） |
+| `GameRunner` | `game_runner.h/cpp` | 并行对局管理器（N 个 C++ 游戏线程共享全局资源）— 支持对战/自对弈双模式 |
 | `GameConfig` | `game_runner.h` | 对战配置结构体（MCTS + 温度参数） |
-| `GameResult` | `game_runner.h` | 单局对战结果结构体 |
+| `GameResult` | `game_runner.h` | 单局对战结果结构体（含训练样本字段） |
+| `GameSample` | `game_sample.h` | AGZ 格式训练样本结构体 {state, pi, z} |
+| `SampleAugmentor` | `game_sample.h` | D4 群 8 种棋盘对称变换工具类 |
 
 **Python 桥接**：
 - `bindings.cpp` — pybind11 定义，暴露 `cpp_mcts.MctsSearcher`、`GameRunner`、`GameConfig`
 - `cpp_mcts_adapter.py` — 单搜索适配器，接口兼容 Python `MCTSSearcher`
 - `cpp_mcts_battle_adapter.py` — 并行对战适配器，包装 C++ `GameRunner` 为 Python 接口
+- `cpp_sample_buffer_adapter.py` — 自对弈样本缓冲区适配器，包装 C++ `GameRunner`（自对弈模式）+ `SampleBufferManager`
 
 **线程模型**：
 - 单搜索：N 个 MCTS 工作线程 + 1 个 GPU 推理线程（生产者-消费者模式）
@@ -292,6 +299,11 @@ MCTS对战: mcts_battle.py → create_engine(cnn_v7.10) × 2
 C++ MCTS对战: mcts_battle_cpp.py → CppMctsBattleAdapter
               → C++ GameRunner（N 个游戏线程，共享线程池+GPU）
               → 输出双方胜率统计
+
+C++ MCTS样本生成: mcts_sample_buffer.py → CppMctsSampleBufferAdapter
+                  → C++ GameRunner（自对弈模式，D4增强）
+                  → SampleBufferManager（FIFO 缓冲区，每10局chunk落盘）
+                  → 输出 sample_buffer/ 目录下的 chunk JSON 文件
 ```
 
 ---
@@ -327,6 +339,8 @@ tests/
 | MCTS 自对弈（多进程） | `python src/ai/scripts/mcts_self_play.py --model cnn_v7.pth --games 100 --workers 4` |
 | MCTS 双模型对战 | `python src/ai/scripts/mcts_battle.py --model1 cnn_v8.10 --model2 cnn_v8.11 --games 100` |
 | MCTS 双模型对战（多进程） | `python src/ai/scripts/mcts_battle.py --model1 cnn_v8.10 --model2 cnn_v8.11 --games 100 --workers 4` |
+| C++ MCTS 对战 | `python src/ai/scripts/mcts_battle_cpp.py --ai1 cnn_v11.1 --ai2 cnn_v11.2 --games 100` |
+| C++ MCTS 样本生成 | `python src/ai/scripts/mcts_sample_buffer.py --model cnn_v11.1 --games 1000` |
 | MCTS 训练 | `python src/ai/scripts/mcts_train.py --model cnn_v7.pth --train-from-dir samples --epochs 100` |
 | 价值头自对弈 | `python src/ai/scripts/value_self_play.py --model cnn_v10.1 --games 100` |
 | 价值头训练 | `python src/ai/scripts/value_train.py --model cnn_v10.1 --train-from-dir samples --epochs 100` |

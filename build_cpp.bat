@@ -64,6 +64,24 @@ if not defined CMAKE_EXE (
 )
 echo [INFO] cmake: %CMAKE_EXE%
 
+REM ---- Detect ctest (same method) ----
+set CTEST_EXE=
+for /f "delims=" %%i in ('python -c "import sys, os; d=os.path.join(sys.prefix,'Scripts','ctest.exe'); print(d if os.path.isfile(d) else '')" 2^>nul') do set CTEST_EXE=%%i
+if not defined CTEST_EXE (
+    for /f "delims=" %%i in ('python -c "import site, os; d=os.path.join(os.path.dirname(site.USER_SITE),'Scripts','ctest.exe') if site.USER_SITE else ''; print(d if d and os.path.isfile(d) else '')" 2^>nul') do set CTEST_EXE=%%i
+)
+if not defined CTEST_EXE (
+    ctest --version >nul 2>&1
+    if not errorlevel 1 (
+        set CTEST_EXE=ctest
+    )
+)
+if not defined CTEST_EXE (
+    echo [WARN] ctest not found. C++ tests will be skipped.
+) else (
+    echo [INFO] ctest: %CTEST_EXE%
+)
+
 REM ---- Detect pybind11 cmake dir ----
 set PYBIND11_DIR=
 for /f "delims=" %%i in ('python -c "import pybind11; print(pybind11.get_cmake_dir())" 2^>nul') do set PYBIND11_DIR=%%i
@@ -123,12 +141,22 @@ if exist "%PYD_SRC%" (
     set TORCH_LIB_DIR=
     for /f "delims=" %%i in ('python -c "import torch, os; print(os.path.join(os.path.dirname(torch.__file__), 'lib'))" 2^>nul') do set TORCH_LIB_DIR=%%i
     if defined TORCH_LIB_DIR (
-        for %%d in (torch.dll torch_cpu.dll c10.dll) do (
+        for %%d in (torch.dll torch_cpu.dll c10.dll libiomp5md.dll torch_global_deps.dll shm.dll uv.dll zlibwapi.dll) do (
             if exist "!TORCH_LIB_DIR!\%%d" (
                 copy /y "!TORCH_LIB_DIR!\%%d" "..\python\%%d" >nul 2>&1
             )
         )
         echo [ OK ] Torch CPU DLLs copied
+
+        REM ---- Copy torch DLLs to build output (needed by test executables) ----
+        if exist "%BUILD_TYPE%" (
+            for %%d in (torch.dll torch_cpu.dll c10.dll libiomp5md.dll torch_global_deps.dll shm.dll uv.dll zlibwapi.dll) do (
+                if exist "!TORCH_LIB_DIR!\%%d" (
+                    copy /y "!TORCH_LIB_DIR!\%%d" "%BUILD_TYPE%\%%d" >nul 2>&1
+                )
+            )
+            echo [ OK ] Torch DLLs copied to %BUILD_TYPE%\ for tests
+        )
     )
 ) else (
     echo [WARN] cpp_mcts.pyd not found in build output
@@ -136,11 +164,19 @@ if exist "%PYD_SRC%" (
 
 REM ---- Run tests (optional) ----
 if %RUN_TESTS%==1 (
+    if not defined CTEST_EXE (
+        echo [ERROR] ctest not found. Install: pip install cmake
+        cd ..\..
+        exit /b 1
+    )
     echo.
     echo ========================================
     echo   Running C++ Tests
     echo ========================================
-    ctest --output-on-failure -C %BUILD_TYPE%
+    "%CTEST_EXE%" --output-on-failure -C %BUILD_TYPE%
+    if errorlevel 1 (
+        echo [WARN] Some tests failed
+    )
 )
 
 echo.

@@ -297,3 +297,15 @@ introduce batch mcts and virtual loss in mcts. But don't use multi thread.
 
 # intention_id=48
 调整现在的自我对弈 gpu print 信息，加上滑动窗口，avg_batch_size 我希望是最近10个 batch 的平均 size。wait_ratio   我希望是最近5s内的等待率
+
+# intention_id=49
+现在要来做一个 cnn_v11 对弈生成样本缓冲区的脚本。技术要点如下：
+- 对弈生成样本脚本保持 src/ai/scripts/mcts_battle_cpp.py 的异步架构不变，参数也保持一致
+- 同样全程使用 C++，python 只做简单封装，生成样本也由 c++ 完成
+- 对弈时，双方轮流交替执方
+- 每局对弈结束后，产生样本。样本的数据结构和语义与项目中已有的双头网络样本保持一致
+- sample_buffer 是样本缓冲区，它是一个队列，先进先出，sample_buffer_max_size 为8万条样本（局面）
+- 每完成10局对弈，就把样本落盘到 sample_buffer。缓冲区 size >= sample_buffer_max_size 时，把最旧的10局对局移出，然后放入最新的10局对局。这里以10局对局左右进出缓冲区的单位，不管每一局里面有多少步。只在统计总size 的时候要看多少步
+- 样本启用 D4 群 8 变换增强（旋转+镜像）
+- 输出文件组织方式由你来设计
+- 实时 print 对弈进展统计信息 

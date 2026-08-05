@@ -408,6 +408,47 @@ python src/ai/scripts/mcts_battle_cpp.py --ai1 cnn_v11.1 --ai2 cnn_v11.2 --games
 python src/ai/scripts/mcts_battle_cpp.py --ai1 cnn_v11.1 --ai2 cnn_v11.2 --games 100 --workers 4
 ```
 
+#### MCTS C++ 自对弈样本缓冲区（设计 49）
+
+> 使用 C++ MCTS 引擎让单个 cnn_v11 模型自对弈，持续产出训练样本并以滑动窗口缓冲区（FIFO，最大 8 万条）管理落盘。所有对局在 C++ 层面多线程并行，共享全局 MCTS 线程池和 GPU 推理引擎。每步产生 8 条 D4 增强变体，样本格式与 mcts_self_play 完全一致。
+
+```bash
+python src/ai/scripts/mcts_sample_buffer.py --model <注册名.代数> --games <局数> [选项]
+```
+
+**选项**：
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--model` | **必需** | 模型 registry spec，如 cnn_v11.1 |
+| `--games` | **必需** | 自对弈总局数（≥1） |
+| `--workers` | 0 | 游戏工作线程数（0=每局一个线程） |
+| `--simulations` | 800 | 每步 MCTS 模拟次数 |
+| `--c-puct` | 2.0 | PUCT 探索系数 |
+| `--temp-steps` | 8 | 温度探索步数 |
+| `--temperature` | 1.0 | 温度参数 |
+| `--dirichlet-epsilon` | 0.25 | 狄利克雷噪声比例 |
+| `--dirichlet-alpha` | 0.03 | 狄利克雷分布参数 |
+| `--virtual-loss` | 配置值 | virtual loss 值（默认读取 MCTS_VIRTUAL_LOSS 配置） |
+| `--buffer-max-size` | 80000 | 缓冲区最大样本数（FIFO 淘汰） |
+| `--chunk-games` | 10 | 每 chunk 对局数（控制落盘粒度） |
+| `--output-dir` | `sample_buffer` | 缓冲区输出目录 |
+
+> **滑动窗口缓冲区**：样本以 chunk 为单位写入 `{output-dir}/`，达到 `buffer-max-size` 上限后自动淘汰最早 chunk（FIFO）。下游训练器可随时读取缓冲区中的样本进行训练。支持 Ctrl+C 优雅中断，等待进行中对局完成后退出。
+
+**示例**：
+
+```bash
+# 基本自对弈：cnn_v11 第1代，1000 局
+python src/ai/scripts/mcts_sample_buffer.py --model cnn_v11.1 --games 1000
+
+# 自定义 MCTS 参数 + 缓冲区配置
+python src/ai/scripts/mcts_sample_buffer.py --model cnn_v11.1 --games 500 --workers 4 --simulations 400 --buffer-max-size 40000 --chunk-games 20
+
+# 指定输出目录
+python src/ai/scripts/mcts_sample_buffer.py --model cnn_v11.1 --games 2000 --output-dir my_buffer
+```
+
 #### GPU 推理攒批配置
 
 GPU 推理线程采用**动态区间攒批**机制，通过 `cpp/python/mcts_config.json` 配置：
@@ -793,6 +834,7 @@ python -m pytest tests/integration/test_cpp_mcts_e2e.py -v
 | `src/ai/train_data/` | 训练样本（sample.json） |
 | `src/ai/merge_samples/` | 合并后的训练样本大文件 |
 | `src/tools/create_samples_tool/` | create_samples 验收工具 |
+| `sample_buffer/` | MCTS C++ 自对弈滑动窗口缓冲区（FIFO） |
 
 ---
 

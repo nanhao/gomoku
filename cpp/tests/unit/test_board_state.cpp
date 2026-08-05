@@ -78,17 +78,14 @@ static void test_empty_board() {
 // --- TC-BS-02: 满棋盘平局 ---
 static void test_full_board_draw() {
     TEST("TC-BS-02 full board draw");
-    // 构造一个满棋盘但无五连的局面（交替排列）
+    // 构造一个满棋盘但无五连的局面
+    // 使用 modulo 6 模式 (阈值 3): 0-2→1(黑), 3-5→2(白)
+    // 已验证四个方向 (水平步进1, 垂直步进15, 主对角线步进16, 反对角线步进14)
+    // 5步序列均包含两种颜色，保证无五连
     std::vector<int> board(225, 0);
     for (int i = 0; i < 225; ++i) {
-        board[i] = (i % 2 == 0) ? 1 : 2;
+        board[i] = (i % 6 < 3) ? 1 : 2;
     }
-    // 确保没有五连：破坏第 0 行的前 5 个位置的连续性
-    board[0] = 1;
-    board[1] = 2;
-    board[2] = 1;
-    board[3] = 2;
-    board[4] = 2;  // 最后两个相同 → 只有二连
     BoardState bs(board, 1);
 
     ASSERT_FALSE(bs.has_winner());
