@@ -110,6 +110,7 @@ PYBIND11_MODULE(cpp_mcts, m) {
     // ---- GpuInferenceStats 监控统计 ----
     py::class_<GpuInferenceStats>(m, "GpuInferenceStats",
         "GPU 推理线程运行时监控统计")
+        // 全周期累计
         .def_readonly("total_batches", &GpuInferenceStats::total_batches,
             "已处理的批次数")
         .def_readonly("total_requests", &GpuInferenceStats::total_requests,
@@ -125,9 +126,16 @@ PYBIND11_MODULE(cpp_mcts, m) {
         .def_readonly("batch_size_max", &GpuInferenceStats::batch_size_max,
             "历史最大批次大小")
         .def("wait_ratio", &GpuInferenceStats::wait_ratio,
-            "GPU 线程等待比例 = wait/(wait+infer)，0~1")
+            "GPU 线程等待比例 = wait/(wait+infer)，0~1（全周期累计）")
         .def("avg_batch_size", &GpuInferenceStats::avg_batch_size,
-            "历史平均批次大小");
+            "历史平均批次大小（全周期累计）")
+        // 滑动窗口
+        .def_readonly("recent_batch_count", &GpuInferenceStats::recent_batch_count,
+            "滑动窗口内的批次数（最多 10）")
+        .def_readonly("recent_avg_batch_size", &GpuInferenceStats::recent_avg_batch_size,
+            "最近 10 个 batch 的平均大小")
+        .def_readonly("recent_wait_ratio", &GpuInferenceStats::recent_wait_ratio,
+            "最近 5 秒内的 GPU 等待比例，0~1");
 
     // MctsSearcher 主类
     py::class_<MctsSearcher>(m, "MctsSearcher",

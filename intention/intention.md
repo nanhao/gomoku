@@ -294,3 +294,6 @@ introduce batch mcts and virtual loss in mcts. But don't use multi thread.
 技术上，要求 n 局游戏必须是在不同的线程中并行进行，使用 c++ 版的 mcts。所有的游戏共享一个全局的线程池。并且由 gpu 进行局面评估。
 脚本需要实时打印进度，并在最终完成后打印统计数据和双方胜率。
 脚本可以指定温度采样的参数。
+
+# intention_id=48
+调整现在的自我对弈 gpu print 信息，加上滑动窗口，avg_batch_size 我希望是最近10个 batch 的平均 size。wait_ratio   我希望是最近5s内的等待率

@@ -256,27 +256,61 @@ void NeuralNet::inference_loop() {
 
         // === 阶段 6: 更新统计 ===
         {
+            auto t_now = std::chrono::steady_clock::now();
+            int bs = static_cast<int>(batch.size());
+
             std::lock_guard<std::mutex> slock(stats_mutex_);
+            // -- 全周期累计 --
             stats_.total_batches++;
-            stats_.total_requests += static_cast<int64_t>(batch.size());
+            stats_.total_requests += static_cast<int64_t>(bs);
             stats_.total_wait_us += wait_us;
             stats_.total_infer_us += infer_us;
-            int bs = static_cast<int>(batch.size());
             if (stats_.batch_size_min == 0 || bs < stats_.batch_size_min) {
                 stats_.batch_size_min = bs;
             }
             if (bs > stats_.batch_size_max) {
                 stats_.batch_size_max = bs;
             }
+
+            // -- 滑动窗口: batch 大小（最近 10 个）--
+            recent_batch_sizes_.push_back(bs);
+            while (static_cast<int>(recent_batch_sizes_.size()) > kRecentBatchWindow) {
+                recent_batch_sizes_.pop_front();
+            }
+
+            // -- 滑动窗口: 时间窗口（最近 5 秒的 wait/infer 记录）--
+            recent_timings_.emplace_back(t_now, std::make_pair(wait_us, infer_us));
+            auto cutoff = t_now - std::chrono::microseconds(kRecentTimeWindowUs);
+            while (!recent_timings_.empty() && recent_timings_.front().first < cutoff) {
+                recent_timings_.pop_front();
+            }
+
             if (stats_.total_batches % stats_log_interval_ == 0) {
+                // 即时计算滑动窗口值用于日志输出
+                double recent_avg = 0.0;
+                if (!recent_batch_sizes_.empty()) {
+                    int64_t sum = 0;
+                    for (int sz : recent_batch_sizes_) sum += sz;
+                    recent_avg = static_cast<double>(sum) / recent_batch_sizes_.size();
+                }
+                double recent_wr = 0.0;
+                {
+                    int64_t rw = 0, ri = 0;
+                    for (const auto& entry : recent_timings_) {
+                        rw += entry.second.first;
+                        ri += entry.second.second;
+                    }
+                    int64_t total = rw + ri;
+                    if (total > 0) recent_wr = static_cast<double>(rw) / total;
+                }
                 std::printf(
                     "[NeuralNet] batches=%lld reqs=%lld "
-                    "avg_batch=%.1f wait_ratio=%.1f%% "
+                    "avg_batch=%.1f(rec=%.1f) wait_ratio=%.1f%%(rec=%.1f%%) "
                     "queue_peak=%d batch_range=[%d,%d]\n",
                     static_cast<long long>(stats_.total_batches),
                     static_cast<long long>(stats_.total_requests),
-                    stats_.avg_batch_size(),
-                    stats_.wait_ratio() * 100.0,
+                    stats_.avg_batch_size(), recent_avg,
+                    stats_.wait_ratio() * 100.0, recent_wr * 100.0,
                     stats_.queue_peak_size,
                     stats_.batch_size_min, stats_.batch_size_max);
             }
@@ -290,7 +324,34 @@ void NeuralNet::inference_loop() {
 
 GpuInferenceStats NeuralNet::get_stats() const {
     std::lock_guard<std::mutex> lock(stats_mutex_);
-    return stats_;
+    GpuInferenceStats s = stats_;  // 拷贝累计字段
+
+    // ---- 计算滑动窗口: avg_batch_size（最近 10 个 batch）----
+    s.recent_batch_count = static_cast<int>(recent_batch_sizes_.size());
+    if (s.recent_batch_count > 0) {
+        int64_t sum = 0;
+        for (int sz : recent_batch_sizes_) sum += sz;
+        s.recent_avg_batch_size = static_cast<double>(sum) / s.recent_batch_count;
+    }
+
+    // ---- 计算滑动窗口: wait_ratio（最近 5 秒）----
+    {
+        auto now = std::chrono::steady_clock::now();
+        auto cutoff = now - std::chrono::microseconds(kRecentTimeWindowUs);
+        int64_t rw = 0, ri = 0;
+        for (const auto& entry : recent_timings_) {
+            if (entry.first >= cutoff) {
+                rw += entry.second.first;
+                ri += entry.second.second;
+            }
+        }
+        int64_t total = rw + ri;
+        if (total > 0) {
+            s.recent_wait_ratio = static_cast<double>(rw) / total;
+        }
+    }
+
+    return s;
 }
 
 // =====================================================================

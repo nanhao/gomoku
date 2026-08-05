@@ -4,6 +4,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
+#include <deque>
 #include <future>
 #include <memory>
 #include <mutex>
@@ -24,6 +25,7 @@ struct NeuralNetResult {
 所有耗时以微秒为单位。由推理线程单线程更新，get_stats() 返回快照。
 */
 struct GpuInferenceStats {
+    // ---- 全周期累计统计 ----
     int64_t total_batches = 0;    // 已处理的批次数
     int64_t total_requests = 0;   // 已处理的请求总数
     int64_t total_wait_us = 0;    // 等待攒批的总耗时（微秒）
@@ -32,13 +34,18 @@ struct GpuInferenceStats {
     int batch_size_min = 0;       // 历史最小批次大小
     int batch_size_max = 0;       // 历史最大批次大小
 
-    /** GPU 线程等待比例 = wait / (wait + infer)，0~1 */
+    // ---- 滑动窗口统计（由 get_stats() 计算填充）----
+    int recent_batch_count = 0;           // 滑动窗口内的批次数（≤10）
+    double recent_avg_batch_size = 0.0;   // 最近 10 个 batch 的平均大小
+    double recent_wait_ratio = 0.0;       // 最近 5 秒内的 GPU 等待比例，0~1
+
+    /** 全周期 GPU 线程等待比例 = wait / (wait + infer)，0~1 */
     double wait_ratio() const {
         int64_t total = total_wait_us + total_infer_us;
         return total > 0 ? static_cast<double>(total_wait_us) / total : 0.0;
     }
 
-    /** 历史平均批次大小 */
+    /** 全周期平均批次大小 */
     double avg_batch_size() const {
         return total_batches > 0
             ? static_cast<double>(total_requests) / total_batches : 0.0;
@@ -163,6 +170,14 @@ private:
     GpuInferenceStats stats_;
     mutable std::mutex stats_mutex_;
     int stats_log_interval_ = 100;    // 每 N 个 batch 输出一次监控日志
+
+    // ---- 滑动窗口原始数据（仅推理线程写入，get_stats 加锁读取）----
+    static constexpr int kRecentBatchWindow = 10;          // avg_batch 窗口大小
+    static constexpr int64_t kRecentTimeWindowUs = 5'000'000;  // wait_ratio 窗口: 5秒（微秒）
+    std::deque<int> recent_batch_sizes_;                       // 最近 N 个 batch 大小
+    std::deque<std::pair<std::chrono::steady_clock::time_point,
+                         std::pair<int64_t, int64_t>>>
+        recent_timings_;  // (timestamp, (wait_us, infer_us)) 按时间排序
 
     /** 执行批量前向推理（调用方需先获取 model_mutex_ 的 shared_lock）
 
