@@ -42,14 +42,11 @@ from config.mcts import MCTS_VIRTUAL_LOSS
 
 # ---------- 中断处理 ----------
 
-_interrupted = False
-
 
 def _signal_handler(signum, frame):
-    """SIGINT 信号处理器 — 标记中断，等待进行中对局完成后退出"""
-    global _interrupted
-    _interrupted = True
-    print("\n[中断] 收到 Ctrl+C，等待进行中对局完成...")
+    """SIGINT 信号处理器 — 直接终止进程"""
+    print("\n[中断] 收到 Ctrl+C，立即终止进程")
+    os._exit(0)
 
 
 # ---------- 参数解析 ----------
@@ -182,8 +179,8 @@ def run_sample_buffer(args) -> None:
     print(f"[模型] {args.model}")
     print(f"[模式] 自对弈（双方交替执方），总局数={args.games}")
 
-    # 注册 SIGINT 信号处理器（优雅退出）
-    original_handler = signal.signal(signal.SIGINT, _signal_handler)
+    # 注册 SIGINT 信号处理器（直接终止）
+    signal.signal(signal.SIGINT, _signal_handler)
 
     adapter = None
     try:
@@ -204,12 +201,8 @@ def run_sample_buffer(args) -> None:
 
         # 轮询进度并实时打印
         last_print_time = 0.0
-        global _interrupted
 
         while not adapter.is_finished():
-            if _interrupted:
-                break
-
             # 轮询进度并触发样本落盘
             adapter.poll_and_ingest()
 
@@ -242,8 +235,6 @@ def run_sample_buffer(args) -> None:
             except Exception:
                 pass
         raise
-    finally:
-        signal.signal(signal.SIGINT, original_handler)
 
 
 # ---------- 入口 ----------
