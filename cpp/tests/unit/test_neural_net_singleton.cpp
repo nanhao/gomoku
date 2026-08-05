@@ -1,7 +1,7 @@
 /** NeuralNet 单例模式 单元测试
 
 覆盖 design/47/main_docs/test_cases.md 中 NeuralNet 单例化相关用例。
-验证: 单例生命周期、set_model 切换、predict/predict_async 接口。
+验证: 单例生命周期、set_model 切换、predict 接口。
 
 注意:
 - 需要有效 TorchScript 模型文件的测试会被跳过（标记为 SKIP）。
@@ -15,7 +15,6 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
-#include <future>
 #include <string>
 #include <vector>
 
@@ -88,9 +87,9 @@ static void test_singleton_initialize() {
 }
 
 
-// --- TC-NN-S02: predict_async 异步推理 ---
-static void test_predict_async() {
-    TEST("TC-NN-S02 predict_async interface");
+// --- TC-NN-S02: predict 同步推理 ---
+static void test_predict() {
+    TEST("TC-NN-S02 predict interface");
     std::string path = get_model_path();
 
     try {
@@ -102,8 +101,7 @@ static void test_predict_async() {
             encoded[2 * 225 + i] = 1.0f;
         }
 
-        auto future = nn.predict_async(encoded);
-        auto result = future.get();
+        auto result = nn.predict(encoded);
 
         ASSERT_EQ((int)result.policy.size(), 225);
         ASSERT_TRUE(result.value >= -1.0f && result.value <= 1.0f);
@@ -222,13 +220,12 @@ static void test_legacy_constructor() {
             encoded[2 * 225 + i] = 1.0f;
         }
 
-        // 旧式 predict (async) 仍可用
-        auto future = nn.predict_async(encoded);
-        auto result = future.get();
+        // 旧式 predict 仍可用
+        auto result = nn.predict(encoded);
 
         ASSERT_EQ((int)result.policy.size(), 225);
 
-        // 新式 predict (sync) 也可用
+        // 同步 predict 也可用
         auto result2 = nn.predict(encoded);
         ASSERT_EQ((int)result2.policy.size(), 225);
 
@@ -243,7 +240,7 @@ int main() {
     std::printf("=== NeuralNet Singleton Unit Tests ===\n\n");
 
     test_singleton_initialize();
-    test_predict_async();
+    test_predict();
     test_predict_sync();
     test_set_model();
     test_set_model_invalid();

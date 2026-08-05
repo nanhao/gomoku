@@ -14,7 +14,6 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
-#include <future>
 #include <string>
 #include <vector>
 
@@ -143,9 +142,9 @@ static void test_single_predict() {
     }
 }
 
-// --- TC-NN-04: 批量异步推理 ---
-static void test_batch_async_predict() {
-    TEST("TC-NN-04 batch async predict");
+// --- TC-NN-04: 批量同步推理 ---
+static void test_batch_sync_predict() {
+    TEST("TC-NN-04 batch sync predict");
     std::string path = get_model_path();
     if (!model_file_exists(path)) {
         SKIP("no model file available");
@@ -154,21 +153,16 @@ static void test_batch_async_predict() {
     try {
         NeuralNet nn(path, false);
 
-        // 提交 4 个请求
         std::vector<float> encoded(675, 0.0f);
         for (int i = 0; i < 225; ++i) {
             encoded[2 * 225 + i] = 1.0f;
         }
 
-        std::future<NeuralNetResult> f1 = nn.predict_async(encoded);
-        std::future<NeuralNetResult> f2 = nn.predict_async(encoded);
-        std::future<NeuralNetResult> f3 = nn.predict_async(encoded);
-        std::future<NeuralNetResult> f4 = nn.predict_async(encoded);
-
-        auto r1 = f1.get();
-        auto r2 = f2.get();
-        auto r3 = f3.get();
-        auto r4 = f4.get();
+        // 4 次同步推理（无需 async/future）
+        auto r1 = nn.predict(encoded);
+        auto r2 = nn.predict(encoded);
+        auto r3 = nn.predict(encoded);
+        auto r4 = nn.predict(encoded);
 
         ASSERT_EQ((int)r1.policy.size(), 225);
         ASSERT_EQ((int)r2.policy.size(), 225);
@@ -198,15 +192,8 @@ static void test_large_batch_stress() {
         }
 
         const int N = 100;
-        std::vector<std::future<NeuralNetResult>> futures;
-        futures.reserve(N);
-
         for (int i = 0; i < N; ++i) {
-            futures.push_back(nn.predict_async(encoded));
-        }
-
-        for (int i = 0; i < N; ++i) {
-            auto result = futures[i].get();
+            auto result = nn.predict(encoded);
             ASSERT_EQ((int)result.policy.size(), 225);
             ASSERT_TRUE(result.value >= -1.0f && result.value <= 1.0f);
         }
@@ -288,7 +275,7 @@ int main() {
     test_model_load_success();
     test_model_file_not_found();
     test_single_predict();
-    test_batch_async_predict();
+    test_batch_sync_predict();
     test_large_batch_stress();
     test_invalid_input();
     test_consistency_with_python();

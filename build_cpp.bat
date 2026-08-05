@@ -119,7 +119,7 @@ if exist "%PYD_SRC%" (
     copy /y "%PYD_SRC%" "..\python\cpp_mcts.pyd" >nul
     echo [ OK ] cpp_mcts.pyd ready
 
-    REM ---- Copy required torch DLLs ----
+    REM ---- Copy required torch CPU DLLs (pyd 导入时即依赖这些) ----
     set TORCH_LIB_DIR=
     for /f "delims=" %%i in ('python -c "import torch, os; print(os.path.join(os.path.dirname(torch.__file__), 'lib'))" 2^>nul') do set TORCH_LIB_DIR=%%i
     if defined TORCH_LIB_DIR (
@@ -128,7 +128,7 @@ if exist "%PYD_SRC%" (
                 copy /y "!TORCH_LIB_DIR!\%%d" "..\python\%%d" >nul 2>&1
             )
         )
-        echo [ OK ] Torch DLLs copied
+        echo [ OK ] Torch CPU DLLs copied
     )
 ) else (
     echo [WARN] cpp_mcts.pyd not found in build output

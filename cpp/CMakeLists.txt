@@ -30,11 +30,15 @@ message(STATUS "Using Torch root: ${TORCH_ROOT}")
 set(TORCH_INCLUDE_DIRS "${TORCH_ROOT}/include" "${TORCH_ROOT}/include/torch/csrc/api/include")
 set(TORCH_LIB_DIR "${TORCH_ROOT}/lib")
 
-# 链接必要的 LibTorch 库（CPU 推理仅需这些）
+# 链接必要的 LibTorch 库（CPU + CUDA 动态加载支持）
+# 链接 torch_cuda.lib 确保 CUDA 符号在编译时解析；运行时通过 PATH 查找 DLL。
+# 需要将 torch\lib 加入 PATH 才能加载 torch_cuda.dll 及其依赖（cublas, cudnn 等）。
 set(TORCH_LIBRARIES
     "${TORCH_LIB_DIR}/torch.lib"
     "${TORCH_LIB_DIR}/torch_cpu.lib"
+    "${TORCH_LIB_DIR}/torch_cuda.lib"
     "${TORCH_LIB_DIR}/c10.lib"
+    "${TORCH_LIB_DIR}/c10_cuda.lib"
 )
 
 # 添加 DLL 搜索路径（运行时需要）

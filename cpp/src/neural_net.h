@@ -7,6 +7,8 @@
 #include <future>
 #include <memory>
 #include <mutex>
+#include <queue>
+#include <shared_mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -45,11 +47,14 @@ struct GpuInferenceStats {
 
 /** 神经网络推理引擎（全局单例）
 
-使用 LibTorch 加载 TorchScript 模型，提供异步批量推理接口。
+使用 LibTorch 加载 TorchScript 模型，提供同步推理接口。
 
-内部架构：生产者-消费者模式
-- MCTS 工作线程投递 predict() 请求 → 入队 → 立即返回 std::future
-- 专有 GPU 推理线程循环：攒批 → GPU forward → 拆分结果 → 唤醒等待线程
+内部架构：专用推理线程 + 请求队列攒批
+- 构造时加载模型到 CPU（主线程），启动推理线程
+- 推理线程自行初始化 GPU（module->to(kCUDA)），避免跨线程 CUDA context 冲突
+- MCTS worker 线程调用 predict() → 提交请求到队列，阻塞等待 promise 结果
+- 推理线程收集 batch 后批量 GPU forward，结果通过 promise 返回
+- set_model 时获取独占写锁，加载新模型到 CPU，推理线程下一 batch 自动迁移
 
 单例模式：
 - initialize() 创建全局唯一实例（call_once 保护）
@@ -57,7 +62,8 @@ struct GpuInferenceStats {
 - set_model() 切换模型权重（线程安全）
 - 旧式构造器保留，支持独立实例（向后兼容）
 
-线程安全：所有公开方法均可多线程并发调用。
+线程安全：predict() 可多线程并发提交；推理线程单线程执行 GPU 操作；
+set_model() 独占写锁阻塞推理线程的下一 batch。
 */
 class NeuralNet {
 public:
@@ -73,15 +79,15 @@ public:
     */
     static void initialize(const std::string& model_path, bool use_gpu);
 
-    /** 关闭全局单例，等待推理线程退出 */
+    /** 关闭全局单例 */
     static void shutdown();
 
     // ---- 模型管理 ----
 
-    /** 切换模型权重（线程安全）
+    /** 切换模型权重（线程安全，独占写锁）
 
-    阻塞直到当前推理批次完成，重新加载模型，
-    然后恢复推理线程。若加载失败，保留旧模型并抛出异常。
+    若新路径与当前模型路径相同则跳过（幂等）。
+    加载失败时保留旧模型并抛出异常。
 
     @param model_path 新模型文件路径
     @throws std::runtime_error 若文件不存在或加载失败
@@ -90,20 +96,10 @@ public:
 
     // ---- 推理接口 ----
 
-    /** 异步投递推理请求
+    /** 同步推理（内部通过推理线程攒批后批量 GPU/CPU forward）
 
-    将 encoded_board 加入推理队列，立即返回 future。
-    调用方通过 future.get() 阻塞等待结果。
-
-    @param encoded_board 3×15×15 = 675 维相对视角编码张量
-    @return 异步结果的 std::future
-    */
-    std::future<NeuralNetResult> predict_async(
-        const std::vector<float>& encoded_board);
-
-    /** 同步推理（便捷方法）
-
-    等同 predict_async(state).get()。
+    MCTS worker 线程调用此方法，内部提交请求到推理线程队列，
+    阻塞等待 promise 结果。推理线程收集多个请求后批量执行 forward。
 
     @param encoded_board 3×15×15 = 675 维相对视角编码张量
     @return NeuralNetResult 推理结果
@@ -120,7 +116,7 @@ public:
 
     // ---- 构造/析构（保留旧接口，向后兼容）----
 
-    /** 加载 TorchScript 模型并启动 GPU 推理线程
+    /** 加载 TorchScript 模型
 
     攒批参数从 mcts_config.json 读取（batch_lower_bound / batch_upper_bound）。
 
@@ -129,7 +125,7 @@ public:
     */
     NeuralNet(std::string model_path, bool use_gpu);
 
-    /** 停止推理线程并等待其退出 */
+    /** 释放 LibTorch 模块 */
     ~NeuralNet();
 
     // 禁止拷贝和移动
@@ -137,43 +133,38 @@ public:
     NeuralNet& operator=(const NeuralNet&) = delete;
 
 private:
-    /** 单次推理请求 */
-    struct InferenceRequest {
-        std::vector<float> encoded_board;           // 675 维输入
-        std::promise<NeuralNetResult> promise;      // 结果回传 promise
-    };
+    // ---- 推理线程 ----
+    void inference_loop();
 
+    std::thread inference_thread_;
+    std::atomic<bool> stop_flag_{false};
+
+    struct PendingRequest {
+        std::vector<float> encoded_board;
+        std::promise<NeuralNetResult> promise;
+    };
+    std::queue<PendingRequest> pending_requests_;
+    std::mutex queue_mutex_;
+    std::condition_variable queue_cv_;
+
+    // ---- 模型 ----
     std::string model_path_;
-    int batch_lower_bound_;  // GPU 攒批下限（队列 < 此值继续等待）
-    int batch_upper_bound_;  // GPU 攒批上限（单次最多取走这么多）
+    int batch_lower_bound_;  // GPU 攒批下限
+    int batch_upper_bound_;  // GPU 攒批上限
     bool use_gpu_;
 
     // LibTorch 模型模块（前向声明，实际类型为 torch::jit::Module）
     void* module_impl_;  // torch::jit::script::Module*
 
-    // 推理线程
-    std::thread inference_thread_;
+    // 模型保护锁：inference_loop 用 shared_lock（GPU forward），set_model 用 unique_lock（独占写）
+    mutable std::shared_mutex model_mutex_;
 
-    // 请求队列
-    std::vector<InferenceRequest> pending_requests_;
-    std::mutex queue_mutex_;
-    std::condition_variable queue_cv_;
-
-    // 停止标志
-    std::atomic<bool> stop_flag_{false};
-
-    // 模型切换互斥锁（保护 set_model / 推理线程的 model 访问）
-    std::mutex model_mutex_;
-
-    // ---- 运行时监控（仅推理线程写入，主线程读取需加锁）----
+    // ---- 运行时监控（仅推理线程写入，get_stats 加锁读取）----
     GpuInferenceStats stats_;
-    mutable std::mutex stats_mutex_;  // 保护 stats_ 的读取
+    mutable std::mutex stats_mutex_;
     int stats_log_interval_ = 100;    // 每 N 个 batch 输出一次监控日志
 
-    /** GPU 推理线程主循环 */
-    void inference_loop();
-
-    /** 执行批量前向推理
+    /** 执行批量前向推理（调用方需先获取 model_mutex_ 的 shared_lock）
 
     @param batch 输入张量列表（每个 675 维）
     @return 等长的 NeuralNetResult 列表

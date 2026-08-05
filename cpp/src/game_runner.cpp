@@ -149,6 +149,7 @@ void GameRunner::run_single_game(int game_index) {
     int winner = 0;  // 0=未决出
 
     // 5. 对局主循环
+    std::string last_model_path;  // 追踪上次加载的模型路径，避免重复切换
     while (move_count < 225) {
         // 确定当前落子方使用哪个模型
         MctsSearcher* current_searcher = nullptr;
@@ -162,8 +163,11 @@ void GameRunner::run_single_game(int game_index) {
             current_model_path = model2_path_;
         }
 
-        // 切换 NeuralNet 到当前模型（线程安全）
-        nn.set_model(current_model_path);
+        // 仅在模型路径变化时切换（幂等优化，避免不必要的加载）
+        if (current_model_path != last_model_path) {
+            nn.set_model(current_model_path);
+            last_model_path = current_model_path;
+        }
 
         // MCTS 搜索
         MctsResult mcts_result = current_searcher->search(state);

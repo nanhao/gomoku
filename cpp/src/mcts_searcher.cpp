@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
-#include <future>
 #include <random>
 #include <stdexcept>
 
@@ -303,8 +302,7 @@ void MctsSearcher::run_one_simulation() {
                 // === 阶段 2: Evaluation（神经网络评估）===
                 std::vector<float> encoded =
                     child_state.encode_for_network();
-                auto future = nn().predict_async(encoded);
-                NeuralNetResult nn_result = future.get();
+                NeuralNetResult nn_result = nn().predict(encoded);
 
                 // === 阶段 3: Expansion（展开子节点）===
                 std::vector<int> legal_actions =

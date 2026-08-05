@@ -1,4 +1,4 @@
-"""C++ MCTS 对战适配器模块
+﻿"""C++ MCTS 对战适配器模块
 
 提供 CppMctsBattleAdapter 类，将 C++ GameRunner 包装为 Python 友好接口。
 负责从 registry spec 解析模型路径、创建 C++ GameRunner、进度查询和结果获取。
@@ -65,6 +65,12 @@ class CppMctsBattleAdapter:
         print(f"[CppMctsBattleAdapter] model1={model1_spec} → {model1_pt}")
         print(f"[CppMctsBattleAdapter] model2={model2_spec} → {model2_pt}")
 
+        # 将 torch\lib 加入 PATH，以便 LibTorch 运行时动态加载 CUDA DLL
+        _torch_lib_dir = os.path.join(os.path.dirname(os.path.dirname(
+            __import__('torch').__file__)), 'lib')
+        if _torch_lib_dir not in os.environ.get('PATH', ''):
+            os.environ['PATH'] = _torch_lib_dir + os.pathsep + os.environ.get('PATH', '')
+
         import cpp_mcts  # type: ignore[import-not-found]
 
         # 构建 C++ GameConfig（从 Python MctsSelfPlayConfig 映射）
@@ -76,7 +82,8 @@ class CppMctsBattleAdapter:
         cpp_config.virtual_loss = config.virtual_loss
         cpp_config.temperature = config.temperature
         cpp_config.temp_steps = config.temp_steps
-        # C++ 对战默认使用 GPU（若可用）
+        # GPU 推理：推理在调用线程上同步执行（移除独立推理线程），
+        # 与 Python MCTS 一致，避免了 CUDA context 跨线程共享问题。
         cpp_config.use_gpu = True
 
         # 创建 C++ GameRunner（内部初始化全局线程池和 NeuralNet 单例）
