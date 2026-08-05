@@ -89,6 +89,10 @@ function(add_unit_test test_name test_file)
     )
     target_link_libraries(${test_name} PRIVATE mcts_core)
     add_test(NAME ${test_name} COMMAND ${test_name})
+    # 确保测试运行时能找到 LibTorch DLLs
+    set_tests_properties(${test_name} PROPERTIES
+        ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${TORCH_LIB_DIR}"
+    )
 endfunction()
 
 add_unit_test(test_board_state test_board_state.cpp)
@@ -108,6 +112,10 @@ function(add_integration_test test_name test_file)
     )
     target_link_libraries(${test_name} PRIVATE mcts_core)
     add_test(NAME ${test_name} COMMAND ${test_name})
+    # 确保测试运行时能找到 LibTorch DLLs
+    set_tests_properties(${test_name} PROPERTIES
+        ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${TORCH_LIB_DIR}"
+    )
 endfunction()
 
 add_integration_test(test_mcts_integration test_mcts_integration.cpp)

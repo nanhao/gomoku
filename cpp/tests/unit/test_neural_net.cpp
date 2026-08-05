@@ -14,6 +14,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -66,8 +67,10 @@ static std::string get_model_path() {
 
 // 检查模型文件是否存在
 static bool model_file_exists(const std::string& path) {
-    // 简单判断：尝试加载会抛异常，这里用空路径标记跳过
-    return !path.empty();
+    if (path.empty()) return false;
+    // 使用 std::ifstream 检查文件是否实际存在
+    std::ifstream f(path);
+    return f.good();
 }
 
 // --- TC-NN-01: 模型加载成功 ---
