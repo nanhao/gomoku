@@ -5,6 +5,7 @@
 """
 import os
 import shutil
+import sys
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -132,21 +133,38 @@ class CnnV11TrainLoop:
         loss_history: List[float] = []
 
         try:
+            checkpoint_round = 0
             while True:
+                checkpoint_round += 1
+
                 # 每轮 checkpoint 前刷新缓冲区
                 self._reader.refresh()
+                total_samples = self._reader.total_samples()
+
+                print(f"[checkpoint #{checkpoint_round}] 开始训练 {self._updates_per_checkpoint} 步"
+                      f"（缓冲区 {total_samples} 条样本）")
 
                 # 训练 N 个 mini-batch
-                for _ in range(self._updates_per_checkpoint):
+                round_loss_sum = 0.0
+                for i in range(self._updates_per_checkpoint):
                     total_updates += 1
                     total_loss = self._train_one_batch()
                     loss_history.append(total_loss)
+                    round_loss_sum += total_loss
+
+                    # 每 10 步或最后一步打印进度
+                    if (i + 1) % 10 == 0 or i == self._updates_per_checkpoint - 1:
+                        avg_loss = round_loss_sum / (i + 1)
+                        print(f"  step {total_updates:>5d}  [{i + 1:>3d}/{self._updates_per_checkpoint}]"
+                              f"  loss={total_loss:.4f}  avg_loss={avg_loss:.4f}")
 
                 # 保存 checkpoint
+                print(f"  保存 checkpoint...", end=" ", flush=True)
                 checkpoint_pth = os.path.join(
                     self._checkpoint_dir, "checkpoint.pth"
                 )
                 self._trainer.save_model(checkpoint_pth)
+                print("pth ✓", end=" ", flush=True)
 
                 # 导出 checkpoint TorchScript
                 checkpoint_ts = os.path.join(
@@ -155,26 +173,37 @@ class CnnV11TrainLoop:
                 self._export_torchscript(
                     self._trainer.model.network, checkpoint_ts
                 )
+                print("pt ✓")
 
                 # 评估
+                print(f"  评估中（{self._eval_games} 局）...", end=" ", flush=True)
                 win_rate = self._evaluator.evaluate(
                     checkpoint_ts,
                     self._best_ts_path,
                     self._eval_games,
                     temp_steps=2,
                 )
+                print(f"胜率 = {win_rate:.1%}")
                 checkpoints_evaluated += 1
                 best_win_rate = max(best_win_rate, win_rate)
+
+                # 打印本轮状态
+                status = "✓ 通过" if win_rate >= 0.55 else "✗ 未通过"
+                print(f"  {status}  |  连续失败: {consecutive_failures + (0 if win_rate >= 0.55 else 1)}/{self._max_consecutive_failures}"
+                      f"  |  最高胜率: {best_win_rate:.1%}")
+                print()
 
                 if win_rate >= 0.55:
                     # 晋升
                     promoted_gen = self._gen + 1
                     promoted_spec = f"cnn_v11.{promoted_gen}"
 
+                    print(f">>> 晋升! checkpoint → {promoted_spec}")
                     self._promote_checkpoint(
                         checkpoint_pth, checkpoint_ts, promoted_gen
                     )
 
+                    print("保存 loss 日志...")
                     self._loss_logger.flush()
                     self._loss_logger.plot()
 
@@ -189,6 +218,8 @@ class CnnV11TrainLoop:
                 else:
                     consecutive_failures += 1
                     if consecutive_failures >= self._max_consecutive_failures:
+                        print(f">>> 连续 {self._max_consecutive_failures} 次失败，停止训练")
+                        print("保存 loss 日志...")
                         self._loss_logger.flush()
                         self._loss_logger.plot()
                         return TrainLoopResult(
@@ -200,15 +231,8 @@ class CnnV11TrainLoop:
                             loss_history=loss_history,
                         )
         except KeyboardInterrupt:
-            self._loss_logger.flush()
-            return TrainLoopResult(
-                stopped_by="interrupted",
-                promoted_to=None,
-                total_updates=total_updates,
-                checkpoints_evaluated=checkpoints_evaluated,
-                best_win_rate=best_win_rate,
-                loss_history=loss_history,
-            )
+            print()
+            sys.exit(1)
 
     # ---------- 内部方法 ----------
 

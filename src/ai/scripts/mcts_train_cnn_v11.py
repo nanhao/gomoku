@@ -7,7 +7,17 @@
     python -m ai.scripts.mcts_train_cnn_v11 --model cnn_v11.1 --buffer-dir sample_buffer
 """
 import argparse
+import os
+import signal
 import sys
+
+# 确保项目根目录和 cpp/python 在 sys.path 中，支持直接执行脚本
+_proj_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+_src_dir = os.path.join(_proj_root, 'src')
+_cpp_py_dir = os.path.join(_proj_root, 'cpp', 'python')
+for _p in (_proj_root, _src_dir, _cpp_py_dir):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 from ai.cnn_v11_train_loop import CnnV11TrainLoop
 from ai.scripts.mcts_config import MctsSelfPlayConfig
@@ -161,6 +171,40 @@ def main() -> None:
         use_prior=True,
     )
 
+    # ---------- 打印所有配置 ----------
+    print("=" * 60)
+    print("CNN v11 样本缓冲区训练脚本")
+    print("=" * 60)
+    print()
+    print("[训练参数]")
+    print(f"  初始模型:        {args.model}")
+    print(f"  缓冲区目录:      {args.buffer_dir}")
+    print(f"  batch 大小:      {args.batch_size}")
+    print(f"  每 checkpoint:   {args.updates_per_checkpoint} 步")
+    print(f"  评估局数:        {args.eval_games}")
+    print(f"  最大连续失败:    {args.max_failures}")
+    print(f"  学习率:          {args.lr}")
+    print(f"  权重衰减:        {args.weight_decay}")
+    print(f"  训练设备:        {args.device}")
+    print()
+    print("[MCTS 评估参数]")
+    print(f"  simulations:     {mcts_config.simulations}")
+    print(f"  c_puct:          {mcts_config.c_puct}")
+    print(f"  temp_steps:      {mcts_config.temp_steps}")
+    print(f"  temperature:     {mcts_config.temperature}")
+    print(f"  dirichlet_eps:   {mcts_config.dirichlet_epsilon}")
+    print(f"  virtual_loss:    {mcts_config.virtual_loss}")
+    print()
+    print("[晋升规则]")
+    print(f"  晋升阈值:        >= 55% 胜率")
+    print(f"  停止条件:        连续 {args.max_failures} 次 < 55%")
+    print()
+    print("=" * 60)
+    print()
+
+    # 注册 SIGINT 信号处理器（Ctrl+C 直接终止，不等待）
+    original_handler = signal.signal(signal.SIGINT, lambda signum, frame: os._exit(0))
+
     # 创建训练循环
     loop = CnnV11TrainLoop(
         model_spec=args.model,
@@ -177,6 +221,9 @@ def main() -> None:
 
     # 执行训练
     result = loop.run()
+
+    # 恢复原始信号处理器
+    signal.signal(signal.SIGINT, original_handler)
 
     # 打印结果
     if result.stopped_by == "promoted":
