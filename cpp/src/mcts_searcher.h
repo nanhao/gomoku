@@ -41,7 +41,7 @@ public:
 
     /** 使用外部线程池和 NeuralNet 创建搜索器（推荐用于多对局场景）
 
-    @param model_path TorchScript 模型文件路径（用于 set_model 提示）
+    @param model_path TorchScript 模型文件路径（用作 model_id 标识）
     @param pool 外部 MCTS 线程池引用（多个搜索器共享）
     @param nn 外部 NeuralNet 引用（多个搜索器共享 GPU 推理）
     @param num_simulations 每次搜索的总模拟次数

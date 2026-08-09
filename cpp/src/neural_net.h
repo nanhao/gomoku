@@ -12,6 +12,7 @@
 #include <shared_mutex>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 /** 神经网络推理结果 */
@@ -57,20 +58,20 @@ struct GpuInferenceStats {
 使用 LibTorch 加载 TorchScript 模型，提供同步推理接口。
 
 内部架构：专用推理线程 + 请求队列攒批
-- 构造时加载模型到 CPU（主线程），启动推理线程
+- 构造时加载首个模型到 CPU（主线程），启动推理线程
 - 推理线程自行初始化 GPU（module->to(kCUDA)），避免跨线程 CUDA context 冲突
-- MCTS worker 线程调用 predict() → 提交请求到队列，阻塞等待 promise 结果
-- 推理线程收集 batch 后批量 GPU forward，结果通过 promise 返回
-- set_model 时获取独占写锁，加载新模型到 CPU，推理线程下一 batch 自动迁移
+- MCTS worker 线程调用 predict(board, model_id) → 提交请求到队列，阻塞等待 promise 结果
+- 推理线程收集 batch 后按 model_id 分组，每组独立执行 GPU forward，结果通过 promise 返回
+- preload_model 加载额外模型到缓存，已缓存则幂等跳过
 
 单例模式：
 - initialize() 创建全局唯一实例（call_once 保护）
 - instance() 获取实例（若未初始化则用默认配置自动创建）
-- set_model() 切换模型权重（线程安全）
+- preload_model() 预加载额外模型到缓存（线程安全）
 - 旧式构造器保留，支持独立实例（向后兼容）
 
 线程安全：predict() 可多线程并发提交；推理线程单线程执行 GPU 操作；
-set_model() 独占写锁阻塞推理线程的下一 batch。
+preload_model() 独占写锁阻塞推理线程的下一 batch。
 */
 class NeuralNet {
 public:
@@ -91,27 +92,31 @@ public:
 
     // ---- 模型管理 ----
 
-    /** 切换模型权重（线程安全，独占写锁）
+    /** 预加载模型到缓存（线程安全，幂等）
 
-    若新路径与当前模型路径相同则跳过（幂等）。
-    加载失败时保留旧模型并抛出异常。
+    若 model_path 已在缓存中则跳过。
+    加载到 CPU，推理线程首次使用时自动迁移到 GPU。
 
-    @param model_path 新模型文件路径
+    @param model_path 模型文件路径
     @throws std::runtime_error 若文件不存在或加载失败
     */
-    void set_model(const std::string& model_path);
+    void preload_model(const std::string& model_path);
 
     // ---- 推理接口 ----
 
     /** 同步推理（内部通过推理线程攒批后批量 GPU/CPU forward）
 
     MCTS worker 线程调用此方法，内部提交请求到推理线程队列，
-    阻塞等待 promise 结果。推理线程收集多个请求后批量执行 forward。
+    阻塞等待 promise 结果。推理线程收集多个请求后按 model_id 分组，
+    每组独立批量执行 forward。
 
     @param encoded_board 3×15×15 = 675 维相对视角编码张量
+    @param model_id 模型标识（预加载时的文件路径）
     @return NeuralNetResult 推理结果
+    @throws std::runtime_error 若 model_id 未预加载或输入维度错误
     */
-    NeuralNetResult predict(const std::vector<float>& encoded_board);
+    NeuralNetResult predict(const std::vector<float>& encoded_board,
+                            const std::string& model_id);
 
     // ---- 运行时监控 ----
 
@@ -148,22 +153,25 @@ private:
 
     struct PendingRequest {
         std::vector<float> encoded_board;
+        std::string model_id;       // 模型标识（文件路径）
         std::promise<NeuralNetResult> promise;
     };
     std::queue<PendingRequest> pending_requests_;
     std::mutex queue_mutex_;
     std::condition_variable queue_cv_;
 
-    // ---- 模型 ----
-    std::string model_path_;
+    // ---- 模型缓存 ----
+    struct CachedModule {
+        void* module_impl;          // torch::jit::script::Module*
+        bool is_on_gpu = false;     // 是否已迁移到 GPU
+    };
+    std::unordered_map<std::string, CachedModule> module_cache_;
+
     int batch_lower_bound_;  // GPU 攒批下限
     int batch_upper_bound_;  // GPU 攒批上限
     bool use_gpu_;
 
-    // LibTorch 模型模块（前向声明，实际类型为 torch::jit::Module）
-    void* module_impl_;  // torch::jit::script::Module*
-
-    // 模型保护锁：inference_loop 用 shared_lock（GPU forward），set_model 用 unique_lock（独占写）
+    // 模型保护锁：inference_loop 用 shared_lock（GPU forward），preload_model 用 unique_lock（独占写）
     mutable std::shared_mutex model_mutex_;
 
     // ---- 运行时监控（仅推理线程写入，get_stats 加锁读取）----
@@ -182,11 +190,13 @@ private:
     /** 执行批量前向推理（调用方需先获取 model_mutex_ 的 shared_lock）
 
     @param batch 输入张量列表（每个 675 维）
+    @param model_id 模型标识
     @return 等长的 NeuralNetResult 列表
     */
     std::vector<NeuralNetResult> forward_batch(
-        const std::vector<std::vector<float>>& batch);
+        const std::vector<std::vector<float>>& batch,
+        const std::string& model_id);
 
-    /** 内部：加载模型到 module_impl_（不加锁，由调用方保证线程安全） */
-    void load_model(const std::string& model_path);
+    /** 内部：加载模型到 module_cache_（不加锁，由调用方保证线程安全） */
+    void load_model_to_cache(const std::string& model_path);
 };

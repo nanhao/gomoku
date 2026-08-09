@@ -42,12 +42,11 @@ graph TB
 
 | 决策项 | 选择 | 理由 |
 |--------|------|------|
-| 模型持有方式 | NeuralNet 内部 map<string, Module> | 按路径缓存，天然幂等，不改 API |
-| 推理时模型选择 | `predict(encoded_board, model_id)` 新增重载 | 不动现有 `predict()` 签名，向后兼容 |
+| 模型持有方式 | NeuralNet 内部 map<string, Module> | 按路径缓存，天然幂等 |
+| 推理时模型选择 | `predict(encoded_board, model_id)` 必须显式指定模型 | 简洁明确，不需要默认模型概念 |
 | GPU 显存策略 | 两个模型同时驻留 GPU | 单模型 ~34MB，两个 ~68MB，远低于训练显存，完全可接受 |
-| 模型生命周期 | 惰性加载 + 引用计数 / LRU 淘汰 | 避免长期持有不再用的模型 |
-| set_model 语义 | 标记为 deprecated，内部走 `predict(id)` 路径 | 保留兼容但不鼓励使用 |
-| GameRunner 改动 | 构造时预加载两个模型，对局中不再调用 set_model | 最小改动，根治每步切换 |
+| 模型生命周期 | 预加载后一直持有，进程结束时释放 | 对战场景最多两个模型，无需复杂的 LRU/引用计数 |
+| GameRunner 改动 | 构造时预加载两个模型，对局中直接按 model_id 路由 | 消除每步切换，根治性能问题 |
 | 推理线程改动 | `inference_loop` 中 `forward_batch` 按 model_id 分批 | 一个 batch 可能混合两个模型的请求，需按模型分组执行 |
 
 ## 方案概要
@@ -61,8 +60,8 @@ graph TB
 
 改造后（预加载，按 id 路由）:
   GameRunner 构造
-    ├─ nn.preload("checkpoint.pt")  → module_map_["checkpoint.pt"]
-    └─ nn.preload("best.pt")        → module_map_["best.pt"]
+    ├─ nn.preload_model("checkpoint.pt")  → module_cache_["checkpoint.pt"]
+    └─ nn.preload_model("best.pt")        → module_cache_["best.pt"]
   
   GameRunner.run_single_game
     └─ for each move:
@@ -76,14 +75,14 @@ graph TB
 ```cpp
 class NeuralNet {
 private:
-    // ---- 旧：单模型 ----
-    // void* module_impl_;  // 删除
+    // ---- 旧：单模型（删除）----
+    // void* module_impl_;
+    // std::string model_path_;
 
     // ---- 新：模型缓存 ----
     struct CachedModule {
         void* module_impl;          // torch::jit::script::Module*
         torch::Device device;       // CPU or CUDA
-        std::string model_path;
     };
     std::unordered_map<std::string, CachedModule> module_cache_;
     
@@ -96,24 +95,21 @@ private:
 };
 ```
 
-### 2. 新增/修改公开 API
+### 2. 公开 API（本次重构后）
 
 ```cpp
-// ---- 新增：预加载模型（不阻塞推理线程）----
+// ---- 预加载模型（幂等，已缓存则跳过）----
 void preload_model(const std::string& model_path);
 
-// ---- 新增：按模型 ID 推理 ----
+// ---- 按模型 ID 推理（model_id 为必选参数）----
 NeuralNetResult predict(const std::vector<float>& encoded_board,
                         const std::string& model_id);
-
-// ---- 保留：无 model_id 推理（向后兼容，使用默认模型）----
-NeuralNetResult predict(const std::vector<float>& encoded_board);
-// 实现：内部使用当前默认 model_id（= 最近一次 set_model 的路径）
-
-// ---- 标记 deprecated ----
-void set_model(const std::string& model_path);
-// 实现：设为默认 model_id，若未缓存则调用 preload_model
 ```
+
+说明：
+- `predict` 必须显式传入 `model_id`，不再提供无参版本
+- `set_model` 方法直接删除，不再需要
+- `model_path_` 字段删除，改为 `module_cache_` 管理所有模型
 
 ### 3. preload_model 实现
 
@@ -129,7 +125,6 @@ void NeuralNet::preload_model(const std::string& model_path) {
     CachedModule cached;
     cached.module_impl = new torch::jit::script::Module(std::move(module));
     cached.device = torch::kCPU;
-    cached.model_path = model_path;
     
     std::unique_lock<std::shared_mutex> lock(model_mutex_);
     module_cache_[model_path] = cached;
@@ -202,7 +197,7 @@ std::vector<NeuralNetResult> forward_batch(
     const std::string& model_id);
 ```
 
-内部通过 `module_cache_[model_id].module_impl` 获取 `torch::jit::Module*`，其余逻辑不变。
+内部通过 `module_cache_[model_id].module_impl` 获取 `torch::jit::Module*`，其余逻辑不变。旧的无参版本删除。
 
 ### 6. GameRunner 适配
 
@@ -225,7 +220,7 @@ GameRunner::GameRunner(const std::string& model1_path,
 }
 ```
 
-`run_single_game` 中去掉 `set_model` 调用，改为在 `MctsSearcher` 创建时或 `predict` 调用时传入 `model_id`：
+`run_single_game` 中删除 `set_model` 调用和 `last_model_path` 追踪，改为在 `MctsSearcher` 内部直接按 `model_path_` 路由：
 
 ```cpp
 void GameRunner::run_single_game(int game_index) {
@@ -257,39 +252,24 @@ void GameRunner::run_single_game(int game_index) {
 NeuralNetResult result = nn_->predict(encoded_board, model_path_);
 ```
 
-### 8. set_model 兼容策略
-
-保留 `set_model` 方法但标记为 deprecated，内部逻辑改为：
-
-```cpp
-void NeuralNet::set_model(const std::string& model_path) {
-    preload_model(model_path);           // 确保已缓存
-    default_model_id_ = model_path;      // 设为默认
-    // 不再打印 [NeuralNet] set_model 日志
-}
-```
-
-无参 `predict(board)` 使用 `default_model_id_` 路由。
-
 ## 影响范围
 
 ### 修改文件
 
 | 文件 | 改动量 | 说明 |
 |------|--------|------|
-| `cpp/src/neural_net.h` | ~30 行 | 新增 `CachedModule` 结构体、`preload_model`/`predict(id)` 声明、`module_cache_`/`default_model_id_` 字段，删除 `module_impl_` |
-| `cpp/src/neural_net.cpp` | ~100 行 | 实现 `preload_model`、改造 `inference_loop` 分组逻辑、改造 `forward_batch`、新增 `predict(id)` 重载 |
+| `cpp/src/neural_net.h` | ~25 行 | 新增 `CachedModule` 结构体、`preload_model`/`predict(id)` 声明、`module_cache_` 字段；删除 `module_impl_`、`model_path_`、`set_model`、旧 `predict()` |
+| `cpp/src/neural_net.cpp` | ~90 行 | 实现 `preload_model`、改造 `inference_loop` 分组逻辑、改造 `forward_batch`、新增 `predict(id)`；删除 `set_model`、旧 `predict()` |
 | `cpp/src/game_runner.cpp` | ~10 行 | 构造时 `preload_model(model2)`，`run_single_game` 删除 `set_model` 调用和 `last_model_path` 追踪 |
 | `cpp/src/mcts_searcher.cpp` | ~5 行 | `nn_->predict(board)` → `nn_->predict(board, model_path_)` |
-| `cpp/src/bindings.cpp` | 无需改动 | pybind11 绑定不变 |
-| `src/ai/checkpoint_evaluator.py` | 无需改动 | Python 侧通过 pybind11 调用，接口不变 |
+| `cpp/src/bindings.cpp` | 需更新 | pybind11 绑定：删除 `set_model` 暴露，`predict` 签名改为双参数 |
 
 ### 不受影响的模块
 
 - `MctsThreadPool`——不涉及模型管理
-- `MctsSearcher` 旧式构造器——独立 `NeuralNet` 实例，单模型场景不变
-- 自对弈模式（`mcts_sample_buffer.py`）——双方同模型，但也能从预加载受益（避免延迟初始化）
-- 所有 Python 脚本——C++ 内部重构，对上层透明
+- `MctsSearcher` 旧式构造器（自建 `NeuralNet` 实例）——独立实例只持有一个模型，内部 `predict` 调用需更新签名
+- 自对弈模式（`mcts_sample_buffer.py`）——双方同模型，`preload_model` 只加载一次即可
+- 所有 Python 脚本——C++ 内部重构，对上层透明（但 pybind11 绑定需更新签名）
 
 ### 风险评估
 
@@ -297,8 +277,7 @@ void NeuralNet::set_model(const std::string& model_path) {
 |------|------|----------|
 | 多模型 GPU 显存翻倍 | 低 | 双模型 ~68MB + 训练模型 ~200MB = ~270MB，4GB 显卡完全够 |
 | 按模型分组导致攒批效率下降 | 极低 | 对弈场景下同一时刻只有一个模型有推理请求 |
-| `module_cache_` 无限增长 | 低 | 初始版本只存两个模型（对战必然 ≤2），后续可加 LRU |
-| 现有单模型路径（`predict(board)` 无 id）回归 | 中 | 保留无参重载，走 `default_model_id_`，行为完全等价 |
+| `module_cache_` 无限增长 | 低 | 对战场景最多两个模型，自对弈只有一个，无增长风险 |
 
 ## 测试计划
 
@@ -308,10 +287,8 @@ void NeuralNet::set_model(const std::string& model_path) {
 |------|------|
 | preload_idempotent | 同一路径 preload 两次，只加载一次 |
 | predict_with_model_id | 两个不同模型分别 predict，结果不同 |
-| predict_without_model_id | 向后兼容：无 id 版本用默认模型 |
 | cache_two_models | 缓存两个模型，验证 module_cache_ size=2 |
 | forward_batch_different_models | 同一 batch 混合两个模型的请求，各自正确 |
-| set_model_deprecated | set_model 仍能工作，走 preload + 默认路由 |
 
 ### Python 集成测试
 
@@ -319,7 +296,7 @@ void NeuralNet::set_model(const std::string& model_path) {
 |------|------|
 | evaluate_win_rate | CheckpointEvaluator 评估流程，验证无 set_model 刷屏 |
 | self_play_unaffected | mcts_sample_buffer.py 工作正常 |
-| backward_compat | mcts_battle_cpp.py 工作正常（只用默认模型路径） |
+| mcts_battle_cpp | mcts_battle_cpp.py 工作正常 |
 
 ### 构建验证
 
@@ -339,9 +316,9 @@ ctest --test-dir cpp/build --output-on-failure
 
 ## 实现步骤
 
-1. **NeuralNet 核心改造**：`CachedModule` + `preload_model` + `predict(id)` + 分组 `inference_loop`
-2. **向后兼容层**：`predict(board)` 无参版本 + `set_model` deprecated
-3. **GameRunner 适配**：构造时预加载 + 对局中去掉 `set_model`
+1. **NeuralNet 核心改造**：`CachedModule` + `preload_model` + `predict(id)` + 分组 `inference_loop`，删除 `set_model`/`module_impl_`/`model_path_`/旧 `predict()`
+2. **bindings.cpp 更新**：pybind11 绑定适配新 API 签名
+3. **GameRunner 适配**：构造时预加载 + 对局中去掉 `set_model` 和 `last_model_path`
 4. **MctsSearcher 适配**：`predict` 调用加 `model_path_`
 5. **C++ 单测**：TDD 先写测试，再写实现
 6. **Python 集成测试**：验证评估流程和自对弈不受影响

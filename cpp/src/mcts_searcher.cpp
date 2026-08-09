@@ -173,7 +173,7 @@ void MctsSearcher::init_search(const std::vector<int>& state) {
 
     // 神经网络评估根状态
     std::vector<float> encoded = root_state.encode_for_network();
-    NeuralNetResult nn_result = nn().predict(encoded);
+    NeuralNetResult nn_result = nn().predict(encoded, model_path_);
 
     // 保存原始策略（噪声施加前）
     root_policy_ = nn_result.policy;
@@ -302,7 +302,7 @@ void MctsSearcher::run_one_simulation() {
                 // === 阶段 2: Evaluation（神经网络评估）===
                 std::vector<float> encoded =
                     child_state.encode_for_network();
-                NeuralNetResult nn_result = nn().predict(encoded);
+                NeuralNetResult nn_result = nn().predict(encoded, model_path_);
 
                 // === 阶段 3: Expansion（展开子节点）===
                 std::vector<int> legal_actions =

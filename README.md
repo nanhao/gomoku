@@ -826,7 +826,7 @@ python tests/run_tests.py
 - **模型文件**：`src/ai/models/cnn_v8/gen{i}/cnn_v8.pth`（多代模型）
 - **结构图**：[cnn_v8_architecture.puml](src/ai/models/cnn_v8/cnn_v8_architecture.puml) / [cnn_v8_architecture.png](src/ai/models/cnn_v8/cnn_v8_architecture.png)
 
-### C++ MCTS 模块（设计 46 + 47）
+### C++ MCTS 模块（设计 46 + 47 + 51）
 
 高性能 C++17 MCTS 搜索器，通过 pybind11 桥接为 Python 扩展模块，替代纯 Python 搜索逻辑。
 
@@ -834,6 +834,7 @@ python tests/run_tests.py
 - **技术栈**：C++17 / LibTorch / pybind11 / CMake
 - **目标模型**：cnn_v11（TorchScript 导出）
 - **新增（设计 47）**：`GameRunner` 并行对局管理器、`GameConfig` 对战配置、`CppMctsBattleAdapter` Python 适配器、`mcts_battle_cpp.py` CLI 脚本
+- **新增（设计 51）**：`NeuralNet` 双模型缓存 — 启动时预加载双方模型到 `module_cache_`，对局过程中无需切换模型（消除 per-move `set_model` 开销）。推理线程按 `model_id` 自动分组攒批，每组独立 GPU forward。
 
 #### 构建
 

@@ -104,6 +104,7 @@ add_unit_test(test_neural_net_singleton test_neural_net_singleton.cpp)
 add_unit_test(test_mcts_searcher_injection test_mcts_searcher_injection.cpp)
 add_unit_test(test_game_runner_workers test_game_runner_workers.cpp)
 add_unit_test(test_sample_augmentor test_sample_augmentor.cpp)
+add_unit_test(test_neural_net_dual_model test_neural_net_dual_model.cpp)
 
 # --- 集成测试 ---
 function(add_integration_test test_name test_file)

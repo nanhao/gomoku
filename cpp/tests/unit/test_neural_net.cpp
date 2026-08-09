@@ -122,7 +122,7 @@ static void test_single_predict() {
             encoded[2 * 225 + i] = 1.0f;
         }
 
-        auto result = nn.predict(encoded);
+        auto result = nn.predict(encoded, path);
 
         // policy 长度 = 225
         ASSERT_EQ((int)result.policy.size(), 225);
@@ -162,10 +162,10 @@ static void test_batch_sync_predict() {
         }
 
         // 4 次同步推理（无需 async/future）
-        auto r1 = nn.predict(encoded);
-        auto r2 = nn.predict(encoded);
-        auto r3 = nn.predict(encoded);
-        auto r4 = nn.predict(encoded);
+        auto r1 = nn.predict(encoded, path);
+        auto r2 = nn.predict(encoded, path);
+        auto r3 = nn.predict(encoded, path);
+        auto r4 = nn.predict(encoded, path);
 
         ASSERT_EQ((int)r1.policy.size(), 225);
         ASSERT_EQ((int)r2.policy.size(), 225);
@@ -196,7 +196,7 @@ static void test_large_batch_stress() {
 
         const int N = 100;
         for (int i = 0; i < N; ++i) {
-            auto result = nn.predict(encoded);
+            auto result = nn.predict(encoded, path);
             ASSERT_EQ((int)result.policy.size(), 225);
             ASSERT_TRUE(result.value >= -1.0f && result.value <= 1.0f);
         }
@@ -210,12 +210,13 @@ static void test_large_batch_stress() {
 // --- TC-NN-06: 非法输入维度 ---
 static void test_invalid_input() {
     TEST("TC-NN-06 invalid input dimension");
+    std::string path = get_model_path();
     try {
-        NeuralNet nn(get_model_path(), false);
+        NeuralNet nn(path, false);
 
         // 输入长度不是 675
         std::vector<float> bad_input(100, 0.0f);
-        auto result = nn.predict(bad_input);
+        auto result = nn.predict(bad_input, path);
 
         FAIL("expected exception but none thrown");
     } catch (const std::runtime_error&) {
@@ -253,7 +254,7 @@ static void test_consistency_with_python() {
             encoded[450 + i] = 1.0f;
         }
 
-        auto result = nn.predict(encoded);
+        auto result = nn.predict(encoded, path);
 
         // 基本合理性检查（精确一致性需与 Python 逐元素比较）
         ASSERT_EQ((int)result.policy.size(), 225);

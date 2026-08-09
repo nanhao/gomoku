@@ -47,10 +47,10 @@ void NeuralNet::shutdown() {
 }
 
 // =====================================================================
-// 内部: load_model（不加锁，由调用方保证线程安全）
+// 内部: load_model_to_cache（不加锁，由调用方保证线程安全）
 // =====================================================================
 
-void NeuralNet::load_model(const std::string& model_path) {
+void NeuralNet::load_model_to_cache(const std::string& model_path) {
     // 始终加载到 CPU（避免主线程 CUDA 初始化与 worker 线程冲突）
     // GPU 迁移延迟到 forward_batch 首次调用时，在 worker 线程上执行
     torch::Device device(torch::kCPU);
@@ -60,17 +60,11 @@ void NeuralNet::load_model(const std::string& model_path) {
     module.to(device);
     module.eval();
 
-    // 释放旧模型（若存在）
-    if (module_impl_ != nullptr) {
-        auto* old_module = static_cast<torch::jit::script::Module*>(module_impl_);
-        delete old_module;
-        module_impl_ = nullptr;
-    }
-
-    // 存储新模型
-    auto* heap_module = new torch::jit::script::Module(std::move(module));
-    module_impl_ = static_cast<void*>(heap_module);
-    // 注意: model_path_ 由调用方在适当的锁保护下设置
+    // 存入缓存
+    CachedModule cached;
+    cached.module_impl = new torch::jit::script::Module(std::move(module));
+    cached.is_on_gpu = false;
+    module_cache_[model_path] = cached;
 }
 
 // =====================================================================
@@ -78,13 +72,11 @@ void NeuralNet::load_model(const std::string& model_path) {
 // =====================================================================
 
 NeuralNet::NeuralNet(std::string model_path, bool use_gpu)
-    : model_path_(std::move(model_path))
-    , batch_lower_bound_(g_mcts_config.batch_lower_bound > 0
+    : batch_lower_bound_(g_mcts_config.batch_lower_bound > 0
                          ? g_mcts_config.batch_lower_bound : 16)
     , batch_upper_bound_(g_mcts_config.batch_upper_bound > 0
                          ? g_mcts_config.batch_upper_bound : 16)
     , use_gpu_(use_gpu)
-    , module_impl_(nullptr)
 {
     std::cout << "[NeuralNet] use_gpu=" << use_gpu_
               << " cuda_avail=" << torch::cuda::is_available()
@@ -92,14 +84,16 @@ NeuralNet::NeuralNet(std::string model_path, bool use_gpu)
               << "," << batch_upper_bound_ << "]"
               << std::endl;
 
-    // 加载模型到 CPU（避免主线程 CUDA 初始化）
+    // 预加载首个模型到缓存
     try {
-        load_model(model_path_);
+        load_model_to_cache(model_path);
     } catch (const c10::Error& e) {
         throw std::runtime_error(
-            "NeuralNet: 加载 TorchScript 模型失败: " + model_path_
+            "NeuralNet: 加载 TorchScript 模型失败: " + model_path
             + " — " + std::string(e.what()));
     }
+
+    std::cout << "[NeuralNet] preloaded: " << model_path << std::endl;
 
     // 启动推理线程（GPU 初始化在线程内部自行完成）
     stop_flag_ = false;
@@ -114,34 +108,46 @@ NeuralNet::~NeuralNet() {
         inference_thread_.join();
     }
 
-    // 销毁 LibTorch 模块
-    auto* module = static_cast<torch::jit::script::Module*>(module_impl_);
-    delete module;
+    // 销毁所有缓存的 LibTorch 模块
+    for (auto& entry : module_cache_) {
+        auto* module = static_cast<torch::jit::script::Module*>(
+            entry.second.module_impl);
+        delete module;
+    }
+    module_cache_.clear();
 }
 
 // =====================================================================
-// 公开 API: set_model
+// 公开 API: preload_model
 // =====================================================================
 
-void NeuralNet::set_model(const std::string& model_path) {
-    // 独占写锁（阻塞推理线程的下一 batch，因它需要 shared_lock）
+void NeuralNet::preload_model(const std::string& model_path) {
+    // 快速路径：已缓存则跳过（不加写锁）
+    {
+        std::shared_lock<std::shared_mutex> lock(model_mutex_);
+        if (module_cache_.count(model_path)) {
+            return;
+        }
+    }
+
+    // 独占写锁（阻塞推理线程的下一 batch）
     std::unique_lock<std::shared_mutex> lock(model_mutex_);
 
-    if (model_path == model_path_) {
+    // 双重检查：可能在等待写锁期间被其他线程加载
+    if (module_cache_.count(model_path)) {
         return;
     }
 
     // 加载新模型到 CPU（推理线程下一 batch 自动检测并迁移到 GPU）
     try {
-        load_model(model_path);
+        load_model_to_cache(model_path);
     } catch (const c10::Error& e) {
         throw std::runtime_error(
-            "NeuralNet::set_model: 加载模型失败: " + model_path
+            "NeuralNet::preload_model: 加载模型失败: " + model_path
             + " — " + std::string(e.what()));
     }
 
-    model_path_ = model_path;
-    std::cout << "[NeuralNet] set_model: " << model_path << std::endl;
+    std::cout << "[NeuralNet] preloaded: " << model_path << std::endl;
 }
 
 // =====================================================================
@@ -149,12 +155,22 @@ void NeuralNet::set_model(const std::string& model_path) {
 // =====================================================================
 
 NeuralNetResult NeuralNet::predict(
-    const std::vector<float>& encoded_board)
+    const std::vector<float>& encoded_board,
+    const std::string& model_id)
 {
     if (encoded_board.size() != 675) {
         throw std::runtime_error(
             "NeuralNet::predict: encoded_board 大小必须为 675, 实际 "
             + std::to_string(encoded_board.size()));
+    }
+
+    // 快速检查 model_id 是否已缓存（不加写锁）
+    {
+        std::shared_lock<std::shared_mutex> lock(model_mutex_);
+        if (!module_cache_.count(model_id)) {
+            throw std::runtime_error(
+                "NeuralNet::predict: model_id 未预加载: " + model_id);
+        }
     }
 
     // 创建 promise/future 对
@@ -164,7 +180,7 @@ NeuralNetResult NeuralNet::predict(
     // 提交请求到推理线程队列
     {
         std::lock_guard<std::mutex> lock(queue_mutex_);
-        pending_requests_.push({encoded_board, std::move(promise)});
+        pending_requests_.push({encoded_board, model_id, std::move(promise)});
         int qsize = static_cast<int>(pending_requests_.size());
         {
             std::lock_guard<std::mutex> slock(stats_mutex_);
@@ -231,18 +247,43 @@ void NeuralNet::inference_loop() {
         int64_t wait_us = std::chrono::duration_cast<std::chrono::microseconds>(
             t_infer_start - t_wait_start).count();
 
-        // === 阶段 3: 准备 batch 数据（CPU 操作）===
-        std::vector<std::vector<float>> batch_data;
-        batch_data.reserve(batch.size());
-        for (auto& req : batch) {
-            batch_data.push_back(std::move(req.encoded_board));
-        }
-
-        // === 阶段 4: GPU 批量推理（shared_lock 保护）===
-        std::vector<NeuralNetResult> results;
+        // === 阶段 3: 按 model_id 分组，每组独立 GPU 批量推理 ===
+        std::vector<NeuralNetResult> results(batch.size());
         {
+            // 按 model_id 分组
+            std::unordered_map<std::string, std::vector<size_t>> groups;
+            for (size_t i = 0; i < batch.size(); ++i) {
+                groups[batch[i].model_id].push_back(i);
+            }
+
             std::shared_lock<std::shared_mutex> lock(model_mutex_);
-            results = forward_batch(batch_data);
+            for (auto& kv : groups) {
+                const std::string& model_id = kv.first;
+                const std::vector<size_t>& indices = kv.second;
+
+                // 确保模型已迁移到 GPU
+                auto& cached = module_cache_[model_id];
+                if (use_gpu_ && !cached.is_on_gpu
+                    && torch::cuda::is_available()) {
+                    static_cast<torch::jit::script::Module*>(
+                        cached.module_impl)->to(torch::kCUDA);
+                    cached.is_on_gpu = true;
+                }
+
+                // 收集该组的输入数据
+                std::vector<std::vector<float>> group_data;
+                group_data.reserve(indices.size());
+                for (size_t idx : indices) {
+                    group_data.push_back(
+                        std::move(batch[idx].encoded_board));
+                }
+
+                // 执行推理
+                auto group_results = forward_batch(group_data, model_id);
+                for (size_t j = 0; j < indices.size(); ++j) {
+                    results[indices[j]] = std::move(group_results[j]);
+                }
+            }
         }
 
         auto t_end = std::chrono::steady_clock::now();
@@ -359,9 +400,17 @@ GpuInferenceStats NeuralNet::get_stats() const {
 // =====================================================================
 
 std::vector<NeuralNetResult> NeuralNet::forward_batch(
-    const std::vector<std::vector<float>>& batch)
+    const std::vector<std::vector<float>>& batch,
+    const std::string& model_id)
 {
-    auto* module = static_cast<torch::jit::script::Module*>(module_impl_);
+    // 从缓存获取模块
+    auto it = module_cache_.find(model_id);
+    if (it == module_cache_.end()) {
+        throw std::runtime_error(
+            "NeuralNet::forward_batch: model_id 未缓存: " + model_id);
+    }
+    auto* module = static_cast<torch::jit::script::Module*>(
+        it->second.module_impl);
     torch::NoGradGuard no_grad;
 
     // 获取模块所在设备

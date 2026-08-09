@@ -45,6 +45,11 @@ GameRunner::GameRunner(const std::string& model1_path,
     std::cout << "[GameRunner] NeuralNet 已初始化, model="
               << model1_path_ << std::endl;
 
+    // 3. 预加载第二个模型（不同模型对战时）
+    if (model1_path_ != model2_path_) {
+        NeuralNet::instance().preload_model(model2_path_);
+    }
+
     std::cout << "[GameRunner] 游戏线程数=" << num_workers_
               << " (对局数=" << num_games_ << ")" << std::endl;
 
@@ -175,10 +180,10 @@ void GameRunner::run_single_game(int game_index) {
 
     // 2. 获取共享资源
     MctsThreadPool& pool = MctsThreadPool::instance();
-    NeuralNet& nn = NeuralNet::instance();
 
     // 3. 创建两个 MctsSearcher（共享线程池和 GPU）
     //    自对弈模式下 model1_path == model2_path，两个 searcher 使用同一模型
+    NeuralNet& nn = NeuralNet::instance();
     MctsSearcher searcher1(
         model1_path_, pool, nn,
         config_.num_simulations, config_.c_puct,
@@ -211,24 +216,14 @@ void GameRunner::run_single_game(int game_index) {
     std::vector<RawSampleRecord> raw_samples;
 
     // 5. 对局主循环
-    std::string last_model_path;  // 追踪上次加载的模型路径，避免重复切换
     while (move_count < 225) {
-        // 确定当前落子方使用哪个模型
+        // 确定当前落子方使用哪个 searcher
         MctsSearcher* current_searcher = nullptr;
-        std::string current_model_path;
 
         if (current_player == model1_color) {
             current_searcher = &searcher1;
-            current_model_path = model1_path_;
         } else {
             current_searcher = &searcher2;
-            current_model_path = model2_path_;
-        }
-
-        // 仅在模型路径变化时切换（幂等优化，避免不必要的加载）
-        if (current_model_path != last_model_path) {
-            nn.set_model(current_model_path);
-            last_model_path = current_model_path;
         }
 
         // 若开启样本采集，记录落子前的状态

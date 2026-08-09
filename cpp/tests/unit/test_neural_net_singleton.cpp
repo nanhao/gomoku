@@ -1,7 +1,7 @@
 /** NeuralNet 单例模式 单元测试
 
 覆盖 design/47/main_docs/test_cases.md 中 NeuralNet 单例化相关用例。
-验证: 单例生命周期、set_model 切换、predict 接口。
+验证: 单例生命周期、preload_model 预加载、predict 接口。
 
 注意:
 - 需要有效 TorchScript 模型文件的测试会被跳过（标记为 SKIP）。
@@ -101,7 +101,7 @@ static void test_predict() {
             encoded[2 * 225 + i] = 1.0f;
         }
 
-        auto result = nn.predict(encoded);
+        auto result = nn.predict(encoded, path);
 
         ASSERT_EQ((int)result.policy.size(), 225);
         ASSERT_TRUE(result.value >= -1.0f && result.value <= 1.0f);
@@ -136,7 +136,7 @@ static void test_predict_sync() {
         }
 
         // 同步调用，直接返回结果
-        auto result = nn.predict(encoded);
+        auto result = nn.predict(encoded, path);
 
         ASSERT_EQ((int)result.policy.size(), 225);
         ASSERT_TRUE(result.value >= -1.0f && result.value <= 1.0f);
@@ -149,9 +149,9 @@ static void test_predict_sync() {
 }
 
 
-// --- TC-NN-S04: set_model 切换模型 ---
-static void test_set_model() {
-    TEST("TC-NN-S04 set_model switching");
+// --- TC-NN-S04: preload_model 幂等预加载 ---
+static void test_preload_model() {
+    TEST("TC-NN-S04 preload_model idempotent");
     std::string path = get_model_path();
 
     try {
@@ -164,14 +164,14 @@ static void test_set_model() {
             encoded[2 * 225 + i] = 1.0f;
         }
 
-        auto r1 = nn.predict(encoded);
+        auto r1 = nn.predict(encoded, path);
         ASSERT_EQ((int)r1.policy.size(), 225);
 
-        // 切换到同一模型（验证 set_model 不崩溃）
-        nn.set_model(path);
+        // 预加载同一模型（验证幂等，不崩溃）
+        nn.preload_model(path);
 
-        // 切换后再推理
-        auto r2 = nn.predict(encoded);
+        // 预加载后再推理
+        auto r2 = nn.predict(encoded, path);
         ASSERT_EQ((int)r2.policy.size(), 225);
 
         NeuralNet::shutdown();
@@ -182,9 +182,9 @@ static void test_set_model() {
 }
 
 
-// --- TC-NN-S05: set_model 不存在的文件 ---
-static void test_set_model_invalid() {
-    TEST("TC-NN-S05 set_model invalid path");
+// --- TC-NN-S05: preload_model 不存在的文件 ---
+static void test_preload_model_invalid() {
+    TEST("TC-NN-S05 preload_model invalid path");
     std::string path = get_model_path();
 
     try {
@@ -192,7 +192,7 @@ static void test_set_model_invalid() {
         NeuralNet& nn = NeuralNet::instance();
 
         try {
-            nn.set_model("nonexistent_model.pt");
+            nn.preload_model("nonexistent_model.pt");
             FAIL("expected exception but none thrown");
         } catch (const std::runtime_error&) {
             // 预期行为
@@ -220,13 +220,13 @@ static void test_legacy_constructor() {
             encoded[2 * 225 + i] = 1.0f;
         }
 
-        // 旧式 predict 仍可用
-        auto result = nn.predict(encoded);
+        // 旧式 predict 需传入 model_id（路径作为 model_id）
+        auto result = nn.predict(encoded, path);
 
         ASSERT_EQ((int)result.policy.size(), 225);
 
         // 同步 predict 也可用
-        auto result2 = nn.predict(encoded);
+        auto result2 = nn.predict(encoded, path);
         ASSERT_EQ((int)result2.policy.size(), 225);
 
         PASS();
@@ -242,8 +242,8 @@ int main() {
     test_singleton_initialize();
     test_predict();
     test_predict_sync();
-    test_set_model();
-    test_set_model_invalid();
+    test_preload_model();
+    test_preload_model_invalid();
     test_legacy_constructor();
 
     std::printf("\n=== Results: %d passed, %d failed, %d skipped ===\n",

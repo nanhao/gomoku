@@ -202,7 +202,7 @@ AlphaGo Zero 风格的蒙特卡洛树搜索，支持 Batch MCTS + Virtual Loss�
 
 ### C++ MCTS 引擎（`cpp/`）
 
-基于 C++17/LibTorch 的高性能 MCTS 实现，通过 pybind11 桥接为 Python 扩展（详见 [设计 46](../design/46/main_docs/overview.md)）。
+基于 C++17/LibTorch 的高性能 MCTS 实现，通过 pybind11 桥接为 Python 扩展（详见 [设计 46](../design/46/main_docs/overview.md)、[设计 47](../design/47/main_docs/overview.md)、[设计 51](../design/51/main_docs/overview.md)）。
 
 **核心模块**：
 
@@ -210,7 +210,7 @@ AlphaGo Zero 风格的蒙特卡洛树搜索，支持 Batch MCTS + Virtual Loss�
 |------|------|------|
 | `BoardState` | `board_state.h/cpp` | 棋盘编码、胜负判定、相对视角编码 |
 | `MctsNode` | `mcts_node.h/cpp` | 并发安全搜索树节点（PUCT/VL/Backup） |
-| `NeuralNet` | `neural_net.h/cpp` | LibTorch 异步批量推理（全局单例、GPU 共享） |
+| `NeuralNet` | `neural_net.h/cpp` | LibTorch 异步批量推理（全局单例、GPU 共享、双模型缓存） |
 | `MctsThreadPool` | `thread_pool.h/cpp` | 全局工作线程池（支持批次屏障 + 任务队列双模式） |
 | `MctsSearcher` | `mcts_searcher.h/cpp` | 多线程搜索编排（支持共享资源注入）、Dirichlet 噪声、子树复用 |
 | `GameRunner` | `game_runner.h/cpp` | 并行对局管理器（N 个 C++ 游戏线程共享全局资源）— 支持对战/自对弈双模式 |
@@ -227,8 +227,9 @@ AlphaGo Zero 风格的蒙特卡洛树搜索，支持 Batch MCTS + Virtual Loss�
 
 **线程模型**：
 - 单搜索：N 个 MCTS 工作线程 + 1 个 GPU 推理线程（生产者-消费者模式）
-- 并行对战：K 个 MCTS 工作线程（任务队列）+ N 个游戏线程 + 全局单例 NeuralNet（GPU 共享）
-  `Game threads → MctsSearcher.search() → pool.submit() → GPU thread → batch inference`
+- 并行对战：K 个 MCTS 工作线程（任务队列）+ N 个游戏线程 + 全局单例 NeuralNet（GPU 共享、双模型缓存）
+  推理线程按 `model_id` 分组攒批，每组独立 GPU forward。
+  `Game threads → MctsSearcher.search() → pool.submit() → predict(board, model_id) → GPU thread groups by model_id → batch inference`
 
 ### 4. 两类 AI 引擎
 
