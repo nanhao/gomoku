@@ -524,6 +524,30 @@ print(f"队列峰值: {stats.queue_peak_size}")
 
 > **性能诊断**：`wait_ratio` 低（如 10%）表示 GPU 利用率高、攒批充分；`wait_ratio` 高（如 80%）表示 GPU 在空等，瓶颈在 MCTS 生产端。`queue_peak` 持续偏高说明请求堆积，GPU 成为瓶颈。
 
+#### GPU 防休眠
+
+防止 NVIDIA 独显因空闲而进入休眠状态（休眠后恢复会导致 CUDA 上下文丢失，正在运行的训练/自对弈脚本会崩溃）：
+
+```bash
+python src/ai/keep_gpu_alive.py [选项]
+```
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--min-interval` | 最小移动间隔（秒） | 0.08 |
+| `--max-interval` | 最大移动间隔（秒） | 0.5 |
+| `--max-step` | 最大单步移动像素 | 50 |
+
+> 运行后按 **空格键** 暂停/恢复，按 **Ctrl+C** 退出。脚本通过持续随机微移鼠标来保持 GPU 活跃，不会严重干扰正常操作。
+
+```bash
+# 示例：默认参数运行
+python src/ai/keep_gpu_alive.py
+
+# 示例：更快频率、更小步幅
+python src/ai/keep_gpu_alive.py --min-interval 0.05 --max-interval 0.3 --max-step 30
+```
+
 #### MCTS 训练
 
 > 支持所有双头模型（cnn_v7, cnn_v8, ...），根据权重路径自动选择对应的模型类和训练器。

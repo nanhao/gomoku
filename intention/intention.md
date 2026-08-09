@@ -309,3 +309,10 @@ introduce batch mcts and virtual loss in mcts. But don't use multi thread.
 - 样本启用 D4 群 8 变换增强（旋转+镜像）
 - 输出文件组织方式由你来设计
 - 实时 print 对弈进展统计信息 
+
+# intention_id=50
+现在来做 cnn_v11 的python训练脚本。技术要点如下：
+- 从样本缓冲区随机抽出 512 个样本做一个 mini-batch，按照 alphago zero 的损失函数计算 loss，其中正则项用 adamw 的 weight_decay=1e-4 代替
+- 一次 mini-batch 更新一个权重，然后再重新随机抽取进行下一个 mini-batch，一共进行 50 次更新后，暂停训练，触发一次 checkpoint 评估
+- 评估交给评估器执行。评估器用这个 checkpoint 和历史最佳权重best进行对弈（复用mcts_battle_cpp.py的逻辑）50局（50个游戏线程），前2步采样，之后贪婪。双方轮流交替执方。50局结束后，如果 checkpoint 的胜率 >=55%，则晋升为 best
+- 如果晋升失败，则在该 checkpoint 基础上继续训练。连续三次失败后，停止训练
