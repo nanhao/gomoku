@@ -322,3 +322,9 @@ introduce batch mcts and virtual loss in mcts. But don't use multi thread.
 
 # intention_id=52
 我希望 mcts_sample_buffer.py 和 mcts_train_cnn_v11.py 的 model 参数是可选的。当没有指定 --model 参数时，脚本自动识别 cnn_v11 的最高代数，从最高代数开始。
+
+# intention_id=53
+在项目根目录下实现一个 shell 脚本，脚本内容为：
+1，执行 python src/ai/scripts/mcts_sample_buffer.py --games 30 --workers 10
+2, 如果 1 没有报错，执行 python src/ai/scripts/mcts_train_cnn_v11.py --updates-per-checkpoint 15
+3，如果 2 没有报错，回到 1

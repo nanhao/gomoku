@@ -107,11 +107,17 @@ class CppMctsSampleBufferAdapter:
         self._chunk_games = chunk_games
 
         # 从已有 manifest 续接局号，避免 chunk 文件名与新写入冲突
+        # C++ GameRunner 每批次局编号从 0 开始（局部坐标系），
+        # 缓冲区使用全局局编号，需要通过 _global_base_game_index 做翻译：
+        #   全局局号 = _global_base_game_index + C++ 局部 game_index + 1
         if self._buffer.get_chunk_count() > 0:
             max_end = max(c["game_end"] for c in self._buffer._chunks)
             self._next_game_start = max_end + 1
+            # 全局基准：C++ game_index=0 对应全局局号 _global_base_game_index + 1
+            self._global_base_game_index = max_end
         else:
             self._next_game_start = 1
+            self._global_base_game_index = 0
 
         # 累计统计
         self._evicted_total = 0
@@ -246,6 +252,7 @@ class CppMctsSampleBufferAdapter:
         """轮询 C++ 进度，若新完成 >= chunk_games 局则落盘
 
         每检测到 chunk_games 局新完成即触发 buffer.ingest()。
+        使用 C++ 局部局编号（0-based）与 _global_base_game_index 翻译为全局局号。
 
         Returns:
             新落盘的样本数（0 表示本次无新落盘）
@@ -253,10 +260,16 @@ class CppMctsSampleBufferAdapter:
         completed, _ = self.get_progress()
         new_ingested = 0
 
-        # 当已完成局数足以形成新的 chunk 时
-        while completed >= self._next_game_start + self._chunk_games - 1:
+        # 将全局局号阈值翻译为 C++ 局部 completed 阈值：
+        # 全局 chunk [game_start, game_end] 对应的局部 completed 阈值 =
+        #   game_end - _global_base_game_index
+        while True:
             game_start = self._next_game_start
             game_end = game_start + self._chunk_games - 1
+            # 本 chunk 在 C++ 局部坐标中需要的最少完成局数
+            local_needed = game_end - self._global_base_game_index
+            if completed < local_needed:
+                break
 
             # 获取已完成的结果
             try:
@@ -264,11 +277,12 @@ class CppMctsSampleBufferAdapter:
             except Exception:
                 break
 
-            # 提取 game_start..game_end 范围内的样本
+            # 提取全局 game_start..game_end 范围内的样本
             all_samples: list = []
             for r in results:
-                gi = r.game_index + 1  # 转为 1-based
-                if game_start <= gi <= game_end and r.samples:
+                # 翻译为全局局号：C++ 局部 game_index → 全局
+                global_gi = self._global_base_game_index + r.game_index + 1
+                if game_start <= global_gi <= game_end and r.samples:
                     # 将 C++ GameSample 转为 Python dict
                     for s in r.samples:
                         all_samples.append({
@@ -288,9 +302,14 @@ class CppMctsSampleBufferAdapter:
         return new_ingested
 
     def _flush_remaining(self) -> None:
-        """将最后一个不足 chunk_games 局的对局样本落盘"""
+        """将最后一个不足 chunk_games 局的对局样本落盘
+
+        使用 C++ 局部局编号（0-based）与 _global_base_game_index 翻译为全局局号。
+        """
         completed, _ = self.get_progress()
-        if completed < self._next_game_start:
+        # 翻译为全局：当前批次最后一个全局局号
+        last_global_game = self._global_base_game_index + completed
+        if last_global_game < self._next_game_start:
             return  # 无双新对局
 
         # 获取结果
@@ -299,11 +318,11 @@ class CppMctsSampleBufferAdapter:
         except Exception:
             return
 
-        # 提取剩余对局的样本
+        # 提取剩余对局的样本（使用全局局号匹配）
         all_samples: list = []
         for r in results:
-            gi = r.game_index + 1  # 转为 1-based
-            if gi >= self._next_game_start and r.samples:
+            global_gi = self._global_base_game_index + r.game_index + 1
+            if global_gi >= self._next_game_start and r.samples:
                 for s in r.samples:
                     all_samples.append({
                         "state": list(s.state),
@@ -311,10 +330,10 @@ class CppMctsSampleBufferAdapter:
                         "z": float(s.z),
                     })
 
-        if all_samples and completed >= self._next_game_start:
+        if all_samples:
             evicted = self._buffer.ingest(
-                self._next_game_start, completed, all_samples
+                self._next_game_start, last_global_game, all_samples
             )
             self._evicted_total += evicted
             self._samples_total += len(all_samples)
-            self._next_game_start = completed + 1
+            self._next_game_start = last_global_game + 1
