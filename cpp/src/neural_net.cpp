@@ -1,6 +1,7 @@
 #include "neural_net.h"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
@@ -25,25 +26,38 @@
 // =====================================================================
 
 static std::unique_ptr<NeuralNet> s_nn_instance;
-static std::once_flag s_nn_init_flag;
+static std::atomic<bool> s_nn_initialized{false};
+static std::mutex s_nn_init_mutex;
 
 NeuralNet& NeuralNet::instance() {
-    std::call_once(s_nn_init_flag, [] {
-        // 使用默认参数自动初始化
-        s_nn_instance.reset(new NeuralNet(
-            "src/ai/models/cnn_v11/cnn_v11_torchscript.pt", true));
-    });
+    // 快速路径：已初始化则直接返回（无锁）
+    if (!s_nn_initialized.load(std::memory_order_acquire)) {
+        std::lock_guard<std::mutex> lock(s_nn_init_mutex);
+        // 双重检查：可能在等锁期间被其他线程初始化
+        if (!s_nn_initialized.load(std::memory_order_relaxed)) {
+            s_nn_instance.reset(new NeuralNet(
+                "src/ai/models/cnn_v11/cnn_v11_torchscript.pt", true));
+            s_nn_initialized.store(true, std::memory_order_release);
+        }
+    }
     return *s_nn_instance;
 }
 
 void NeuralNet::initialize(const std::string& model_path, bool use_gpu) {
-    std::call_once(s_nn_init_flag, [&] {
-        s_nn_instance.reset(new NeuralNet(model_path, use_gpu));
-    });
+    if (!s_nn_initialized.load(std::memory_order_acquire)) {
+        std::lock_guard<std::mutex> lock(s_nn_init_mutex);
+        if (!s_nn_initialized.load(std::memory_order_relaxed)) {
+            s_nn_instance.reset(new NeuralNet(model_path, use_gpu));
+            s_nn_initialized.store(true, std::memory_order_release);
+        }
+    }
 }
 
 void NeuralNet::shutdown() {
+    // 加锁保护：防止 shutdown 与 initialize/instance 并发时出现 use-after-free
+    std::lock_guard<std::mutex> lock(s_nn_init_mutex);
     s_nn_instance.reset();
+    s_nn_initialized.store(false, std::memory_order_release);
 }
 
 // =====================================================================

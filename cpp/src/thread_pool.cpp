@@ -1,6 +1,7 @@
 #include "thread_pool.h"
 #include "mcts_config.h"
 
+#include <atomic>
 #include <mutex>
 #include <queue>
 
@@ -9,24 +10,37 @@
 // ---------------------------------------------------------------------------
 
 static std::unique_ptr<MctsThreadPool> s_instance;
-static std::once_flag s_init_flag;
+static std::atomic<bool> s_initialized{false};
+static std::mutex s_init_mutex;
 
 MctsThreadPool& MctsThreadPool::instance() {
-    std::call_once(s_init_flag, [] {
-        s_instance.reset(new MctsThreadPool(g_mcts_config.num_threads));
-    });
+    // 快速路径：已初始化则直接返回（无锁）
+    if (!s_initialized.load(std::memory_order_acquire)) {
+        std::lock_guard<std::mutex> lock(s_init_mutex);
+        // 双重检查：可能在等锁期间被其他线程初始化
+        if (!s_initialized.load(std::memory_order_relaxed)) {
+            s_instance.reset(new MctsThreadPool(g_mcts_config.num_threads));
+            s_initialized.store(true, std::memory_order_release);
+        }
+    }
     return *s_instance;
 }
 
 void MctsThreadPool::initialize(int num_threads) {
-    std::call_once(s_init_flag, [num_threads] {
-        s_instance.reset(new MctsThreadPool(num_threads));
-    });
+    if (!s_initialized.load(std::memory_order_acquire)) {
+        std::lock_guard<std::mutex> lock(s_init_mutex);
+        if (!s_initialized.load(std::memory_order_relaxed)) {
+            s_instance.reset(new MctsThreadPool(num_threads));
+            s_initialized.store(true, std::memory_order_release);
+        }
+    }
 }
 
 void MctsThreadPool::shutdown() {
-    // unique_ptr reset → destructor joins all workers
+    // 加锁保护：防止 shutdown 与 initialize/instance 并发时出现 use-after-free
+    std::lock_guard<std::mutex> lock(s_init_mutex);
     s_instance.reset();
+    s_initialized.store(false, std::memory_order_release);
 }
 
 // ---------------------------------------------------------------------------

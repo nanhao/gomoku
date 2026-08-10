@@ -65,10 +65,10 @@ struct GpuInferenceStats {
 - preload_model 加载额外模型到缓存，已缓存则幂等跳过
 
 单例模式：
-- initialize() 创建全局唯一实例（call_once 保护）
+- initialize() 创建全局唯一实例（可重复调用：shutdown 重置后再次 initialize 有效）
 - instance() 获取实例（若未初始化则用默认配置自动创建）
+- shutdown() 销毁实例并重置初始化标志，允许后续重新 initialize
 - preload_model() 预加载额外模型到缓存（线程安全）
-- 旧式构造器保留，支持独立实例（向后兼容）
 
 线程安全：predict() 可多线程并发提交；推理线程单线程执行 GPU 操作；
 preload_model() 独占写锁阻塞推理线程的下一 batch。
@@ -80,7 +80,7 @@ public:
     /** 获取全局单例实例（首次调用时自动初始化） */
     static NeuralNet& instance();
 
-    /** 显式初始化全局单例（call_once 保护，仅首次生效）
+    /** 显式初始化全局单例（首次创建，shutdown 后可再次调用）
 
     @param model_path TorchScript 模型文件路径 (.pt)
     @param use_gpu 是否使用 GPU 推理

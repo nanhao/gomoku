@@ -159,6 +159,31 @@ static void test_pending_count() {
 }
 
 
+// TC3.5: shutdown 后重新 initialize
+// 验证 Bug: std::once_flag 不可重置导致第二次 initialize 失效
+static void test_reinitialize_after_shutdown() {
+    TEST("TC3.5 re-initialize after shutdown");
+
+    // 第一次初始化 + shutdown
+    MctsThreadPool::initialize(4);
+    {
+        MctsThreadPool& pool = MctsThreadPool::instance();
+        ASSERT_TRUE(pool.size() > 0);
+    }
+    MctsThreadPool::shutdown();
+
+    // 第二次 initialize（模拟 checkpoint #2）
+    MctsThreadPool::initialize(4);
+    {
+        MctsThreadPool& pool = MctsThreadPool::instance();
+        ASSERT_TRUE(pool.size() > 0);
+    }
+    MctsThreadPool::shutdown();
+
+    PASS();
+}
+
+
 int main() {
     std::printf("=== MctsThreadPool Queue Mode Unit Tests ===\n\n");
 
@@ -166,6 +191,7 @@ int main() {
     test_concurrent_submit();
     test_wait_all_blocking();
     test_pending_count();
+    test_reinitialize_after_shutdown();
 
     std::printf("\n=== Results: %d passed, %d failed ===\n",
                 tests_passed, tests_failed);

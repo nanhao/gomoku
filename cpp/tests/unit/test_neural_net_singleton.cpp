@@ -15,6 +15,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -61,6 +62,12 @@ static std::string get_model_path() {
         }                                                  \
     } while (0)
 
+// 检查模型文件是否存在
+static bool model_file_exists(const std::string& path) {
+    if (path.empty()) return false;
+    std::ifstream f(path);
+    return f.good();
+}
 
 // --- TC-NN-S01: initialize 创建单例 ---
 static void test_singleton_initialize() {
@@ -236,6 +243,49 @@ static void test_legacy_constructor() {
 }
 
 
+// --- TC-NN-S07: shutdown 后重新 initialize ---
+// 验证 Bug: std::once_flag 不可重置导致第二次 initialize 失效
+static void test_reinitialize_after_shutdown() {
+    TEST("TC-NN-S07 re-initialize after shutdown");
+    std::string path = get_model_path();
+    if (!model_file_exists(path)) {
+        SKIP("no model file available");
+        return;
+    }
+    try {
+        // 第一次初始化 + 推理 + shutdown
+        NeuralNet::initialize(path, false);
+        {
+            NeuralNet& nn = NeuralNet::instance();
+            std::vector<float> encoded(675, 0.0f);
+            for (int i = 0; i < 225; ++i) {
+                encoded[2 * 225 + i] = 1.0f;
+            }
+            auto r1 = nn.predict(encoded, path);
+            ASSERT_EQ((int)r1.policy.size(), 225);
+        }
+        NeuralNet::shutdown();
+
+        // 第二次 initialize（模拟 checkpoint #2）
+        NeuralNet::initialize(path, false);
+        {
+            NeuralNet& nn = NeuralNet::instance();
+            std::vector<float> encoded(675, 0.0f);
+            for (int i = 0; i < 225; ++i) {
+                encoded[2 * 225 + i] = 1.0f;
+            }
+            auto r2 = nn.predict(encoded, path);
+            ASSERT_EQ((int)r2.policy.size(), 225);
+        }
+        NeuralNet::shutdown();
+
+        PASS();
+    } catch (const std::exception& e) {
+        FAIL(e.what());
+    }
+}
+
+
 int main() {
     std::printf("=== NeuralNet Singleton Unit Tests ===\n\n");
 
@@ -245,6 +295,7 @@ int main() {
     test_preload_model();
     test_preload_model_invalid();
     test_legacy_constructor();
+    test_reinitialize_after_shutdown();
 
     std::printf("\n=== Results: %d passed, %d failed, %d skipped ===\n",
                 tests_passed, tests_failed, tests_skipped);
