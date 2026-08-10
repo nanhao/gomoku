@@ -71,9 +71,9 @@ class CheckpointEvaluator:
         cpp_config.temp_steps = temp_steps
         cpp_config.use_gpu = True
 
-        # 创建 GameRunner（checkpoint=model1, best=model2）
+        # 创建 GameRunner（checkpoint=model1, best=model2, 固定 10 个游戏线程）
         runner = cpp_mcts.GameRunner(
-            checkpoint_ts_path, best_ts_path, num_games, cpp_config, 0
+            checkpoint_ts_path, best_ts_path, num_games, cpp_config, 10
         )
 
         # 启动所有游戏线程
