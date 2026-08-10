@@ -97,7 +97,7 @@ class CppMctsSampleBufferAdapter:
         )
         self._num_games = num_games
 
-        # 创建 SampleBufferManager
+        # 创建 SampleBufferManager（必须先于 _next_game_start 计算）
         from ai.sample_buffer_manager import SampleBufferManager
         self._buffer = SampleBufferManager(
             buffer_dir=buffer_dir,
@@ -105,7 +105,13 @@ class CppMctsSampleBufferAdapter:
             chunk_games=chunk_games,
         )
         self._chunk_games = chunk_games
-        self._next_game_start = 1  # 下一批 chunk 的起始局号（1-based）
+
+        # 从已有 manifest 续接局号，避免 chunk 文件名与新写入冲突
+        if self._buffer.get_chunk_count() > 0:
+            max_end = max(c["game_end"] for c in self._buffer._chunks)
+            self._next_game_start = max_end + 1
+        else:
+            self._next_game_start = 1
 
         # 累计统计
         self._evicted_total = 0
