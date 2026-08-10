@@ -319,3 +319,6 @@ introduce batch mcts and virtual loss in mcts. But don't use multi thread.
 
 # intention_id=51
 目前c++自对弈脚本在双方不同模型的情况下，效率极低，需要重构提升效率。
+
+# intention_id=52
+我希望 mcts_sample_buffer.py 和 mcts_train_cnn_v11.py 的 model 参数是可选的。当没有指定 --model 参数时，脚本自动识别 cnn_v11 的最高代数，从最高代数开始。

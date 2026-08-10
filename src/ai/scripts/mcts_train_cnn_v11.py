@@ -4,7 +4,10 @@
 每 N 步产生 checkpoint，通过 C++ MCTS 对战评估决定是否晋升。
 
 用法示例：
+    python -m ai.scripts.mcts_train_cnn_v11 --buffer-dir sample_buffer
     python -m ai.scripts.mcts_train_cnn_v11 --model cnn_v11.1 --buffer-dir sample_buffer
+
+--model 为可选参数。不指定时自动识别 cnn_v11 的最高代数。
 """
 import argparse
 import os
@@ -34,17 +37,18 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例：
+  python -m ai.scripts.mcts_train_cnn_v11
   python -m ai.scripts.mcts_train_cnn_v11 --model cnn_v11.1
   python -m ai.scripts.mcts_train_cnn_v11 --model cnn_v11.3 --batch-size 256 --eval-games 30
 """,
     )
 
-    # 必填参数
+    # 模型参数（可选，不指定时自动识别最高代数）
     parser.add_argument(
         "--model",
         type=str,
-        required=True,
-        help="初始模型 spec（如 cnn_v11.1），同时作为初始 best",
+        default=None,
+        help="初始模型 spec（如 cnn_v11.1）。不指定时自动识别 cnn_v11 最高代数",
     )
 
     # 可选参数
@@ -158,6 +162,13 @@ def main() -> None:
 
     # 参数校验
     validate_args(args)
+
+    # 自动识别 model（未指定时查找 cnn_v11 最高代数）
+    if args.model is None:
+        from ai.registry import get_highest_gen
+        highest_gen = get_highest_gen("cnn_v11")
+        args.model = f"cnn_v11.{highest_gen}"
+        print(f"[自动识别] 未指定 --model，使用 cnn_v11 最高代数: {args.model}")
 
     # 构建 MCTS 配置
     mcts_config = MctsSelfPlayConfig(

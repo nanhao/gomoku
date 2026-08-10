@@ -349,5 +349,111 @@ class TestModelRegistryData(unittest.TestCase):
                                 f"{name} 应有 trainer_path")
 
 
+class TestGetHighestGen(unittest.TestCase):
+    """测试 get_highest_gen 函数"""
+
+    @classmethod
+    def setUpClass(cls):
+        """为 cnn_v10 创建临时 gen 目录供测试使用"""
+        from ai.models.cnn_v10.model import CNNV10Model
+        import torch
+        cls._model_dir = os.path.dirname(CNNV10Model.DEFAULT_MODEL_PATH)
+        cls._gen_dirs_created = []
+
+    @classmethod
+    def tearDownClass(cls):
+        """清理 gen2+ 临时目录，保留 gen1 供其他测试使用"""
+        import shutil
+        for d in cls._gen_dirs_created:
+            if os.path.isdir(d):
+                shutil.rmtree(d, ignore_errors=True)
+
+    def _create_gen_dir(self, gen_num: int) -> str:
+        """创建带 .pth 文件的 gen{N}/ 目录
+
+        gen1 由 setUpClass 保证存在，不记录到清理列表；gen2+ 会被 tearDownClass 清理。
+        """
+        from ai.models.cnn_v10.model import CNNV10Model
+        import torch
+        gen_dir = os.path.join(self._model_dir, f"gen{gen_num}")
+        pth_path = os.path.join(gen_dir, "cnn_v10.pth")
+        if not os.path.exists(pth_path):
+            os.makedirs(gen_dir, exist_ok=True)
+            tmp = CNNV10Model(fresh=True, gen=gen_num)
+            torch.save(tmp.network.state_dict(), pth_path)
+        # 仅跟踪 gen2+ 用于清理，gen1 需保留供其他测试使用
+        if gen_num > 1 and gen_dir not in self._gen_dirs_created:
+            self._gen_dirs_created.append(gen_dir)
+        return gen_dir
+
+    def test_get_highest_gen_returns_max(self):
+        """TC-HG-01: 有 gen1/gen2/gen3 时返回 3"""
+        from ai.registry import get_highest_gen
+        self._create_gen_dir(1)
+        self._create_gen_dir(2)
+        self._create_gen_dir(3)
+        result = get_highest_gen("cnn_v10")
+        self.assertEqual(result, 3)
+
+    def test_get_highest_gen_no_gen_raises(self):
+        """TC-HG-02: 无 gen 目录时抛出 ValueError"""
+        from ai.registry import get_highest_gen
+        import shutil
+        # 备份现有 gen 目录，测试后恢复
+        backup_map = {}
+        for item in os.listdir(self._model_dir):
+            item_path = os.path.join(self._model_dir, item)
+            if os.path.isdir(item_path) and item.startswith("gen"):
+                backup = item_path + "_backup"
+                shutil.move(item_path, backup)
+                backup_map[item_path] = backup
+
+        try:
+            with self.assertRaises(ValueError) as ctx:
+                get_highest_gen("cnn_v10")
+            self.assertIn("没有找到任何可用代数", str(ctx.exception))
+        finally:
+            # 恢复备份的 gen 目录
+            for orig_path, backup_path in backup_map.items():
+                if os.path.isdir(backup_path):
+                    shutil.move(backup_path, orig_path)
+
+    def test_get_highest_gen_unknown_model_raises(self):
+        """TC-HG-03: 未知模型抛出 ValueError"""
+        from ai.registry import get_highest_gen
+        with self.assertRaises(ValueError) as ctx:
+            get_highest_gen("nonexistent_model")
+        self.assertIn("未知的模型", str(ctx.exception))
+
+    def test_get_highest_gen_non_multi_gen_raises(self):
+        """TC-HG-04: 非多代模型抛出 ValueError"""
+        from ai.registry import get_highest_gen
+        with self.assertRaises(ValueError) as ctx:
+            get_highest_gen("cnn_v1")
+        self.assertIn("不支持多代", str(ctx.exception))
+
+    def test_get_highest_gen_skips_empty_dirs(self):
+        """TC-HG-05: 跳过无 .pth 的空 gen 目录"""
+        from ai.registry import get_highest_gen
+        import shutil
+        # 清理其他测试残留的高代数 gen 目录
+        for item in os.listdir(self._model_dir):
+            item_path = os.path.join(self._model_dir, item)
+            if os.path.isdir(item_path) and item.startswith("gen"):
+                gen_str = item[3:]
+                if gen_str and gen_str.isdigit() and int(gen_str) > 1:
+                    shutil.rmtree(item_path, ignore_errors=True)
+
+        self._create_gen_dir(1)
+        # 创建空 gen2 目录（无 .pth）
+        empty_gen2 = os.path.join(self._model_dir, "gen2")
+        os.makedirs(empty_gen2, exist_ok=True)
+        self._gen_dirs_created.append(empty_gen2)
+
+        result = get_highest_gen("cnn_v10")
+        # gen2 无 .pth，应被跳过，最高为 gen1
+        self.assertEqual(result, 1)
+
+
 if __name__ == "__main__":
     unittest.main()

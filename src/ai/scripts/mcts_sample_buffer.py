@@ -7,8 +7,11 @@
 每步产生 8 条 D4 增强变体，样本格式与现有 mcts_self_play.py 完全一致。
 
 用法：
+    python src/ai/scripts/mcts_sample_buffer.py --games 1000
     python src/ai/scripts/mcts_sample_buffer.py --model cnn_v11.1 --games 1000
     python src/ai/scripts/mcts_sample_buffer.py --model cnn_v11.1 --games 500 --workers 4 --simulations 400
+
+--model 为可选参数。不指定时自动识别 cnn_v11 的最高代数。
 
 设计文档：design/49/main_docs/overview.md
 """
@@ -64,8 +67,8 @@ def parse_args(argv: List[str] | None = None):
         description="MCTS C++ 自对弈样本缓冲区脚本 — 产出训练样本",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p.add_argument("--model", required=True,
-                   help="模型 registry spec（如 cnn_v11.1）")
+    p.add_argument("--model", default=None,
+                   help="模型 registry spec（如 cnn_v11.1）。不指定时自动识别 cnn_v11 最高代数")
     p.add_argument("--games", type=int, required=True,
                    help="自对弈总局数（≥1）")
     p.add_argument("--workers", type=int, default=0,
@@ -169,6 +172,13 @@ def run_sample_buffer(args) -> None:
     if args.games < 1:
         print("[错误] --games 必须 ≥ 1", file=sys.stderr)
         sys.exit(1)
+
+    # 自动识别 model（未指定时查找 cnn_v11 最高代数）
+    if args.model is None:
+        from ai.registry import get_highest_gen
+        highest_gen = get_highest_gen("cnn_v11")
+        args.model = f"cnn_v11.{highest_gen}"
+        print(f"[自动识别] 未指定 --model，使用 cnn_v11 最高代数: {args.model}")
 
     # 构建配置
     config = _build_config(args)

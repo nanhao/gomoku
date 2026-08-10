@@ -413,6 +413,10 @@ python src/ai/scripts/mcts_battle_cpp.py --ai1 cnn_v11.1 --ai2 cnn_v11.2 --games
 > 使用 C++ MCTS 引擎让单个 cnn_v11 模型自对弈，持续产出训练样本并以滑动窗口缓冲区（FIFO，最大 8 万条）管理落盘。所有对局在 C++ 层面多线程并行，共享全局 MCTS 线程池和 GPU 推理引擎。每步产生 8 条 D4 增强变体，样本格式与 mcts_self_play 完全一致。
 
 ```bash
+# 基本用法（自动识别 cnn_v11 最高代数）
+python src/ai/scripts/mcts_sample_buffer.py --games <局数> [选项]
+
+# 显式指定模型代数
 python src/ai/scripts/mcts_sample_buffer.py --model <注册名.代数> --games <局数> [选项]
 ```
 
@@ -420,7 +424,7 @@ python src/ai/scripts/mcts_sample_buffer.py --model <注册名.代数> --games <
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
-| `--model` | **必需** | 模型 registry spec，如 cnn_v11.1 |
+| `--model` | 自动识别最高代数 | 模型 registry spec（如 cnn_v11.1），不指定时自动识别 cnn_v11 的最高代数 |
 | `--games` | **必需** | 自对弈总局数（≥1） |
 | `--workers` | 0 | 游戏工作线程数（0=每局一个线程） |
 | `--simulations` | 800 | 每步 MCTS 模拟次数 |
@@ -439,7 +443,10 @@ python src/ai/scripts/mcts_sample_buffer.py --model <注册名.代数> --games <
 **示例**：
 
 ```bash
-# 基本自对弈：cnn_v11 第1代，1000 局
+# 基本自对弈：自动识别最高代数，1000 局
+python src/ai/scripts/mcts_sample_buffer.py --games 1000
+
+# 指定代数
 python src/ai/scripts/mcts_sample_buffer.py --model cnn_v11.1 --games 1000
 
 # 自定义 MCTS 参数 + 缓冲区配置
@@ -454,6 +461,10 @@ python src/ai/scripts/mcts_sample_buffer.py --model cnn_v11.1 --games 2000 --out
 > 从持续运行的样本缓冲区中随机抽取 mini-batch 进行增量训练，每 N 步产生 checkpoint，通过 C++ MCTS 对战评估决定是否晋升。
 
 ```bash
+# 基本用法（自动识别 cnn_v11 最高代数）
+python src/ai/scripts/mcts_train_cnn_v11.py [选项]
+
+# 显式指定模型代数
 python src/ai/scripts/mcts_train_cnn_v11.py --model <注册名.代数> [选项]
 ```
 
@@ -461,7 +472,7 @@ python src/ai/scripts/mcts_train_cnn_v11.py --model <注册名.代数> [选项]
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
-| `--model` | **必需** | 初始模型 spec（如 cnn_v11.1），同时作为初始 best |
+| `--model` | 自动识别最高代数 | 初始模型 spec（如 cnn_v11.1），不指定时自动识别 cnn_v11 的最高代数 |
 | `--buffer-dir` | `sample_buffer` | 样本缓冲区目录 |
 | `--batch-size` | 512 | 每个 mini-batch 的样本数 |
 | `--updates-per-checkpoint` | 50 | 多少步后触发 checkpoint 评估 |
@@ -480,7 +491,10 @@ python src/ai/scripts/mcts_train_cnn_v11.py --model <注册名.代数> [选项]
 **示例**：
 
 ```bash
-# 基本训练：从样本缓冲区训练 cnn_v11.1
+# 基本训练：自动识别最高代数，从样本缓冲区训练
+python src/ai/scripts/mcts_train_cnn_v11.py --buffer-dir sample_buffer
+
+# 指定代数训练
 python src/ai/scripts/mcts_train_cnn_v11.py --model cnn_v11.1 --buffer-dir sample_buffer
 
 # 自定义参数

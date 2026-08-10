@@ -8,16 +8,32 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
-# ========== TC-CLI-01: 必填参数缺失 ==========
+# ========== TC-CLI-01: --model 可选，自动识别最高代数 ==========
 
-def test_missing_required_model_param():
-    """不带 --model 时应报错并打印 usage"""
+def test_model_auto_detect_highest_gen():
+    """不传 --model 时自动识别 cnn_v11 最高代数并传给 CnnV11TrainLoop"""
+    sys.modules.pop("ai.scripts.mcts_train_cnn_v11", None)
+
     test_args = ["mcts_train_cnn_v11.py"]
     with patch.object(sys, "argv", test_args):
-        with pytest.raises(SystemExit) as exc_info:
-            from ai.scripts.mcts_train_cnn_v11 import main
-            main()
-    assert exc_info.value.code != 0  # exit code ≠ 0
+        with patch("ai.registry.get_highest_gen", return_value=3) as mock_hg:
+            with patch("ai.scripts.mcts_train_cnn_v11.CnnV11TrainLoop") as mock_loop:
+                mock_result = MagicMock()
+                mock_result.stopped_by = "promoted"
+                mock_result.promoted_to = "cnn_v11.4"
+                mock_result.total_updates = 50
+                mock_result.checkpoints_evaluated = 1
+                mock_result.best_win_rate = 0.62
+                mock_result.loss_history = []
+                mock_loop.return_value.run.return_value = mock_result
+                from ai.scripts.mcts_train_cnn_v11 import main
+                main()
+
+    # 验证调用了 get_highest_gen
+    mock_hg.assert_called_once_with("cnn_v11")
+    # 验证 CnnV11TrainLoop 收到自动识别的 model_spec
+    call_kwargs = mock_loop.call_args.kwargs
+    assert call_kwargs["model_spec"] == "cnn_v11.3"
 
 
 # ========== TC-CLI-02: 参数边界校验 ==========

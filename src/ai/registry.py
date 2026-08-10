@@ -320,6 +320,57 @@ def list_models_with_full_name() -> list[str]:
     return result
 
 
+def get_highest_gen(model_name: str) -> int:
+    """获取多代模型的最高可用代数
+
+    扫描 model_name 对应的 gen{i}/ 子目录，返回最大的有效代数。
+    仅当 gen 目录下存在 .pth 文件时才视为有效代数。
+
+    Args:
+        model_name: 模型名称（不含代数部分），如 "cnn_v11"
+
+    Returns:
+        最高可用代数（正整数）
+
+    Raises:
+        ValueError: 模型不在注册表中、非多代模型、或没有找到任何可用代数
+    """
+    if model_name not in MODEL_REGISTRY:
+        raise ValueError(f"未知的模型: '{model_name}'")
+
+    if not _is_multi_gen_model(model_name):
+        raise ValueError(
+            f"模型 '{model_name}' 不支持多代，无需查询最高代数"
+        )
+
+    model_dir = os.path.join(_MODELS_DIR, model_name)
+    if not os.path.isdir(model_dir):
+        raise ValueError(
+            f"模型 '{model_name}' 没有找到任何可用代数"
+        )
+
+    max_gen = 0
+    for item in os.listdir(model_dir):
+        item_path = os.path.join(model_dir, item)
+        if os.path.isdir(item_path) and item.startswith("gen"):
+            gen_str = item[3:]
+            if gen_str:
+                try:
+                    gen_num = int(gen_str)
+                    if gen_num >= 1 and _gen_dir_has_pth(item_path):
+                        if gen_num > max_gen:
+                            max_gen = gen_num
+                except ValueError:
+                    pass
+
+    if max_gen == 0:
+        raise ValueError(
+            f"模型 '{model_name}' 没有找到任何可用代数"
+        )
+
+    return max_gen
+
+
 def _gen_dir_has_pth(gen_dir: str) -> bool:
     """判断 gen{i}/ 目录下是否至少存在一个 .pth 文件
 
