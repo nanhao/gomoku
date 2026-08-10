@@ -177,6 +177,11 @@ class SampleBufferManager:
         若文件不存在则返回 False（保持初始化状态）。
         若文件存在但格式损坏，静默忽略并返回 False。
 
+        加载时自动清理：
+        - 同名文件去重，仅保留最后一条（处理多次重启导致的文件复用堆积）
+        - 磁盘上不存在的 chunk 文件条目移除（处理残留的已淘汰条目）
+        - 以上清理后会重新计算 total_samples
+
         Returns:
             True 表示成功加载已有状态，False 表示新缓冲区或文件损坏
         """
@@ -190,17 +195,42 @@ class SampleBufferManager:
 
             self._max_size = data.get("max_size", self._max_size)
             self._chunk_games = data.get("chunk_games", self._chunk_games)
-            self._total_samples = data.get("total_samples", 0)
 
             raw_chunks: List[Dict] = data.get("chunks", [])
-            self._chunks = []
-            for c in raw_chunks:
-                self._chunks.append({
-                    "game_start": c.get("game_start", 0),
-                    "game_end": c.get("game_end", 0),
-                    "sample_count": c.get("sample_count", 0),
-                    "file": c.get("file", ""),
-                })
+            raw_total: int = data.get("total_samples", 0)
+
+            # 去重：同名文件只保留最后一次出现（处理多次重启复用文件名）
+            seen: Dict[str, int] = {}  # filename → index in raw_chunks
+            for i, c in enumerate(raw_chunks):
+                filename = c.get("file", "")
+                if filename:
+                    seen[filename] = i
+            deduped: List[Dict] = [raw_chunks[i] for i in sorted(seen.values())]
+
+            # 验存：过滤掉磁盘上不存在的 chunk（处理残留的已淘汰条目）
+            valid_chunks: List[Dict] = []
+            for c in deduped:
+                chunk_path = os.path.join(self._buffer_dir, c.get("file", ""))
+                if os.path.isfile(chunk_path):
+                    valid_chunks.append({
+                        "game_start": c.get("game_start", 0),
+                        "game_end": c.get("game_end", 0),
+                        "sample_count": c.get("sample_count", 0),
+                        "file": c.get("file", ""),
+                    })
+
+            self._chunks = valid_chunks
+            # 重新计算总样本数（基于实际有效 chunk）
+            self._total_samples = sum(c["sample_count"] for c in valid_chunks)
+
+            # 诊断：若加载时做了清理则输出，并自动落盘修复
+            removed = len(raw_chunks) - len(valid_chunks)
+            if removed > 0:
+                print(f"[SampleBufferManager] manifest 清理: 移除 {removed} 条无效/重复条目"
+                      f"（原有 {len(raw_chunks)}，有效 {len(valid_chunks)}）")
+                print(f"[SampleBufferManager] total_samples: {raw_total} → {self._total_samples}")
+                self._save_manifest()
+
             return True
         except (json.JSONDecodeError, IOError, KeyError):
             # 文件损坏，重置为空状态
