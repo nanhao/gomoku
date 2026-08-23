@@ -328,3 +328,11 @@ introduce batch mcts and virtual loss in mcts. But don't use multi thread.
 1，执行 python src/ai/scripts/mcts_sample_buffer.py --games 30 --workers 10
 2, 如果 1 没有报错，执行 python src/ai/scripts/mcts_train_cnn_v11.py --updates-per-checkpoint 15
 3，如果 2 没有报错，回到 1
+
+# intention_id=54
+在 src/ai/scripts 下面实现一个 python 脚本，功能是让 cnn_v4.3 自我对弈之后产生样本文件。样本文件默认放在 samples/boots/1 目录下。样本结构和 cnn_v11 的样本结构相同。采用 cnn_v4.3 的输出概率分布作为样本的概率分布。
+脚本参数：
+- game 对弈局数，默认 100
+- temp 温度采样系数，默认 1.0
+- temp-step 温度采样全局步数，默认 12
+- output 样本保存目录，默认 samples/boots/1
