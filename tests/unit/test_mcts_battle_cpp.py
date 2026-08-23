@@ -66,7 +66,7 @@ class TestArgumentParsing:
             "--simulations", "400", "--c-puct", "1.5",
             "--temperature", "0.5", "--temp-steps", "12",
             "--dirichlet-epsilon", "0.3", "--dirichlet-alpha", "0.05",
-            "--batch-size", "64", "--virtual-loss", "2.0",
+            "--virtual-loss", "2.0",
         ]
         args = parse_args(argv)
         assert args.simulations == 400
@@ -75,7 +75,6 @@ class TestArgumentParsing:
         assert args.temp_steps == 12
         assert args.dirichlet_epsilon == 0.3
         assert args.dirichlet_alpha == 0.05
-        assert args.batch_size == 64
         assert args.virtual_loss == 2.0
 
     def test_games_zero_rejected_by_run_battle(self):
@@ -108,7 +107,7 @@ class TestConfigBuilding:
             "--ai1", "cnn_v11.1", "--ai2", "cnn_v11.2", "--games", "10",
             "--simulations", "200", "--c-puct", "1.5",
             "--temperature", "0.8", "--temp-steps", "10",
-            "--batch-size", "32", "--virtual-loss", "4.0",
+            "--virtual-loss", "4.0",
         ]
         args = parse_args(argv)
         config = _build_config(args)
@@ -116,7 +115,6 @@ class TestConfigBuilding:
         assert config.c_puct == 1.5
         assert config.temperature == 0.8
         assert config.temp_steps == 10
-        assert config.batch_size == 32
         assert config.virtual_loss == 4.0
 
     def test_build_config_default_batch_size(self):

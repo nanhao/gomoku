@@ -1,0 +1,55 @@
+@startuml
+title CNN v11 双代历史最强评估 — 关键流程交互
+
+actor User
+
+participant "CnnV11TrainLoop\n(训练编排)" as Loop
+participant "CheckpointEvaluator\n(评估器)" as Evaluator
+participant "GameRunner\n(C++ MCTS对战)" as Battle
+database "src/ai/models/cnn_v11/\ngen{N-1}/" as PrevDir
+database "src/ai/models/cnn_v11/\ngen{N}/" as BestDir
+database "src/ai/models/cnn_v11/\ngen{N+1}/" as PromoDir
+
+== 初始化 ==
+
+Loop -> Loop : 解析模型代数 N（model_spec=cnn_v11.N）
+Loop -> BestDir : 导出 best TorchScript 缓存 → temp/best.pt
+Loop -> PrevDir : 检查 gen{N-1}/cnn_v11_torchscript.pt 是否存在
+alt 上一代存在
+    PrevDir --> Loop : prev_best_ts_path（直接引用，双代评估）
+else 无上一代（N=1）
+    PrevDir --> Loop : None（仅单场评估，打印提示）
+end
+
+== Checkpoint 评估（每轮） ==
+
+Loop -> Loop : 保存 checkpoint → temp/checkpoint.pt
+
+Loop -> Evaluator : evaluate(checkpoint.pt, best.pt, eval_games, temp_steps=2)
+Evaluator -> Battle : GameRunner(alternate_colors=true) 50 局并行对战
+Battle --> Evaluator : 50 局结果（偶数局 model1 执黑/奇数局执白）
+Evaluator -> Evaluator : 计算 win_rate_best
+Evaluator --> Loop : win_rate_best
+
+alt prev_best 存在（双代评估）
+    Loop -> Evaluator : evaluate(checkpoint.pt, prev_best.pt, eval_games, temp_steps=2)
+    Evaluator -> Battle : GameRunner(alternate_colors=true) 50 局并行对战
+    Battle --> Evaluator : 50 局结果
+    Evaluator --> Loop : win_rate_prev
+end
+
+Loop -> Loop : effective = min(win_rate_best, win_rate_prev)\nbest_win_rate = max(best_win_rate, effective)
+
+alt win_rate_best >= 55% 且 (win_rate_prev is None 或 >= 55%) (晋升)
+    Loop -> PromoDir : 移动 checkpoint → gen{N+1}/cnn_v11.pth\n+ cnn_v11_torchscript.pt
+    Loop --> User : [晋升] 双代胜率 XX% / YY%，晋升为 cnn_v11.N+1
+else 任一胜率 < 55% (失败)
+    Loop -> Loop : consecutive_failures += 1
+    alt consecutive_failures >= max_failures
+        Loop --> User : [停止] 连续评估失败，训练终止
+    else 继续训练
+        Loop -> Loop : 从 working model 继续
+    end
+end
+
+@enduml

@@ -194,6 +194,43 @@ def test_evaluate_passes_temp_steps_to_config(default_config):
     assert mock_config_instance.temp_steps == 0
 
 
+# ========== TC-CE-05: 交替执方开启 ==========
+
+def test_evaluate_enables_alternate_colors(default_config):
+    """验证 evaluate 始终启用 C++ 交替执方（避免先手优势噪声）"""
+    from ai.checkpoint_evaluator import CheckpointEvaluator
+
+    results = [_make_cpp_result(winner=1, model1_color=1, model2_color=2)
+               for _ in range(50)]
+    for i, r in enumerate(results):
+        r.game_index = i
+
+    mock_runner = MagicMock()
+    mock_runner.get_results.return_value = results
+    mock_runner.is_finished.return_value = True
+    mock_runner.get_completed_count.return_value = 50
+    mock_runner.get_total_count.return_value = 50
+
+    mock_game_config_cls = MagicMock()
+    mock_config_instance = MagicMock()
+    mock_game_config_cls.return_value = mock_config_instance
+
+    mock_cpp_mcts = _make_mock_cpp_mcts(mock_runner, mock_game_config_cls)
+
+    evaluator = CheckpointEvaluator(default_config)
+    with patch("os.path.isfile", return_value=True), \
+         patch.dict("sys.modules", {"cpp_mcts": mock_cpp_mcts}):
+        evaluator.evaluate(
+            checkpoint_ts_path="/fake/checkpoint.pt",
+            best_ts_path="/fake/best.pt",
+            num_games=50,
+            temp_steps=2,
+        )
+
+    # 交替执方必须被设置为 True，保证评估执方公平
+    assert mock_config_instance.alternate_colors is True
+
+
 # ========== TC-CE-04: 双方执方均匀 ==========
 
 def test_evaluate_alternating_sides(default_config):

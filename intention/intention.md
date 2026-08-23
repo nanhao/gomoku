@@ -339,3 +339,6 @@ introduce batch mcts and virtual loss in mcts. But don't use multi thread.
 
 # intention_id=55
 修改src/ai/scripts/cnn_v4_self_play.py，让其直接输出到样本缓冲区中，按照 cnn_v11 的样本缓冲区格式。
+
+# intention_id=56
+修改 src/ai/scripts/mcts_train_cnn_v11.py，使其在评估时，除了将当前checkpoint与历史最强进行对弈，也与上一代历史最强进行对弈。这意味着要保存历史最强和上一代历史最强的权重。只有当当前 checkpoint 与两代历史最强的胜率都达到或超过阈值时，才晋升成功

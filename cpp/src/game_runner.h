@@ -22,6 +22,7 @@ struct GameConfig {
     double temperature = 1.0;
     int temp_steps = 8;
     bool use_gpu = true;
+    bool alternate_colors = false;  // 双模型对战是否按局号奇偶交替执方
 };
 
 /** 单局对战结果
@@ -107,6 +108,19 @@ public:
     @return 按 game_index 排序的结果列表
     */
     std::vector<GameResult> get_results() const;
+
+    /** 解析双模型对战的执方分配
+
+    自对弈模式或 alternate_colors=true 时：偶数局 model1 执黑、奇数局执白；
+    否则随机分配 model1 执方（1=黑/2=白），model2 执相反方。
+
+    @param game_index 局编号 0..N-1
+    @param is_self_play 自对弈模式标志（true 时强制交替）
+    @param alternate_colors 双模型模式是否交替执方
+    @return (model1_color, model2_color)，1=黑 2=白
+    */
+    static std::pair<int, int> resolve_colors(
+        int game_index, bool is_self_play, bool alternate_colors);
 
 private:
     std::string model1_path_;

@@ -25,6 +25,8 @@ def test_model_auto_detect_highest_gen():
                 mock_result.checkpoints_evaluated = 1
                 mock_result.best_win_rate = 0.62
                 mock_result.loss_history = []
+                mock_result.win_rate_vs_best = 0.62
+                mock_result.win_rate_vs_prev = None
                 mock_loop.return_value.run.return_value = mock_result
                 from ai.scripts.mcts_train_cnn_v11 import main
                 main()
@@ -102,6 +104,8 @@ def test_defaults_applied():
             mock_result.checkpoints_evaluated = 1
             mock_result.best_win_rate = 0.62
             mock_result.loss_history = [1.0, 0.9]
+            mock_result.win_rate_vs_best = 0.62
+            mock_result.win_rate_vs_prev = None
             mock_loop.return_value.run.return_value = mock_result
             from ai.scripts.mcts_train_cnn_v11 import main
             main()
@@ -148,6 +152,8 @@ def test_all_params_custom():
             mock_result.checkpoints_evaluated = 5
             mock_result.best_win_rate = 0.75
             mock_result.loss_history = [1.0]
+            mock_result.win_rate_vs_best = 0.75
+            mock_result.win_rate_vs_prev = 0.70
             mock_loop.return_value.run.return_value = mock_result
             from ai.scripts.mcts_train_cnn_v11 import main
             main()

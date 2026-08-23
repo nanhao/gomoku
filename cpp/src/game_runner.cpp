@@ -6,6 +6,7 @@
 #include <random>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 #include "board_state.h"
 #include "mcts_config.h"
@@ -151,32 +152,39 @@ void GameRunner::run_worker_games(int worker_index) {
 }
 
 // =====================================================================
+// 执方分配
+// =====================================================================
+
+std::pair<int, int> GameRunner::resolve_colors(
+    int game_index, bool is_self_play, bool alternate_colors)
+{
+    // 交替模式（自对弈或显式开启）：偶数局 model1 执黑、奇数局执白
+    if (is_self_play || alternate_colors) {
+        if (game_index % 2 == 0) {
+            return {1, 2};  // model1 黑, model2 白
+        }
+        return {2, 1};      // model1 白, model2 黑
+    }
+
+    // 随机模式（双模型默认，向后兼容）：随机确定 model1 执方
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<int> color_dist(1, 2);
+    int model1_color = color_dist(gen);
+    return {model1_color, 3 - model1_color};  // 1↔2
+}
+
+// =====================================================================
 // 单局对局主循环
 // =====================================================================
 
 void GameRunner::run_single_game(int game_index) {
     // 1. 确定执方
-    //    对战模式：随机分配；自对弈模式：交替分配
-    int model1_color;
-    int model2_color;
-
-    if (is_self_play_) {
-        // 自对弈交替模式：game_index 偶数 → model1 执黑
-        if (game_index % 2 == 0) {
-            model1_color = 1;  // 黑
-            model2_color = 2;  // 白
-        } else {
-            model1_color = 2;  // 白
-            model2_color = 1;  // 黑
-        }
-    } else {
-        // 随机确定 model1 执方（1=黑/2=白），model2 执相反方
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_int_distribution<int> color_dist(1, 2);
-        model1_color = color_dist(gen);
-        model2_color = 3 - model1_color;  // 1↔2
-    }
+    //    自对弈或 alternate_colors：交替分配；否则随机分配
+    auto colors = resolve_colors(
+        game_index, is_self_play_, config_.alternate_colors);
+    int model1_color = colors.first;
+    int model2_color = colors.second;
 
     // 2. 获取共享资源
     MctsThreadPool& pool = MctsThreadPool::instance();

@@ -214,7 +214,9 @@ PYBIND11_MODULE(cpp_mcts, m) {
         .def_readwrite("temp_steps", &GameConfig::temp_steps,
             "温度探索步数")
         .def_readwrite("use_gpu", &GameConfig::use_gpu,
-            "是否使用 GPU 推理");
+            "是否使用 GPU 推理")
+.def_readwrite("alternate_colors", &GameConfig::alternate_colors,
+            "双模型对战是否按局号奇偶交替执方");
 
     // ---- GameResult 结果结构体 ----
     py::class_<GameResult>(m, "GameResult",

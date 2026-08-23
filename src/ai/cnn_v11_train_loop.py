@@ -27,8 +27,10 @@ class TrainLoopResult:
         promoted_to: 晋升后的 gen spec，未晋升时为 None
         total_updates: 总共执行的 mini-batch 次数
         checkpoints_evaluated: 评估过的 checkpoint 数量
-        best_win_rate: 所有 checkpoint 中的最高胜率
+        best_win_rate: 所有 checkpoint 中的最高有效胜率（两场评估取较低者）
         loss_history: 每个 mini-batch 的 total_loss 列表
+        win_rate_vs_best: 最后一次评估对当前代 best 的胜率
+        win_rate_vs_prev: 最后一次评估对上一代 best 的胜率，无上一代时为 None
     """
     stopped_by: str
     promoted_to: Optional[str] = None
@@ -36,6 +38,8 @@ class TrainLoopResult:
     checkpoints_evaluated: int = 0
     best_win_rate: float = 0.0
     loss_history: List[float] = field(default_factory=list)
+    win_rate_vs_best: Optional[float] = None
+    win_rate_vs_prev: Optional[float] = None
 
 
 class CnnV11TrainLoop:
@@ -102,6 +106,22 @@ class CnnV11TrainLoop:
         # 导出 best TorchScript（缓存，后续评估复用）
         self._best_ts_path: str = os.path.join(self._checkpoint_dir, "best.pt")
         self._export_torchscript(self._trainer.model.network, self._best_ts_path)
+
+        # 解析上一代历史最强（gen{N-1}）的 TorchScript 路径。
+        # 该权重已持久化在 gen 目录，直接引用即可，无需复制；
+        # 不存在（gen1 或代数不连续）时置 None，仅进行单场评估。
+        self._prev_best_ts_path: Optional[str] = None
+        if self._gen > 1:
+            from ai.models.cnn_v11.model import CNNV11Model
+            base_model_dir = os.path.dirname(CNNV11Model.DEFAULT_MODEL_PATH)
+            prev_ts_path = os.path.join(
+                base_model_dir, f"gen{self._gen - 1}", "cnn_v11_torchscript.pt"
+            )
+            if os.path.isfile(prev_ts_path):
+                self._prev_best_ts_path = prev_ts_path
+            else:
+                print(f"  [提示] 上一代 gen{self._gen - 1} 模型不存在，"
+                      f"本次仅与当前代 best 进行单场评估")
 
         # 创建组件
         self._reader: SampleBufferReader = SampleBufferReader(buffer_dir)
@@ -175,25 +195,61 @@ class CnnV11TrainLoop:
                 )
                 print("pt ✓")
 
-                # 评估
-                print(f"  评估中（{self._eval_games} 局）...", end=" ", flush=True)
-                win_rate = self._evaluator.evaluate(
+                # 评估第 1 场：vs 当前代历史最强（best）
+                print(f"  评估中 vs best（{self._eval_games} 局）...",
+                      end=" ", flush=True)
+                win_rate_best = self._evaluator.evaluate(
                     checkpoint_ts,
                     self._best_ts_path,
                     self._eval_games,
                     temp_steps=2,
                 )
-                print(f"胜率 = {win_rate:.1%}")
+                print(f"胜率 = {win_rate_best:.1%}")
+
+                # 评估第 2 场：vs 上一代历史最强（prev_best，可选）
+                win_rate_prev = None
+                if self._prev_best_ts_path is not None:
+                    print(f"  评估中 vs prev_best（{self._eval_games} 局）...",
+                          end=" ", flush=True)
+                    win_rate_prev = self._evaluator.evaluate(
+                        checkpoint_ts,
+                        self._prev_best_ts_path,
+                        self._eval_games,
+                        temp_steps=2,
+                    )
+                    print(f"胜率 = {win_rate_prev:.1%}")
+                else:
+                    print("  （无上一代模型，仅单场评估）")
+
                 checkpoints_evaluated += 1
-                best_win_rate = max(best_win_rate, win_rate)
+
+                # 有效胜率：双代评估时取两场较低者（晋升判定保守），
+                # 单场评估时即为 vs best 胜率
+                if win_rate_prev is not None:
+                    effective_win_rate = min(win_rate_best, win_rate_prev)
+                else:
+                    effective_win_rate = win_rate_best
+                best_win_rate = max(best_win_rate, effective_win_rate)
+
+                # 晋升判定：对两代历史最强的胜率都 >= 55%
+                passed = win_rate_best >= 0.55 and (
+                    win_rate_prev is None or win_rate_prev >= 0.55
+                )
 
                 # 打印本轮状态
-                status = "✓ 通过" if win_rate >= 0.55 else "✗ 未通过"
-                print(f"  {status}  |  连续失败: {consecutive_failures + (0 if win_rate >= 0.55 else 1)}/{self._max_consecutive_failures}"
-                      f"  |  最高胜率: {best_win_rate:.1%}")
+                status = "✓ 通过" if passed else "✗ 未通过"
+                if win_rate_prev is not None:
+                    print(f"  {status}  |  vs best: {win_rate_best:.1%}"
+                          f"  vs prev: {win_rate_prev:.1%}"
+                          f"  |  连续失败: {consecutive_failures + (0 if passed else 1)}/{self._max_consecutive_failures}"
+                          f"  |  最高有效胜率: {best_win_rate:.1%}")
+                else:
+                    print(f"  {status}  |  vs best: {win_rate_best:.1%}"
+                          f"  |  连续失败: {consecutive_failures + (0 if passed else 1)}/{self._max_consecutive_failures}"
+                          f"  |  最高有效胜率: {best_win_rate:.1%}")
                 print()
 
-                if win_rate >= 0.55:
+                if passed:
                     # 晋升
                     promoted_gen = self._gen + 1
                     promoted_spec = f"cnn_v11.{promoted_gen}"
@@ -214,6 +270,8 @@ class CnnV11TrainLoop:
                         checkpoints_evaluated=checkpoints_evaluated,
                         best_win_rate=best_win_rate,
                         loss_history=loss_history,
+                        win_rate_vs_best=win_rate_best,
+                        win_rate_vs_prev=win_rate_prev,
                     )
                 else:
                     consecutive_failures += 1
@@ -229,6 +287,8 @@ class CnnV11TrainLoop:
                             checkpoints_evaluated=checkpoints_evaluated,
                             best_win_rate=best_win_rate,
                             loss_history=loss_history,
+                            win_rate_vs_best=win_rate_best,
+                            win_rate_vs_prev=win_rate_prev,
                         )
         except KeyboardInterrupt:
             print()

@@ -70,6 +70,9 @@ class CheckpointEvaluator:
         cpp_config.temperature = self._mcts_config.temperature
         cpp_config.temp_steps = temp_steps
         cpp_config.use_gpu = True
+        # 交替执方：偶数局 checkpoint 执黑、奇数局执白，
+        # 避免随机执方引入黑方先手优势噪声影响胜率判定
+        cpp_config.alternate_colors = True
 
         # 创建 GameRunner（checkpoint=model1, best=model2, 固定 10 个游戏线程）
         runner = cpp_mcts.GameRunner(

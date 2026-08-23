@@ -207,7 +207,9 @@ def main() -> None:
     print(f"  virtual_loss:    {mcts_config.virtual_loss}")
     print()
     print("[晋升规则]")
-    print(f"  晋升阈值:        >= 55% 胜率")
+    print(f"  晋升阈值:        对两代历史最强胜率均 >= 55%")
+    print(f"  评估对手:        当前代 best（gen N）与上一代 best（gen N-1）各 {args.eval_games} 局")
+    print(f"                  无上一代模型时仅单场评估")
     print(f"  停止条件:        连续 {args.max_failures} 次 < 55%")
     print()
     print("=" * 60)
@@ -238,8 +240,13 @@ def main() -> None:
 
     # 打印结果
     if result.stopped_by == "promoted":
-        print(f"\n[晋升] checkpoint 胜率 {result.best_win_rate:.1%}，"
-              f"晋升为 {result.promoted_to}")
+        if result.win_rate_vs_prev is not None:
+            print(f"\n[晋升] vs best 胜率 {result.win_rate_vs_best:.1%}，"
+                  f"vs prev 胜率 {result.win_rate_vs_prev:.1%}，"
+                  f"晋升为 {result.promoted_to}")
+        else:
+            print(f"\n[晋升] checkpoint 胜率 {result.best_win_rate:.1%}，"
+                  f"晋升为 {result.promoted_to}")
     elif result.stopped_by == "max_failures":
         print(f"\n[停止] 连续 {args.max_failures} 次评估失败，"
               f"训练终止。最高胜率: {result.best_win_rate:.1%}")
