@@ -174,7 +174,7 @@ def main() -> None:
     mcts_config = MctsSelfPlayConfig(
         simulations=args.simulations,
         c_puct=args.c_puct,
-        temp_steps=2,  # 评估时固定前 2 步采样，之后贪婪
+        temp_steps=0,  # 评估时固定前 2 步采样，之后贪婪
         temperature=1.0,
         dirichlet_epsilon=0.25,
         dirichlet_alpha=0.03,

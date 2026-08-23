@@ -17,6 +17,10 @@
 
 **C++ MCTS 自对弈样本缓冲区**：C++ 多线程自对弈持续产出训练样本，D4 增强 + FIFO 滑动窗口缓冲区管理（详见 [设计 49](../design/49/main_docs/overview.md)）
 
+**CNN v11 训练闭环**：样本缓冲区驱动的增量训练 + C++ MCTS 对战评估晋升（详见 [设计 50](../design/50/main_docs/overview.md)）
+
+**JSON 动态配置**：C++/Python 共享 `cpp/python/mcts_config.json` 动态加载 MCTS 参数（模拟数、线程数、PUCT 等），修改无需重新编译
+
 ---
 
 ## 总体架构
@@ -145,12 +149,12 @@ src/
 │       ├── mcts_battle.py        MCTS 双模型对战
 │       ├── mcts_battle_worker.py MCTS 对战 Worker
 │       ├── mcts_battle_cpp.py    MCTS C++ 双模型对战（GPU 并行）
-│       ├── mcts_sample_buffer.py MCTS C++ 自对弈样本缓冲区（D4增强+FIFO）
+│       ├── mcts_sample_buffer.py MCTS C++ 自对弈样本缓冲区（D4增强+FIFO，--model 可选）
 │       ├── mcts_train.py         MCTS 训练
 │       ├── value_self_play.py    价值头自对弈（cnn_v10）
 │       ├── value_self_play_worker.py  价值头自对弈 Worker
-│       └── value_train.py        价值头训练（cnn_v10）
-│       └── mcts_train_cnn_v11.py  CNN v11 样本缓冲区训练
+│       ├── value_train.py        价值头训练（cnn_v10）
+│       └── mcts_train_cnn_v11.py  CNN v11 样本缓冲区训练（--model 可选）
 │
 ├── gui/           # GUI 界面（tkinter）
 │   ├── main.py         主窗口
@@ -162,7 +166,9 @@ src/
 │       ├── heatmap.py        热力图叠加（tkinter）
 │       ├── replay_viewer.py  对局回放查看
 │       ├── replay_browser.py 回放浏览器
-│       └── load_game_dialog.py 存档加载
+│       ├── load_game_dialog.py 存档加载
+│       ├── ai_battle.py      AI 内战界面组件
+│       └── constants.py      GUI 常量定义
 │
 ├── cli/           # 命令行界面
 │   └── main.py
@@ -175,6 +181,9 @@ src/
 │
 └── tools/         # 辅助工具
     └── create_samples_tool/  Flask Web 样本验收工具
+        ├── app.py           Flask 应用入口
+        ├── data_parser.py   样本数据解析
+        └── executor.py      样本执行/验收逻辑
 ```
 
 ---
@@ -183,7 +192,7 @@ src/
 
 ### 1. 模型注册表 (`registry.py`)
 
-统一管理所有 AI 模型的懒加载注册。通过 `get_model(spec)` 和 `get_trainer(spec)` 按需实例化，支持多代模型（`cnn_v3.1` 格式）。新增模型只需添加 RegistryEntry 即可。
+统一管理所有 AI 模型的懒加载注册。通过 `get_model(spec)` 和 `get_trainer(spec)` 按需实例化，支持多代模型（`cnn_v3.1` 格式）。新增模型只需添加 RegistryEntry 即可。`get_highest_gen(model_name)` 扫描 gen 目录返回最高代数，供训练/采样脚本自动识别最新模型。
 
 ### 2. 引擎智能路由 (`engine/builder.py`)
 
@@ -202,7 +211,7 @@ AlphaGo Zero 风格的蒙特卡洛树搜索，支持 Batch MCTS + Virtual Loss�
 
 ### C++ MCTS 引擎（`cpp/`）
 
-基于 C++17/LibTorch 的高性能 MCTS 实现，通过 pybind11 桥接为 Python 扩展（详见 [设计 46](../design/46/main_docs/overview.md)、[设计 47](../design/47/main_docs/overview.md)、[设计 51](../design/51/main_docs/overview.md)）。
+基于 C++17/LibTorch 的高性能 MCTS 实现，通过 pybind11 桥接为 Python 扩展（详见 [设计 46](../design/46/main_docs/overview.md)、[设计 47](../design/47/main_docs/overview.md)、[设计 49](../design/49/main_docs/overview.md)、[设计 50](../design/50/main_docs/overview.md)、[设计 51](../design/51/main_docs/overview.md)）。
 
 **核心模块**：
 
@@ -212,6 +221,7 @@ AlphaGo Zero 风格的蒙特卡洛树搜索，支持 Batch MCTS + Virtual Loss�
 | `MctsNode` | `mcts_node.h/cpp` | 并发安全搜索树节点（PUCT/VL/Backup） |
 | `NeuralNet` | `neural_net.h/cpp` | LibTorch 异步批量推理（全局单例、GPU 共享、双模型缓存） |
 | `MctsThreadPool` | `thread_pool.h/cpp` | 全局工作线程池（支持批次屏障 + 任务队列双模式） |
+| `MctsConfig` | `mcts_config.h/cpp` | 运行时配置（模块导入时从 mcts_config.json 加载到全局 `g_mcts_config`，参数含模拟数/线程数/PUCT/狄利克雷/攒批阈值/VL/GPU） |
 | `MctsSearcher` | `mcts_searcher.h/cpp` | 多线程搜索编排（支持共享资源注入）、Dirichlet 噪声、子树复用 |
 | `GameRunner` | `game_runner.h/cpp` | 并行对局管理器（N 个 C++ 游戏线程共享全局资源）— 支持对战/自对弈双模式 |
 | `GameConfig` | `game_runner.h` | 对战配置结构体（MCTS + 温度参数） |
@@ -220,10 +230,12 @@ AlphaGo Zero 风格的蒙特卡洛树搜索，支持 Batch MCTS + Virtual Loss�
 | `SampleAugmentor` | `game_sample.h` | D4 群 8 种棋盘对称变换工具类 |
 
 **Python 桥接**：
-- `bindings.cpp` — pybind11 定义，暴露 `cpp_mcts.MctsSearcher`、`GameRunner`、`GameConfig`
+- `bindings.cpp` — pybind11 定义，暴露 `cpp_mcts.MctsSearcher`、`GameRunner`、`GameConfig`、`GameSample`、`MctsResult`、`GpuInferenceStats`，以及线程池管理函数 `init_thread_pool` / `shutdown_thread_pool` / `thread_pool_size` / `get_gpu_stats`
 - `cpp_mcts_adapter.py` — 单搜索适配器，接口兼容 Python `MCTSSearcher`
 - `cpp_mcts_battle_adapter.py` — 并行对战适配器，包装 C++ `GameRunner` 为 Python 接口
 - `cpp_sample_buffer_adapter.py` — 自对弈样本缓冲区适配器，包装 C++ `GameRunner`（自对弈模式）+ `SampleBufferManager`
+- `cpp_battle_game_result.py` — `CppBattleGameResult` 数据类，将 C++ `GameResult` 转换为 Python dataclass
+- `mcts_config.py` + `mcts_config.json` — Python 端配置入口，与 C++ 端共享同一 JSON（含 `init_global_thread_pool` 显式初始化全局线程池）
 
 **线程模型**：
 - 单搜索：N 个 MCTS 工作线程 + 1 个 GPU 推理线程（生产者-消费者模式）
@@ -310,7 +322,7 @@ C++ MCTS样本生成: mcts_sample_buffer.py → CppMctsSampleBufferAdapter
                   → SampleBufferManager（FIFO 缓冲区，每10局chunk落盘）
                   → 输出 sample_buffer/ 目录下的 chunk JSON 文件
 
-CNN v11 缓冲区训练: mcts_train_cnn_v11.py → CnnV11TrainLoop
+CNN v11 缓冲区训练: mcts_train_cnn_v11.py（--model 可选，默认最高代数）→ CnnV11TrainLoop
                   → SampleBufferReader（随机抽样）
                   → CNNV11Trainer._train_step（MSE+CrossEntropy）
                   → CheckpointEvaluator（C++ MCTS 对战评估）
@@ -325,11 +337,12 @@ CNN v11 缓冲区训练: mcts_train_cnn_v11.py → CnnV11TrainLoop
 ```
 tests/
 ├── conftest.py                # 全局 fixtures
+├── run_tests.py               # 测试运行入口
+├── test_game.py 等            # 游戏核心测试（位于根目录，无独立 game/ 子目录）
 ├── ai/                        # AI 模块测试（含 unit/ + integration/ 子目录）
 ├── gui/                       # GUI 组件测试
-├── app/                       # 应用层测试
+├── app/                       # 应用层测试（含 edge/ 边界场景）
 ├── cli/                       # CLI 测试
-├── game/                      # 游戏核心测试
 ├── unit/                      # 跨模块单元测试
 ├── integration/               # MCTS 集成测试
 ├── e2e/                       # 端到端测试
@@ -352,10 +365,11 @@ tests/
 | MCTS 双模型对战 | `python src/ai/scripts/mcts_battle.py --model1 cnn_v8.10 --model2 cnn_v8.11 --games 100` |
 | MCTS 双模型对战（多进程） | `python src/ai/scripts/mcts_battle.py --model1 cnn_v8.10 --model2 cnn_v8.11 --games 100 --workers 4` |
 | C++ MCTS 对战 | `python src/ai/scripts/mcts_battle_cpp.py --ai1 cnn_v11.1 --ai2 cnn_v11.2 --games 100` |
-| C++ MCTS 样本生成 | `python src/ai/scripts/mcts_sample_buffer.py --model cnn_v11.1 --games 1000` |
+| C++ MCTS 样本生成 | `python src/ai/scripts/mcts_sample_buffer.py --model cnn_v11.1 --games 1000`（--model 可选，默认 cnn_v11 最高代数） |
 | MCTS 训练 | `python src/ai/scripts/mcts_train.py --model cnn_v7.pth --train-from-dir samples --epochs 100` |
 | 价值头自对弈 | `python src/ai/scripts/value_self_play.py --model cnn_v10.1 --games 100` |
 | 价值头训练 | `python src/ai/scripts/value_train.py --model cnn_v10.1 --train-from-dir samples --epochs 100` |
 | 迭代进化 | `python src/ai/iterative_train.py --ai1 cnn_v4.99 --ai2 cnn_v4.100 --sample_dir samples` |
-| CNN v11 缓冲区训练 | `python src/ai/scripts/mcts_train_cnn_v11.py --model cnn_v11.1 --buffer-dir sample_buffer` |
+| CNN v11 缓冲区训练 | `python src/ai/scripts/mcts_train_cnn_v11.py --model cnn_v11.1 --buffer-dir sample_buffer`（--model 可选，默认最高代数） |
+| 自对弈+训练循环 | `run_selfplay_train_loop.bat`（循环执行 采样→训练，任一步失败即停止） |
 | 运行测试 | `python -m pytest tests/ -v -s` |

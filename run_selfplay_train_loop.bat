@@ -33,7 +33,7 @@ echo.
 
 REM ---- Step 1: Start self-play sampling ----
 echo [INFO] Starting self-play sampling...
-python src/ai/scripts/mcts_sample_buffer.py --games 30 --workers 10 --temp-steps 16
+python src/ai/scripts/mcts_sample_buffer.py --games 10 --workers 10 --temp-steps 16
 if errorlevel 1 (
     echo.
     echo [ERROR] Round !ROUND!: self-play failed, stopping loop.
@@ -45,7 +45,7 @@ echo.
 
 REM ---- Step 2: Train model ----
 echo [INFO] Starting model training...
-python src/ai/scripts/mcts_train_cnn_v11.py --updates-per-checkpoint 15
+python src/ai/scripts/mcts_train_cnn_v11.py --updates-per-checkpoint 15 --eval-games 10
 if errorlevel 1 (
     echo.
     echo [ERROR] Round !ROUND!: training failed, stopping loop.
