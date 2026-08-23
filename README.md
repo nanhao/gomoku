@@ -596,6 +596,34 @@ python src/ai/scripts/mcts_train.py --model src/ai/models/cnn_v8/gen1/cnn_v8.pth
 python src/ai/scripts/mcts_train.py --model src/ai/models/cnn_v7/gen1/cnn_v7.pth --train-from-dir samples/7/v2 --epochs 300 --output src/ai/models/cnn_v7/gen2/cnn_v7.pth --val-split 0.1
 ```
 
+### 策略模型自对弈（cnn_v4）
+
+cnn_v4 是纯策略网络（无价值头），不使用 MCTS 搜索，自对弈时**直接采用模型输出的概率分布作为样本的 pi**。前 `temp-steps` 步使用温度采样（`p^(1/T)` 加权），之后走 argmax。样本结构与 cnn_v11 相同：`{"state": [226], "pi": [225], "z": 1.0/-1.0/0.0}`（state 前 225 维为棋盘、第 226 位为当前玩家；z 为胜负回填：胜方 +1.0、负方 -1.0、平局 0.0）。支持 Ctrl+C 中断，已完成的局数会保存进度，下次运行自动续存。
+
+```bash
+python src/ai/scripts/cnn_v4_self_play.py [选项]
+```
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--model` | 模型 registry spec | cnn_v4.3 |
+| `--games` | 对弈局数 | 100 |
+| `--temperature` | 温度采样系数 | 1.0 |
+| `--temp-steps` | 温度采样全局步数，前 N 步温度采样，之后 argmax | 12 |
+| `--output` | 样本保存目录（含 sample.json / summary.json） | samples/boots/1 |
+| `--device` | 推理设备（不可用时回退 cpu） | cuda |
+
+```bash
+# 示例：默认参数，100 局，输出到 samples/boots/1
+python src/ai/scripts/cnn_v4_self_play.py
+
+# 示例：自定义局数与温度
+python src/ai/scripts/cnn_v4_self_play.py --games 500 --temperature 0.8 --temp-steps 16
+
+# 示例：指定输出目录
+python src/ai/scripts/cnn_v4_self_play.py --games 200 --output samples/boots/2
+```
+
 ### 价值头训练（cnn_v10）
 
 cnn_v10 是纯价值头模型（无策略头），训练仅使用 MSE 损失。自对弈通过"枚举-评估"方式生成样本，样本格式为 `{"state": [...], "z": int}`。
