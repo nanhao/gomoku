@@ -1,6 +1,8 @@
-"""cnn_v4.3 自我对弈样本生成脚本（intention 54）
+"""cnn_v4.3 自我对弈样本生成脚本（intention 54/55）
 
-让 cnn_v4.3 模型自我对弈产生训练样本，输出到样本目录。
+让 cnn_v4.3 模型自我对弈产生训练样本，直接写入样本缓冲区
+（cnn_v11 的 chunk + manifest 格式，FIFO 滑动窗口管理）。
+
 与 cnn_v11 样本缓冲区的核心区别：**不使用 MCTS 搜索**，
 每步直接采用模型的输出概率分布作为样本的概率分布（pi）。
 
@@ -11,14 +13,18 @@
 - 前 temp_steps 步按 temperature 做温度采样（p^(1/T) 加权）
 - 之后切换为 argmax 贪心
 
+落盘策略（与 mcts_sample_buffer 一致）：
+- 每攒满 chunk_games 局写入一个 chunk 文件并更新 manifest
+- 从 manifest 最大 game_end + 1 续接局号，支持多批次追加
+- Ctrl+C 中断：已落盘 chunk 保留，未满 chunk 的对局样本丢弃
+
 用法：
     python src/ai/scripts/cnn_v4_self_play.py
     python src/ai/scripts/cnn_v4_self_play.py --games 200 --temp-steps 10
-    python src/ai/scripts/cnn_v4_self_play.py --output samples/boots/2 --model cnn_v4.3
+    python src/ai/scripts/cnn_v4_self_play.py --output-dir my_buffer --model cnn_v4.3
 """
 
 import argparse
-import json
 import os
 import signal
 import sys
@@ -37,13 +43,11 @@ import torch  # noqa: E402
 from ai.constants import STRATEGY_ARGMAX, STRATEGY_SAMPLING  # noqa: E402
 from ai.engine import SinglePolicyAiEngine  # noqa: E402
 from ai.registry import get_model  # noqa: E402
+from ai.sample_buffer_manager import SampleBufferManager  # noqa: E402
 from game.game import check_winner, is_board_full  # noqa: E402
 
 
 # ---------- 常量 ----------
-
-# 周期保存间隔（局数），不可通过 CLI 配置
-_SAVE_INTERVAL = 50
 
 # 中断标志位，由信号处理器设置，主循环检查
 _interrupted = False
@@ -73,8 +77,12 @@ def parse_args(argv: Optional[List[str]] = None):
                    help="温度采样系数（默认 1.0）")
     p.add_argument("--temp-steps", type=int, default=12,
                    help="温度采样全局步数，前 N 步温度采样，之后 argmax（默认 12）")
-    p.add_argument("--output", default="samples/boots/1",
-                   help="样本保存目录（默认 samples/boots/1）")
+    p.add_argument("--output-dir", default="sample_buffer",
+                   help="样本缓冲区目录（默认 sample_buffer）")
+    p.add_argument("--buffer-max-size", type=int, default=80000,
+                   help="缓冲区最大样本数，超出后 FIFO 淘汰最旧 chunk（默认 80000）")
+    p.add_argument("--chunk-games", type=int, default=10,
+                   help="每 chunk 对局数（默认 10）")
     p.add_argument("--device", default="cuda",
                    help="推理设备（默认 cuda，不可用时回退 cpu）")
     return p.parse_args(argv)
@@ -179,73 +187,23 @@ def _play_one_game(
     return samples
 
 
-# ---------- 保存 ----------
+# ---------- 缓冲区 ----------
 
-def _load_existing_samples(output_root: str) -> List[dict]:
-    """加载输出目录下已有的 sample.json
+def _get_next_game_start(buffer) -> int:
+    """计算下一个未使用的全局局号（1-based）
 
-    若文件存在且格式正确，返回其 JSON 数组内容；
-    若文件不存在或格式损坏，返回空列表。
+    与 cnn_v11 的 cpp_sample_buffer_adapter 一致：从 manifest 中
+    最大 game_end 的下一个局号开始，避免 chunk 文件名冲突。
 
     Args:
-        output_root: 输出根目录路径
+        buffer: SampleBufferManager 实例
 
     Returns:
-        已有样本列表（可能为空）
+        下一个起始局号
     """
-    sample_path = os.path.join(output_root, "sample.json")
-    if not os.path.exists(sample_path):
-        return []
-    try:
-        with open(sample_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        if isinstance(data, list):
-            return data
-        print(f"[警告] sample.json 格式异常（非数组），将从头开始")
-        return []
-    except (json.JSONDecodeError, IOError) as e:
-        print(f"[警告] 无法读取已有 sample.json: {e}，将从头开始")
-        return []
-
-
-def _save_progress(all_samples: List[dict], output_root: str,
-                   args, completed_games: int) -> None:
-    """原子保存当前累积样本到磁盘
-
-    同时写入 sample.json 和 summary.json。
-    采用"先写 .tmp 再 rename"原子写入策略，防止写入过程中崩溃导致文件损坏。
-
-    Args:
-        all_samples: 当前累积的全部样本
-        output_root: 输出根目录路径
-        args: argparse.Namespace（用于获取 model、games、hyperparams）
-        completed_games: 当前已完成局数
-    """
-    # 超参数
-    hyperparams = _build_hyperparams(args)
-
-    # 原子写入 sample.json
-    sample_path = os.path.join(output_root, "sample.json")
-    tmp_sample = sample_path + ".tmp"
-    with open(tmp_sample, 'w', encoding='utf-8') as f:
-        json.dump(all_samples, f, ensure_ascii=False)
-    os.replace(tmp_sample, sample_path)
-
-    # 原子写入 summary.json
-    summary_path = os.path.join(output_root, "summary.json")
-    tmp_summary = summary_path + ".tmp"
-    summary = {
-        "model": args.model,
-        "games": args.games,
-        "total_samples": len(all_samples),
-        "completed_games": completed_games,
-        "hyperparams": hyperparams,
-    }
-    with open(tmp_summary, 'w', encoding='utf-8') as f:
-        json.dump(summary, f, ensure_ascii=False, indent=2)
-    os.replace(tmp_summary, summary_path)
-
-    print(f"[保存] {completed_games} 局, {len(all_samples)} 条样本已写入磁盘")
+    if buffer.get_chunk_count() > 0:
+        return max(c["game_end"] for c in buffer._chunks) + 1
+    return 1
 
 
 # ---------- 结果描述 ----------
@@ -275,15 +233,14 @@ def _describe_result(samples: List[dict]) -> str:
 # ---------- 主流程 ----------
 
 def run_self_play(args) -> None:
-    """执行所有局自我对弈（单进程串行）
+    """执行所有局自我对弈（单进程串行），直接写入样本缓冲区
+
+    攒批策略：每攒满 chunk_games 局落盘一个 chunk（原子写入 + manifest 更新）；
+    正常结束时不足 chunk 的剩余局收尾落盘；Ctrl+C 中断时丢弃未满 chunk。
 
     Args:
         args: argparse.Namespace（由 parse_args 返回）
     """
-    # 确定输出根目录并创建
-    output_root = args.output
-    os.makedirs(output_root, exist_ok=True)
-
     # 设备：cuda 不可用时回退 cpu
     device = torch.device(
         args.device if torch.cuda.is_available() and args.device == "cuda" else "cpu"
@@ -300,10 +257,15 @@ def run_self_play(args) -> None:
     model = get_model(args.model)
     model.move_to_device(device)
 
-    # 加载已有样本（支持断点续跑）
-    all_samples = _load_existing_samples(output_root)
-    if all_samples:
-        print(f"[加载] 已有 {len(all_samples)} 条样本")
+    # 创建样本缓冲区管理器（自动加载已有 manifest 状态）
+    buffer = SampleBufferManager(
+        args.output_dir,
+        max_size=args.buffer_max_size,
+        chunk_games=args.chunk_games,
+    )
+    next_game_start = _get_next_game_start(buffer)
+    print(f"[缓冲区] 已有 {buffer.get_total_samples()} 样本 / "
+          f"{buffer.get_chunk_count()} chunk，新样本从局 {next_game_start} 开始")
 
     # 注册 SIGINT 信号处理器
     global _interrupted
@@ -312,9 +274,16 @@ def run_self_play(args) -> None:
 
     try:
         completed_games = 0
+        samples_total = 0
+        evicted_total = 0
+        pending: List[dict] = []   # 当前攒批的样本
+        pending_games = 0          # 当前攒批的局数
+        chunk_start = next_game_start
+
         for game_idx in range(args.games):
             if _interrupted:
-                print(f"\n[中断] 已停止，共完成 {completed_games} 局")
+                print(f"\n[中断] 已停止，共完成 {completed_games} 局"
+                      f"（未满 {args.chunk_games} 局的 {len(pending)} 条样本已丢弃）")
                 break
 
             print(f"\n{'=' * 50}")
@@ -326,23 +295,39 @@ def run_self_play(args) -> None:
                 temperature=hyperparams["temperature"],
                 temp_steps=hyperparams["temp_steps"],
             )
-            all_samples.extend(samples)
+            pending.extend(samples)
+            pending_games += 1
             completed_games += 1
 
             elapsed = time.time() - t_start
             print(f"[局 {game_idx + 1}/{args.games}] 完成 — {len(samples)} 步, "
                   f"结果: {_describe_result(samples)}, 耗时: {elapsed:.1f}s")
 
-            # 周期保存：每 _SAVE_INTERVAL 局写入磁盘，防止中途崩溃丢失数据
-            if completed_games % _SAVE_INTERVAL == 0:
-                _save_progress(all_samples, output_root, args, completed_games)
+            # 攒满 chunk_games 局 → 落盘一个 chunk
+            if pending_games == args.chunk_games:
+                chunk_end = chunk_start + args.chunk_games - 1
+                evicted = buffer.ingest(chunk_start, chunk_end, pending)
+                samples_total += len(pending)
+                evicted_total += evicted
+                print(f"[chunk] 局 {chunk_start}-{chunk_end}: "
+                      f"{len(pending)} 条样本已写入")
+                pending = []
+                pending_games = 0
+                chunk_start = chunk_end + 1
 
-        # 最终保存
-        if completed_games > 0:
-            _save_progress(all_samples, output_root, args, completed_games)
+        # 正常结束时收尾剩余局（中断时不落盘，未满 chunk 丢弃）
+        if pending and not _interrupted:
+            chunk_end = chunk_start + pending_games - 1
+            evicted = buffer.ingest(chunk_start, chunk_end, pending)
+            samples_total += len(pending)
+            evicted_total += evicted
+            print(f"[chunk] 局 {chunk_start}-{chunk_end}: "
+                  f"{len(pending)} 条样本已写入")
 
-        print(f"\n[完成] 共 {completed_games} 局，{len(all_samples)} 条样本，"
-              f"输出: {output_root}")
+        summary = buffer.get_summary()
+        print(f"\n[完成] 共 {completed_games} 局，{samples_total} 条样本写入缓冲区"
+              f"（淘汰 {evicted_total} 条），缓冲区内 {summary['total_samples']} 样本 / "
+              f"{summary['chunk_count']} chunk，目录: {args.output_dir}")
 
     finally:
         signal.signal(signal.SIGINT, original_handler)

@@ -598,7 +598,7 @@ python src/ai/scripts/mcts_train.py --model src/ai/models/cnn_v7/gen1/cnn_v7.pth
 
 ### 策略模型自对弈（cnn_v4）
 
-cnn_v4 是纯策略网络（无价值头），不使用 MCTS 搜索，自对弈时**直接采用模型输出的概率分布作为样本的 pi**。前 `temp-steps` 步使用温度采样（`p^(1/T)` 加权），之后走 argmax。样本结构与 cnn_v11 相同：`{"state": [226], "pi": [225], "z": 1.0/-1.0/0.0}`（state 前 225 维为棋盘、第 226 位为当前玩家；z 为胜负回填：胜方 +1.0、负方 -1.0、平局 0.0）。支持 Ctrl+C 中断，已完成的局数会保存进度，下次运行自动续存。
+cnn_v4 是纯策略网络（无价值头），不使用 MCTS 搜索，自对弈时**直接采用模型输出的概率分布作为样本的 pi**，并**直接写入样本缓冲区**（与 cnn_v11 相同的 chunk + manifest 格式，FIFO 滑动窗口管理，供 `mcts_train_cnn_v11.py` 训练消费）。前 `temp-steps` 步使用温度采样（`p^(1/T)` 加权），之后走 argmax。样本结构：`{"state": [226], "pi": [225], "z": 1.0/-1.0/0.0}`（state 前 225 维为棋盘、第 226 位为当前玩家；z 为胜负回填：胜方 +1.0、负方 -1.0、平局 0.0）。每攒满 `chunk-games` 局落盘一个 chunk，局号从 manifest 最大 game_end + 1 自动续接；Ctrl+C 中断时已落盘 chunk 保留，未满 chunk 的对局样本丢弃。
 
 ```bash
 python src/ai/scripts/cnn_v4_self_play.py [选项]
@@ -610,18 +610,20 @@ python src/ai/scripts/cnn_v4_self_play.py [选项]
 | `--games` | 对弈局数 | 100 |
 | `--temperature` | 温度采样系数 | 1.0 |
 | `--temp-steps` | 温度采样全局步数，前 N 步温度采样，之后 argmax | 12 |
-| `--output` | 样本保存目录（含 sample.json / summary.json） | samples/boots/1 |
+| `--output-dir` | 样本缓冲区目录（含 chunk 文件 + manifest.json） | sample_buffer |
+| `--buffer-max-size` | 缓冲区最大样本数，超出后 FIFO 淘汰最旧 chunk | 80000 |
+| `--chunk-games` | 每 chunk 对局数 | 10 |
 | `--device` | 推理设备（不可用时回退 cpu） | cuda |
 
 ```bash
-# 示例：默认参数，100 局，输出到 samples/boots/1
+# 示例：默认参数，100 局，写入 sample_buffer 缓冲区（从当前最大局号续接）
 python src/ai/scripts/cnn_v4_self_play.py
 
 # 示例：自定义局数与温度
 python src/ai/scripts/cnn_v4_self_play.py --games 500 --temperature 0.8 --temp-steps 16
 
-# 示例：指定输出目录
-python src/ai/scripts/cnn_v4_self_play.py --games 200 --output samples/boots/2
+# 示例：指定缓冲目录与攒批粒度
+python src/ai/scripts/cnn_v4_self_play.py --games 200 --output-dir my_buffer --chunk-games 20
 ```
 
 ### 价值头训练（cnn_v10）

@@ -1,9 +1,10 @@
-"""cnn_v4_self_play 脚本单元测试（intention 54）
+"""cnn_v4_self_play 脚本单元测试（intention 54/55）
 
 测试 cnn_v4.3 自我对弈核心逻辑：
 - _play_one_game 的样本结构与 z 值回填（胜负/平局）
 - 温度采样策略编排（前 temp_steps 步 sampling，之后 argmax）
-- parse_args 默认值与 CLI 参数解析
+- parse_args 默认值与 CLI 参数解析（缓冲区参数）
+- _get_next_game_start 局号续接（从 manifest 最大 game_end + 1）
 
 使用 Fake 模型（SequentialFakeModel），不加载真实权重，不修改真实数据文件。
 """
@@ -279,15 +280,18 @@ class TestParseArgs(unittest.TestCase):
     """parse_args 默认值与参数解析"""
 
     def test_defaults(self):
-        """默认值与 intention 54 一致"""
+        """默认值与 intention 55 一致（直接输出到样本缓冲区）"""
         from ai.scripts.cnn_v4_self_play import parse_args
 
         args = parse_args([])
         self.assertEqual(args.games, 100)
         self.assertEqual(args.temperature, 1.0)
         self.assertEqual(args.temp_steps, 12)
-        self.assertEqual(args.output, "samples/boots/1")
         self.assertEqual(args.model, "cnn_v4.3")
+        # 缓冲区参数
+        self.assertEqual(args.output_dir, "sample_buffer")
+        self.assertEqual(args.buffer_max_size, 80000)
+        self.assertEqual(args.chunk_games, 10)
 
     def test_custom_values(self):
         """自定义参数生效"""
@@ -297,12 +301,53 @@ class TestParseArgs(unittest.TestCase):
             "--games", "50",
             "--temperature", "0.5",
             "--temp-steps", "8",
-            "--output", "tmp_out",
+            "--output-dir", "tmp_buffer",
+            "--buffer-max-size", "40000",
+            "--chunk-games", "5",
         ])
         self.assertEqual(args.games, 50)
         self.assertEqual(args.temperature, 0.5)
         self.assertEqual(args.temp_steps, 8)
-        self.assertEqual(args.output, "tmp_out")
+        self.assertEqual(args.output_dir, "tmp_buffer")
+        self.assertEqual(args.buffer_max_size, 40000)
+        self.assertEqual(args.chunk_games, 5)
+
+
+class _StubBuffer:
+    """仅暴露 _get_next_game_start 所需接口的桩"""
+
+    def __init__(self, chunks):
+        self._chunks = chunks
+
+    def get_chunk_count(self):
+        return len(self._chunks)
+
+
+class TestNextGameStart(unittest.TestCase):
+    """_get_next_game_start 局号续接逻辑"""
+
+    def test_empty_buffer_starts_at_one(self):
+        """空缓冲区（无 chunk）从局 1 开始"""
+        from ai.scripts.cnn_v4_self_play import _get_next_game_start
+
+        self.assertEqual(_get_next_game_start(_StubBuffer([])), 1)
+
+    def test_existing_chunks_continue_after_max_end(self):
+        """已有 chunk 时从最大 game_end + 1 续接（乱序时取最大）"""
+        from ai.scripts.cnn_v4_self_play import _get_next_game_start
+
+        chunks = [
+            {"game_start": 1, "game_end": 10},
+            {"game_start": 11, "game_end": 20},
+        ]
+        self.assertEqual(_get_next_game_start(_StubBuffer(chunks)), 21)
+
+        # 乱序 chunk 列表也应取最大 game_end
+        shuffled = [
+            {"game_start": 11, "game_end": 20},
+            {"game_start": 1, "game_end": 10},
+        ]
+        self.assertEqual(_get_next_game_start(_StubBuffer(shuffled)), 21)
 
 
 if __name__ == "__main__":
