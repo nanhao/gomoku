@@ -336,3 +336,6 @@ introduce batch mcts and virtual loss in mcts. But don't use multi thread.
 - temp 温度采样系数，默认 1.0
 - temp-step 温度采样全局步数，默认 12
 - output 样本保存目录，默认 samples/boots/1
+
+# intention_id=55
+修改src/ai/scripts/cnn_v4_self_play.py，让其直接输出到样本缓冲区中，按照 cnn_v11 的样本缓冲区格式。
