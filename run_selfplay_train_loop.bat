@@ -45,7 +45,7 @@ echo.
 
 REM ---- Step 2: Train model ----
 echo [INFO] Starting model training...
-python src/ai/scripts/mcts_train_cnn_v11.py --updates-per-checkpoint 15 --eval-games 10
+python src/ai/scripts/mcts_train_cnn_v11.py --updates-per-checkpoint 15 --eval-games 50
 if errorlevel 1 (
     echo.
     echo [ERROR] Round !ROUND!: training failed, stopping loop.
