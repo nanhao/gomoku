@@ -231,6 +231,10 @@ class DualHeadTrainer(ABC):
         # L1-L5: 加载数据
         all_states, all_pi, all_z = self._load_samples(sample_dirs)
 
+        # 空样本防御：无有效样本时直接返回空 history（不进入张量转换）
+        if not all_states:
+            return []
+
         # L3: 转换为训练张量
         inputs = self._convert_inputs(all_states).to(self.device)
         pi_targets = torch.tensor(all_pi, dtype=torch.float32, device=self.device)
@@ -326,6 +330,7 @@ class DualHeadTrainer(ABC):
                         f"value_loss: {avg_value_loss:.4f}",
                         f"policy_loss: {avg_policy_loss:.4f}",
                         f"total_loss: {avg_total_loss:.4f}",
+                        f"grad_norm: {avg_grad_norm:.4f}",
                     ]
                     if "val_total_loss" in epoch_result:
                         log_parts.append(f"val_total_loss: {epoch_result['val_total_loss']:.4f}")

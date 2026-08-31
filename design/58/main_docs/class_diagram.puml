@@ -1,0 +1,78 @@
+@startuml
+!theme plain
+
+' 中文字体配置（Windows）
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam classFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title cnn_v11 off-policy 训练脚本 — 类图与依赖关系
+
+' ============ 新增类 ============
+
+class OffPolicyTrainer {
+    + _load_samples(sample_dirs: List[str]) : Tuple[List[List[int]], List[List[float]], List[float]]
+}
+
+class OffPolicyTrainLoop {
+    + __init__(model_spec: str, data_dir: str, batch_size: int, epochs: int, val_split: float, lr: float, weight_decay: float, device: str)
+    + run() : OffPolicyTrainResult
+}
+
+class OffPolicyTrainResult <<dataclass>> {
+    + saved_gen : int
+    + saved_spec : str
+    + requested_epochs : int
+    + total_epochs : int
+    + interrupted : bool
+    + final_total_loss : float
+    + final_val_loss : Optional[float]
+    + history : List[Dict[str, float]]
+}
+
+' ============ 复用类（仅基类打印微调） ============
+
+class DualHeadTrainer <<abstract>> {
+    + train_epochs(sample_dirs, epochs, batch_size, val_split, shuffle, verbose) : List[Dict]
+    + _train_step(inputs, pi_targets, z_targets) : Dict[str, float]
+    + save_model(output_path: str) : str
+    + _plot_loss_curve(history) : str
+    + _load_samples(sample_dirs) : tuple
+}
+
+class CNNV11Trainer {
+    + model_name : str
+    + _create_model(fresh: bool) : CNNV11Model
+    + _convert_inputs(inputs: List) : Tensor
+}
+
+class CNNV11Model {
+    + network : CNNV11Network
+    + save(path: str) : str
+}
+
+class CNNV11Network <<torch.nn.Module>> {
+    + forward(x) : (Tensor, Tensor)
+}
+
+' ============ 数据存储 ============
+
+class "renjunet_samples/\n(chunk JSON + manifest)" as DataDir <<存储>>
+class "mcts_loss_logs/\n(cnn_v11_{ts}.png)" as PlotDir <<存储>>
+class "gen{N+1}/\n(pth + torchscript)" as GenDir <<存储>>
+
+' ============ 关系 ============
+
+OffPolicyTrainer --|> CNNV11Trainer : 继承（仅覆盖 _load_samples）
+CNNV11Trainer --|> DualHeadTrainer : 继承
+
+OffPolicyTrainLoop --> OffPolicyTrainer : 持有，调用 train_epochs
+OffPolicyTrainLoop --> CNNV11Model : 保存 gen{N+1}
+OffPolicyTrainLoop ..> OffPolicyTrainResult : 返回
+
+OffPolicyTrainer ..> DataDir : 读取全部样本
+DualHeadTrainer ..> PlotDir : _plot_loss_curve 输出
+CNNV11Model --> CNNV11Network : 持有 network
+
+' ============ 分组（注释标注，注释中不渲染） ============
+
+@enduml

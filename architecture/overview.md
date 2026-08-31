@@ -154,7 +154,8 @@ src/
 │       ├── value_self_play.py    价值头自对弈（cnn_v10）
 │       ├── value_self_play_worker.py  价值头自对弈 Worker
 │       ├── value_train.py        价值头训练（cnn_v10）
-│       └── mcts_train_cnn_v11.py  CNN v11 样本缓冲区训练（--model 可选）
+│       ├── mcts_train_cnn_v11.py  CNN v11 样本缓冲区训练（--model 可选）
+│       └── mcts_train_cnn_v11_offpolicy.py  CNN v11 off-policy 监督训练（--model 可选）
 │
 ├── gui/           # GUI 界面（tkinter）
 │   ├── main.py         主窗口
@@ -328,6 +329,11 @@ CNN v11 缓冲区训练: mcts_train_cnn_v11.py（--model 可选，默认最高�
                   → CheckpointEvaluator（C++ MCTS 对战评估）
                   → 胜率 ≥ 55% → 晋升 gen{N+1}
                   → 连续 3 次失败 → 停止
+
+CNN v11 off-policy 训练: mcts_train_cnn_v11_offpolicy.py（--model 可选，默认最高代数）→ OffPolicyTrainLoop
+                  → OffPolicyTrainer._load_samples（chunk JSON / sample.json，多 epoch 全量遍历）
+                  → 基类 train_epochs（mini-batch + val_split + 每 epoch 打印含 grad_norm + 自动曲线图）
+                  → 保存 gen{N+1}（pth + TorchScript）
 ```
 
 ---
@@ -371,5 +377,6 @@ tests/
 | 价值头训练 | `python src/ai/scripts/value_train.py --model cnn_v10.1 --train-from-dir samples --epochs 100` |
 | 迭代进化 | `python src/ai/iterative_train.py --ai1 cnn_v4.99 --ai2 cnn_v4.100 --sample_dir samples` |
 | CNN v11 缓冲区训练 | `python src/ai/scripts/mcts_train_cnn_v11.py --model cnn_v11.1 --buffer-dir sample_buffer`（--model 可选，默认最高代数） |
+| CNN v11 off-policy 训练 | `python src/ai/scripts/mcts_train_cnn_v11_offpolicy.py --model cnn_v11.1 --data-dir renjunet_samples`（--model 可选，默认最高代数） |
 | 自对弈+训练循环 | `run_selfplay_train_loop.bat`（循环执行 采样→训练，任一步失败即停止） |
 | 运行测试 | `python -m pytest tests/ -v -s` |

@@ -502,6 +502,48 @@ python src/ai/scripts/mcts_train_cnn_v11.py --model cnn_v11.1 --buffer-dir sampl
 python src/ai/scripts/mcts_train_cnn_v11.py --model cnn_v11.3 --batch-size 256 --eval-games 30 --max-failures 5
 ```
 
+#### CNN v11 off-policy 监督训练（设计 58）
+
+> 对静态样本集（如 `renjunet_samples` 人类棋谱）做多 epoch 全量 mini-batch 监督训练：加载指定 gen 模型 → 全量遍历样本训练 → 保存 gen{N+1}（pth + TorchScript）。
+
+```bash
+# 基本用法（自动识别 cnn_v11 最高代数）
+python src/ai/scripts/mcts_train_cnn_v11_offpolicy.py [选项]
+
+# 显式指定模型代数
+python src/ai/scripts/mcts_train_cnn_v11_offpolicy.py --model <注册名.代数> [选项]
+```
+
+**选项**：
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--model` | 自动识别最高代数 | 初始模型 spec（如 cnn_v11.1），不指定时自动识别 cnn_v11 的最高代数 |
+| `--data-dir` | `renjunet_samples` | 样本目录（chunk JSON 或 sample.json 格式） |
+| `--batch-size` | 2048 | 每个 mini-batch 的样本数 |
+| `--epochs` | 100 | 训练 epoch 数 |
+| `--validate-set` | 0.1 | 验证集比例，值域 [0, 1) |
+| `--lr` | 0.001 | 学习率 |
+| `--weight-decay` | 1e-4 | AdamW 权重衰减 |
+| `--device` | `cuda` | 训练设备（cuda 不可用时自动回退 cpu 并警告） |
+
+> **训练闭环**：`--model`（或最高代数）→ 加载样本（manifest.json 优先，兼容 sample.json）→ 按 `--validate-set` 划分训练/验证集 → 每 epoch shuffle + mini-batch 切分 + 逐批 `_train_step` + 验证集评估 + 打印汇总（含 grad_norm）→ 自动生成曲线图（`mcts_loss_logs/cnn_v11_{ts}.png`）→ 保存 gen{N+1}（`cnn_v11.pth` + `cnn_v11_torchscript.pt`）。
+> Ctrl+C 优雅中断：先完成曲线图，中断后仍保存模型，结果标记 interrupted。
+> 损坏 JSON 跳过并警告、缺字段/维度不符样本跳过并计数，无有效样本时报错退出。
+
+**示例**：
+
+```bash
+# 基本训练：自动识别最高代数，从 renjunet_samples 全量训练 100 epochs
+python src/ai/scripts/mcts_train_cnn_v11_offpolicy.py
+
+# 指定代数与数据目录
+python src/ai/scripts/mcts_train_cnn_v11_offpolicy.py --model cnn_v11.1 --data-dir renjunet_samples
+
+# 自定义参数
+python src/ai/scripts/mcts_train_cnn_v11_offpolicy.py --model cnn_v11.3 --batch-size 1024 --epochs 50 --validate-set 0.2
+```
+
 #### GPU 推理攒批配置
 
 GPU 推理线程采用**动态区间攒批**机制，通过 `cpp/python/mcts_config.json` 配置：

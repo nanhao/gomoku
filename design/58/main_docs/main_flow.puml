@@ -1,0 +1,71 @@
+@startuml
+!theme plain
+
+' 中文字体配置（Windows）
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title cnn_v11 off-policy 训练脚本 — 关键流程交互
+
+actor User
+
+participant "mcts_train_cnn_v11_offpolicy.py\n(CLI入口)" as CLI
+participant "OffPolicyTrainLoop\n(训练编排)" as Loop
+participant "OffPolicyTrainer\n(CNNV11Trainer)" as Trainer
+participant "GPU\n(训练推理)" as GPU
+database "data-dir/\n(chunk JSON + manifest)" as DataDir
+database "src/ai/models/cnn_v11/\ngen{N}/" as ModelDir
+database "mcts_loss_logs/\n(曲线图)" as PlotDir
+
+== 初始化 ==
+
+User -> CLI : --model cnn_v11.N --data-dir renjunet_samples\n--batch-size 2048 --epochs 100 --validate-set 0.1
+CLI -> CLI : 参数校验 / 打印配置（--model 缺省时自动识别最高代数）
+
+CLI -> Loop : 创建 OffPolicyTrainLoop(model_spec, data_dir, ...)
+Loop -> ModelDir : 加载初始模型 gen{N}
+ModelDir --> Loop : model (pth)
+
+Loop -> Trainer : 创建 OffPolicyTrainer(gen=N)
+
+== 训练阶段 ==
+
+Loop -> Trainer : train_epochs([data_dir], epochs=100, batch_size=2048, val_split=0.1)
+Trainer -> DataDir : _load_samples：manifest + 全部 chunk
+DataDir --> Trainer : 700,770 条样本 (states, pis, zs)
+Trainer -> Trainer : 转换为张量 + 按 val_split 随机划分训练/验证集
+
+loop 每个 epoch (1..100)
+    Trainer -> Trainer : shuffle 训练集 → 按 batch_size 切分
+
+    loop 每个 mini-batch (≈342 batch)
+        Trainer -> GPU : _train_step(inputs, pi_targets, z_targets)
+        GPU --> Trainer : value_loss + policy_loss + total_loss + grad_norms
+    end
+
+    Trainer -> GPU : _evaluate_val（验证集前向，无梯度）
+    GPU --> Trainer : val_value/policy/total_loss
+
+    Trainer -> CLI : 打印汇总（Epoch x/100 | loss... | grad_norm... | val_total_loss...）
+end
+
+== 曲线图与保存 ==
+
+Trainer -> PlotDir : _plot_loss_curve(history) → cnn_v11_{ts}.png
+PlotDir --> Trainer : 曲线图路径
+
+Trainer --> Loop : history（loss / grad_norm / val-loss 全记录）
+
+Loop -> ModelDir : 保存 gen{N+1}/cnn_v11.pth + cnn_v11_torchscript.pt
+ModelDir --> Loop : 保存完成（已存在则覆盖）
+
+alt Ctrl+C 中断
+    Loop -> Loop : interrupted=True，仍执行保存与绘图
+else 正常结束
+    Loop -> Loop : interrupted=False
+end
+
+Loop --> CLI : OffPolicyTrainResult(saved_spec="cnn_v11.N+1", total_epochs, ...)
+CLI --> User : 打印结果摘要（保存 gen、epoch 数、最终 loss/val-loss、曲线图路径）
+
+@enduml

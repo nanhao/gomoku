@@ -180,12 +180,12 @@ class TestCNNV11Trainer(unittest.TestCase):
         tmp_dir = tempfile.mkdtemp()
         try:
             trainer = CNNV11Trainer(model=self.model, device=torch.device("cpu"))
-            # 无样本时 _load_samples 返回空列表，_convert_inputs([])
-            # 会触发 torch.cat 的 ValueError（现有行为）
-            with self.assertRaises(ValueError):
-                trainer.train_epochs(
-                    [tmp_dir], epochs=1, batch_size=4, verbose=False,
-                )
+            # 无样本时 _load_samples 返回空列表，空样本防御直接返回空 history
+            # （设计 58 方案 A：不再触发 _convert_inputs([]) 的 torch.cat ValueError）
+            history = trainer.train_epochs(
+                [tmp_dir], epochs=1, batch_size=4, verbose=False,
+            )
+            self.assertEqual(history, [])
         finally:
             import shutil
             shutil.rmtree(tmp_dir, ignore_errors=True)
