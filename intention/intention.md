@@ -342,3 +342,6 @@ introduce batch mcts and virtual loss in mcts. But don't use multi thread.
 
 # intention_id=56
 修改 src/ai/scripts/mcts_train_cnn_v11.py，使其在评估时，除了将当前checkpoint与历史最强进行对弈，也与上一代历史最强进行对弈。这意味着要保存历史最强和上一代历史最强的权重。只有当当前 checkpoint 与两代历史最强的胜率都达到或超过阈值时，才晋升成功
+
+# intention_id=57
+我需要一个临时脚本把 ​renjunet_v10_20260829.rif​ 里面的对局数据转换成 cnn_v11 能认识的格式，也就是 ​sample_buffer​  这个目录下的样本格式。你可以帮我实现这个脚本并运行进行格式转换吗？

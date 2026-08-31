@@ -62,3 +62,5 @@ mcts_loss_logs
 # C++ LibTorch runtime DLLs (installed separately)
 cpp/python/*.dll
 sample_buffer/
+renjunet_samples/
+renjunet_v10_20260829.rif
