@@ -124,6 +124,7 @@ class CnnV11TrainLoop:
                       f"本次仅与当前代 best 进行单场评估")
 
         # 创建组件
+        self._mcts_config: MctsSelfPlayConfig = mcts_config
         self._reader: SampleBufferReader = SampleBufferReader(buffer_dir)
         self._evaluator: CheckpointEvaluator = CheckpointEvaluator(mcts_config)
         self._loss_logger: LossLogger = LossLogger(
@@ -202,7 +203,7 @@ class CnnV11TrainLoop:
                     checkpoint_ts,
                     self._best_ts_path,
                     self._eval_games,
-                    temp_steps=2,
+                    temp_steps=self._mcts_config.temp_steps,
                 )
                 print(f"胜率 = {win_rate_best:.1%}")
 
@@ -215,7 +216,7 @@ class CnnV11TrainLoop:
                         checkpoint_ts,
                         self._prev_best_ts_path,
                         self._eval_games,
-                        temp_steps=2,
+                        temp_steps=self._mcts_config.temp_steps,
                     )
                     print(f"胜率 = {win_rate_prev:.1%}")
                 else:

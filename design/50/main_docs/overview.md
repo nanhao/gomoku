@@ -199,3 +199,19 @@ CnnV11TrainLoop
 | `cnn_v11_torchscript.pt` | TorchScript 模型（供 C++ MCTS 使用） |
 
 gen 编号规则：若初始模型为 `cnn_v11.N`，则晋升产物为 `gen{N+1}`。
+
+## 变更记录（2026-09-01）
+
+### 评估温度策略变更：temp_steps 由 CLI 配置驱动，不再硬编码
+
+| 决策项 | 变更前 | 变更后 | 理由 |
+|--------|--------|--------|------|
+| 评估温度 | `temp_steps=2`（train_loop 硬编码，前 2 步采样） | `temp_steps=0`（由 CLI 传入的 `MctsSelfPlayConfig.temp_steps` 控制，当前为全程贪婪） | 评估参数应以 CLI 配置为准；原 `MctsSelfPlayConfig.temp_steps` 被 evaluate 必填参数覆盖，属无效死配置 |
+
+**变更内容：**
+
+- `CnnV11TrainLoop.__init__`：新增保存 `self._mcts_config`（此前 mcts_config 仅传入 evaluator，未保留为属性）
+- `CnnV11TrainLoop.run()`：两处评估调用 `temp_steps=2` → `temp_steps=self._mcts_config.temp_steps`
+- CLI `mcts_train_cnn_v11.py`：`temp_steps=0` 的注释修正（原注释“前 2 步采样”与值矛盾），参数打印补充“评估时全程贪婪，不覆盖”
+
+**影响：** 评估从“前 2 步温度采样”变为“全程贪婪”（CLI 当前配置 `temp_steps=0`）。后续如需恢复前 2 步采样，仅需修改 CLI 中 `MctsSelfPlayConfig(temp_steps=2)`，无需改动 train_loop。上文正文（核心决策表、方案概要、接口说明）保留历史设计原貌。

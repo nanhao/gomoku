@@ -115,3 +115,15 @@
 不变：晋升成功时在 `src/ai/models/cnn_v11/gen{N+1}/` 下生成 `cnn_v11.pth` 与 `cnn_v11_torchscript.pt`。
 
 上一代（gen N-1）与当前代（gen N）的权重在晋升过程中**不被覆盖**（晋升写入 gen{N+1}），天然满足"保存历史最强和上一代历史最强"的要求。
+
+## 变更记录（2026-09-01）
+
+### 评估温度参数变更：temp_steps 以 CLI 配置为准（当前为 0，全程贪婪）
+
+上文方案概要中 `evaluator.evaluate(..., temp_steps=2)` 为历史实现。2026-09-01 起：
+
+- `CnnV11TrainLoop.run()` 两场评估的 `temp_steps` 改为 `self._mcts_config.temp_steps`，不再硬编码 2
+- CLI `mcts_train_cnn_v11.py` 配置 `MctsSelfPlayConfig(temp_steps=0)`，即评估全程贪婪
+- `CnnV11TrainLoop.__init__` 新增保存 `self._mcts_config` 属性
+
+**影响：** 评估不再有前 2 步温度采样，全程贪婪。后续调整评估温度只需修改 CLI 中 `MctsSelfPlayConfig` 的 `temp_steps` 值。双代评估、交替执方、55% 晋升阈值等其余设计不变。

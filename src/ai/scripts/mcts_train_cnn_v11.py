@@ -174,7 +174,7 @@ def main() -> None:
     mcts_config = MctsSelfPlayConfig(
         simulations=args.simulations,
         c_puct=args.c_puct,
-        temp_steps=0,  # 评估时固定前 2 步采样，之后贪婪
+        temp_steps=0,  # 评估时全程贪婪（0 = 不温度采样），train_loop 直接使用此值
         temperature=1.0,
         dirichlet_epsilon=0.25,
         dirichlet_alpha=0.03,
@@ -201,7 +201,7 @@ def main() -> None:
     print("[MCTS 评估参数]")
     print(f"  simulations:     {mcts_config.simulations}")
     print(f"  c_puct:          {mcts_config.c_puct}")
-    print(f"  temp_steps:      {mcts_config.temp_steps}")
+    print(f"  temp_steps:      {mcts_config.temp_steps}（评估时全程贪婪，不覆盖）")
     print(f"  temperature:     {mcts_config.temperature}")
     print(f"  dirichlet_eps:   {mcts_config.dirichlet_epsilon}")
     print(f"  virtual_loss:    {mcts_config.virtual_loss}")
