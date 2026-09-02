@@ -77,22 +77,27 @@ class TestCNNV11Trainer(unittest.TestCase):
     # ---------- TC3.3 构造器 — gen 参数 ----------
 
     def test_constructor_gen(self):
-        """gen 参数传递给模型"""
+        """gen 参数传递给模型（临时目录隔离，不触碰真实模型目录）"""
         from ai.models.cnn_v11.trainer import CNNV11Trainer
+        from unittest.mock import patch
 
-        # 创建 gen1 目录和权重
-        import shutil
-        model_dir = os.path.dirname(self.ModelCls.DEFAULT_MODEL_PATH)
-        gen1_dir = os.path.join(model_dir, "gen1")
-        os.makedirs(gen1_dir, exist_ok=True)
-        pth_path = os.path.join(gen1_dir, "cnn_v11.pth")
-        try:
+        # 在临时目录构造 gen1 权重并 patch DEFAULT_MODEL_PATH 指向临时基目录，
+        # 禁止读写真实模型目录 src/ai/models/cnn_v11/gen1（曾直接 rmtree 删除真实权重）
+        with tempfile.TemporaryDirectory(prefix="cnn_v11_gen_") as tmp_root:
+            model_dir = os.path.join(tmp_root, "models")
+            gen1_dir = os.path.join(model_dir, "gen1")
+            os.makedirs(gen1_dir, exist_ok=True)
+            pth_path = os.path.join(gen1_dir, "cnn_v11.pth")
+
             tmp_model = self.ModelCls(fresh=True)
             tmp_model.save(pth_path)
-            trainer = CNNV11Trainer(gen=1, device=torch.device("cpu"))
-            self.assertEqual(trainer.model.gen, 1)
-        finally:
-            shutil.rmtree(gen1_dir, ignore_errors=True)
+
+            with patch.object(
+                self.ModelCls, "DEFAULT_MODEL_PATH",
+                os.path.join(model_dir, "cnn_v11.pth"),
+            ):
+                trainer = CNNV11Trainer(gen=1, device=torch.device("cpu"))
+                self.assertEqual(trainer.model.gen, 1)
 
     # ---------- TC3.4 _convert_inputs — 输出形状 ----------
 
