@@ -6,6 +6,7 @@
 #include <random>
 #include <stdexcept>
 
+#include "mcts_config.h"
 #include "thread_pool.h"
 
 // =====================================================================
@@ -35,6 +36,7 @@ MctsSearcher::MctsSearcher(const std::string& model_path,
     , root_(nullptr)
     , root_edge_n_snapshot_(225, 0)
     , root_policy_(225, 1.0f / 225.0f)
+    , max_tree_expands_(g_mcts_config.max_tree_expands)
 {
     // 共享资源由外部管理，构造器不创建任何线程或网络
 }
@@ -55,6 +57,7 @@ MctsSearcher::MctsSearcher(std::string model_path, int num_simulations,
     , root_(nullptr)
     , root_edge_n_snapshot_(225, 0)
     , root_policy_(225, 1.0f / 225.0f)
+    , max_tree_expands_(g_mcts_config.max_tree_expands)
 {
     // 创建共享的神经网络推理引擎（攒批参数从 mcts_config.json 读取）
     neural_net_ = std::make_unique<NeuralNet>(
@@ -65,6 +68,7 @@ MctsSearcher::~MctsSearcher() {
     std::lock_guard<std::mutex> lock(root_mutex_);
     delete root_;
     root_ = nullptr;
+    root_player_ = -1;  // 树已销毁，置哨兵避免误判
 }
 
 // =====================================================================
@@ -122,6 +126,16 @@ bool MctsSearcher::advance_root(int action) {
     MctsNode* child = root_->get_child(action);
     if (child == nullptr) return false;
 
+    // 共用提升逻辑（detach → delete 旧根 → 换根 → 更新状态 → 翻转价值）
+    advance_root_locked(action);
+    return true;
+}
+
+void MctsSearcher::advance_root_locked(int action) {
+    // 调用方须已持有 root_mutex_（公开 advance_root / init_search promote 共用）
+    MctsNode* child = root_->get_child(action);
+    if (child == nullptr) return;
+
     // 1. 从旧根中分离子节点（使其成为独立树）
     child->detach_from_parent();
 
@@ -131,7 +145,12 @@ bool MctsSearcher::advance_root(int action) {
     // 3. 将子节点设为新根
     root_ = child;
 
-    return true;
+    // 4. 更新树根状态记录：旧根视角落子 action、玩家翻转（design/59 修复点 1）
+    root_board_[action] = root_player_;
+    root_player_ = 3 - root_player_;
+
+    // 5. 翻转新根价值视角（父视角边价值 → 自身视角根价值，P1-2）
+    child->flip_value();
 }
 
 // =====================================================================
@@ -144,20 +163,45 @@ void MctsSearcher::init_search(const std::vector<int>& state) {
 
     std::lock_guard<std::mutex> lock(root_mutex_);
 
-    // 检查是否子树复用：根节点已存在
+    // === 树根一致性校验三分支（design/59 修复点 1）===
     if (root_ != nullptr) {
-        // 子树复用场景：记录当前 N 快照
-        root_edge_n_snapshot_ = root_->get_visit_counts();
-
-        // 重新施加狄利克雷噪声
-        // 获取合法动作列表
-        std::vector<int> legal_actions;
-        for (int i = 0; i < 225; ++i) {
-            if (board[i] == 0) legal_actions.push_back(i);
+        if (max_tree_expands_ > 0 && total_expands_ > max_tree_expands_) {
+            // ③-超限：树内累计展开数超上限（修复点 5）→ 整树销毁重建
+            delete root_;
+            root_ = nullptr;
+            root_player_ = -1;  // 无树哨兵
+            total_expands_ = 0;
+            ++rebuild_count_;
+        } else if (root_board_ == board && root_player_ == current_player) {
+            // ① 一致 → 复用（快照 N + 重读策略 + 噪声）
+            reuse_tree(board, current_player);
+            return;
+        } else {
+            // 不一致：判定"恰差 1 步且分支已展开"→ promote；否则整树重建
+            int x = one_step_diff(root_board_, root_player_,
+                                  board, current_player);
+            MctsNode* child = (x >= 0) ? root_->get_child(x) : nullptr;
+            if (child != nullptr && !child->is_leaf()) {
+                // ② 差 1 步且子边已展开（非叶，P0-1 约束）→ 内部推进后复用
+                // P0-1：目标必须是已展开节点——叶节点（expand 建边但从未被选中、
+                // N=0、无子边）提升为根后 select_child 返回 -1 → 模拟全空转
+                advance_root_locked(x);
+                reuse_tree(board, current_player);
+                return;
+            }
+            // ③ 其余（差多子 / 目标未展开叶 / 无此分支）→ 整树销毁重建
+            delete root_;
+            root_ = nullptr;
+            root_player_ = -1;  // 无树哨兵
+            total_expands_ = 0;
+            ++rebuild_count_;
         }
-        add_dirichlet_noise(root_, legal_actions);
-        return;
     }
+
+    // === 全新建树（含重建后的首次建树）===
+    root_board_ = board;           // 树根状态记录（修复点 1）
+    root_player_ = current_player;
+    total_expands_ = 0;            // 展开计数清零（修复点 5）
 
     // 全新搜索：创建根节点
     BoardState root_state(board, current_player);
@@ -196,6 +240,46 @@ void MctsSearcher::init_search(const std::vector<int>& state) {
 
     // 施加狄利克雷噪声
     add_dirichlet_noise(root_, legal_actions);
+}
+
+// =====================================================================
+// 内部: reuse_tree（树根一致复用）与 one_step_diff（差 1 步判定）
+// =====================================================================
+
+void MctsSearcher::reuse_tree(const std::vector<int>& board, int player) {
+    // 复用场景：树根局面与传入 state 一致（含 promote 后）
+
+    // 1. 记录当前 N 快照（get_result 中计算本搜索新增量）
+    root_edge_n_snapshot_ = root_->get_visit_counts();
+
+    // 2. 重读根原始策略：新根可能为推进节点（修复点 3 保证其已持有
+    //    自身局面策略），保证 root_policy_ 与树根局面一致
+    root_policy_ = root_->get_root_policy();
+
+    // 3. 对真实空位重新施加狄利克雷噪声
+    std::vector<int> legal_actions;
+    for (int i = 0; i < 225; ++i) {
+        if (board[i] == 0) legal_actions.push_back(i);
+    }
+    add_dirichlet_noise(root_, legal_actions);
+}
+
+int MctsSearcher::one_step_diff(const std::vector<int>& prev_board,
+                                int prev_player,
+                                const std::vector<int>& board,
+                                int player) {
+    // 交替对弈语义：新局面 = 旧局面 + prev_player 在 x 落一子，且玩家翻转
+    if (player != 3 - prev_player) return -1;  // 玩家未按交替翻转
+
+    int x = -1;
+    for (int i = 0; i < 225; ++i) {
+        if (board[i] == prev_board[i]) continue;
+        // 差异处必须是 prev_player 刚落一子（旧空 → 新 prev_player）
+        if (prev_board[i] != 0 || board[i] != prev_player) return -1;
+        if (x >= 0) return -1;  // 多于 1 处差异
+        x = i;
+    }
+    return x;
 }
 
 // =====================================================================
@@ -304,7 +388,9 @@ void MctsSearcher::run_one_simulation() {
                     child_state.encode_for_network();
                 NeuralNetResult nn_result = nn().predict(encoded, model_path_);
 
-                // === 阶段 3: Expansion（展开子节点）===
+                // === 阶段 3: Expansion（展开 + 存储自身策略，锁内原子）===
+                // P1-1：存储必须与展开同一临界区（expand_with_policy），
+                // 并发 worker 锁外 set_root_policy 属数据竞争（UB）
                 std::vector<int> legal_actions =
                     child_state.get_legal_actions();
                 std::vector<float> priors;
@@ -312,7 +398,12 @@ void MctsSearcher::run_one_simulation() {
                 for (int a : legal_actions) {
                     priors.push_back(nn_result.policy[a]);
                 }
-                child->expand(priors, legal_actions);
+                bool did_expand = child->expand_with_policy(
+                    priors, legal_actions, nn_result.policy);
+                if (did_expand) {
+                    // 本次调用真正展开（幂等返回）→ 展开计数（修复点 5）
+                    total_expands_.fetch_add(1);
+                }
 
                 // === 阶段 4: Backup（回传更新）===
                 child->backup(-nn_result.value);

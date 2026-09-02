@@ -51,6 +51,35 @@ public:
     void expand(const std::vector<float>& action_priors,
                 const std::vector<int>& legal_actions);
 
+    /** 展开节点并存储自身局面原始策略（锁内原子完成，design/59 修复点 3）
+     *
+     * 在 expand_lock_ 临界区内原子完成"展开 + 存储自身局面原始策略
+     * （噪声前 225 维）"。与 expand 幂等语义一致：已展开返回 false 且
+     * 不写策略；返回是否由本次调用真正展开。
+     *
+     * 并发正确性（P1-1）：存储必须与展开在同一临界区内完成——两个 worker
+     * 可同时判定同一 child 为叶（is_leaf 检查无锁）双双进入展开流程，若在
+     * expand 返回后锁外 set_root_policy，双写 std::vector 属数据竞争（UB）；
+     * 由幂等返回决定唯一写入者。
+     *
+     * @param action_priors 各动作的先验概率（需与 legal_actions 对应）
+     * @param legal_actions 合法动作索引列表
+     * @param full_policy 本节点局面的完整 225 维原始策略（噪声施加前）
+     * @return 是否由本次调用真正展开（已展开则 false）
+     */
+    bool expand_with_policy(const std::vector<float>& action_priors,
+                            const std::vector<int>& legal_actions,
+                            const std::vector<float>& full_policy);
+
+    /** 翻转价值视角（design/59 修复点 4）
+     *
+     * q_sa_ = -q_sa_（n_visited_ 不变）。backup 数值链中：非根节点 q_sa_
+     * 存父视角（边价值），根节点 q_sa_ 存自身视角（根特判取反）；节点被提升
+     * 为新根后历史 q 需翻转，避免与新累积口径混同导致 root_value 漂移。
+     * 调用时机无并发（搜索模拟结束后/开始前）。
+     */
+    void flip_value();
+
     /** 沿父链向上回传
      *
      * 每向上一层取反 value。自动撤销 Virtual Loss。
@@ -121,7 +150,9 @@ private:
     std::atomic<int> n_unobserved_{0};      // 正在进行中的模拟次数
     std::atomic<int> virtual_loss_{0};      // Virtual Loss 计数器
 
-    // 原始策略（仅根节点存储）
+    // 自身局面原始策略（噪声施加前 225 维）
+    // 根节点必持有；展开节点经 expand_with_policy 在展开同时持有
+    // （design/59 修复点 3），使任意节点被提升为新根后可返回正确策略。
     std::vector<float> root_policy_;
 
     /** 计算 PUCT 值 */
@@ -130,4 +161,8 @@ private:
 
     /** 递归删除所有子节点 */
     void delete_subtree();
+
+    /** 在已持有 expand_lock_ 的上下文中创建全部子边（expand 族共用） */
+    void do_expand_locked(const std::vector<float>& action_priors,
+                          const std::vector<int>& legal_actions);
 };

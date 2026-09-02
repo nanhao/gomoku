@@ -106,6 +106,7 @@ add_unit_test(test_game_runner_workers test_game_runner_workers.cpp)
 add_unit_test(test_game_runner_colors test_game_runner_colors.cpp)
 add_unit_test(test_sample_augmentor test_sample_augmentor.cpp)
 add_unit_test(test_neural_net_dual_model test_neural_net_dual_model.cpp)
+add_unit_test(test_mcts_searcher_state_sync test_mcts_searcher_state_sync.cpp)
 
 # --- 集成测试 ---
 function(add_integration_test test_name test_file)
@@ -121,3 +122,4 @@ function(add_integration_test test_name test_file)
 endfunction()
 
 add_integration_test(test_mcts_integration test_mcts_integration.cpp)
+add_integration_test(test_game_runner_legal_moves test_game_runner_legal_moves.cpp)

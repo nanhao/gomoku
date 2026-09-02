@@ -348,3 +348,6 @@ introduce batch mcts and virtual loss in mcts. But don't use multi thread.
 
 # intention_id=58
 帮我新增一个脚本，用于 cnn_v11 的训练，与已有的 cnn_v11 训练脚本不同的是，新脚本是 off-policy 训练，即对指定目录（默认是renjunet_samples）下的所有脚本做多个 epoch 的训练。使用 mini-batch 方式，支持 batch-size 参数（默认2048）和 epoch 参数（默认100），以及 validate-set 参数（默认0.1）。要求训练时每隔一段合适的时间就 print 进度信息和 loss、梯度、val-loss 等训练信息。且需要记录 loss、梯度、val-loss，用于训练结束后生成曲线图
+
+# intention_id=59
+解决 intention\report\mcts_battle_cpp_vs_gui_discrepancy_20260902.md 报告中提到的问题

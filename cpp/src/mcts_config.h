@@ -23,6 +23,7 @@ struct MctsConfig {
     int batch_upper_bound = 500;  // GPU 攒批上限（单次最多取走）
     double virtual_loss = 3.0;
     bool use_gpu = true;
+    int max_tree_expands = 20000;  // MctsSearcher 单树累计展开上限（0=不限，design/59 修复点 5）
 };
 
 /// 全局运行时配置实例，由 bindings.cpp 在模块导入时填充

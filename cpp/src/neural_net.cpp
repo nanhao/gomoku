@@ -69,8 +69,11 @@ void NeuralNet::load_model_to_cache(const std::string& model_path) {
     // GPU 迁移延迟到 forward_batch 首次调用时，在 worker 线程上执行
     torch::Device device(torch::kCPU);
 
-    // 加载 TorchScript 模型
-    torch::jit::script::Module module = torch::jit::load(model_path);
+    // 加载 TorchScript 模型；map_location=kCPU 兼容 CUDA 保存的模型
+    // （如训练/晋升流程在 GPU 上导出的 gen2.pt：不带 map_location 时
+    // torch::jit::load 会尝试在 CUDA backend 创建张量，无 GPU 环境即失败）
+    torch::jit::script::Module module =
+        torch::jit::load(model_path, device);
     module.to(device);
     module.eval();
 

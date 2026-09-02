@@ -1,0 +1,75 @@
+@startuml
+!theme plain
+
+' 中文字体配置（Windows）
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title 修复后单局对战关键流程 — 树根状态校验 / 差一步推进 / 空位过滤
+
+participant "GameRunner::run_single_game\n(游戏线程)" as Runner
+participant "Searcher(黑)\nMctsSearcher" as S1
+participant "Searcher(白)\nMctsSearcher" as S2
+participant "NeuralNet\n(GPU 攒批推理)" as NN
+
+== 开局 ==
+
+Runner -> Runner : 确定执方（交替/随机）\n空棋盘 board[225]=0, 黑先
+Runner -> S1 : 创建 searcher（共享线程池+GPU, model1）
+Runner -> S2 : 创建 searcher（共享线程池+GPU, model2）
+
+== 黑方第 1 步（树为空 → 全新建树） ==
+
+Runner -> S1 : search(state=空棋盘+黑)
+S1 -> S1 : init_search: root_==nullptr → 建树\n记录 root_board_/root_player_
+S1 -> NN : predict(根局面编码)
+NN --> S1 : policy(225) + value
+S1 -> S1 : 展开根（合法空位）→ 施加狄利克雷噪声
+loop 800 次模拟
+    S1 -> NN : 叶节点局面（攒批）
+    NN --> S1 : policy + value → 展开/回传
+end
+S1 --> Runner : MctsResult(N, root_value, root_policy)
+
+Runner -> Runner : sample_action(N, board)：过滤已占位 → 温度/贪婪
+Runner -> Runner : 防御检查 board[action]==0 → 落黑子\n胜负判定（未终局）
+Runner -> S1 : advance_root(action)（己方推进，同步 root_board_/root_player_）
+
+== 白方第 1 步（树为空 → 全新建树） ==
+
+Runner -> S2 : search(state=当前棋盘+白)
+S2 -> NN : predict(根局面编码) → 建树
+loop 800 次模拟
+    S2 -> NN : 叶节点局面（攒批）
+    NN --> S2 : policy + value
+end
+S2 --> Runner : MctsResult(N, root_value, root_policy)
+Runner -> Runner : sample_action(N, board) → 落白子
+Runner -> S2 : advance_root(action)
+
+== 黑方第 2 步（树根滞后对手 1 子 → 差一步推进） ==
+
+Runner -> S1 : search(state=当前棋盘+黑)
+S1 -> S1 : init_search: root_ 存在\nroot_board_ 与 state 差 1 子（白刚落的 X）？
+alt 差 1 子 且 X 分支已展开（非叶）
+    S1 -> S1 : advance_root_locked(X)：提升为新根（状态一致）\n→ flip_value 视角翻转 → 复用子树 + 重施噪声
+else 差 1 子 但 X 分支是未展开叶（N=0）→ 提升将致空转弃局（P0-1）
+    S1 -> S1 : 不走 promote → delete root_ 整树重建（rebuild_count_++）
+else 差 1 子但无此分支 / 差多子 / 超展开上限（total_expands_ > max）
+    S1 -> S1 : delete root_ 整树重建 → 重新 predict 建树\n（total_expands_ 清零, rebuild_count_++）
+else 状态完全一致
+    S1 -> S1 : 直接复用 + 重施噪声
+end
+loop 800 次模拟
+    S1 -> NN : 叶节点局面（从一致树根出发）
+    NN --> S1 : policy + value
+end
+S1 --> Runner : MctsResult（visit_counts 中已占位处恒为 0）
+Runner -> Runner : sample_action(N, board)：首选 N>0 的空位\n兜底（对齐 Python）：全部空位按 N 取最大 → 落黑子
+Runner -> S1 : advance_root(action)（失败返回 false → 状态不变，下次 search 自愈）
+
+== 终局与收尾 ==
+
+Runner -> Runner : 反复交替直到 has_winner / is_full
+Runner --> Runner : 记录 GameResult(winner, move_count, samples)\n打印每局 rebuild 计数（可观测性）
+@enduml

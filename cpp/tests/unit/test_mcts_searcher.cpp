@@ -149,8 +149,9 @@ static void test_terminal_state_search() {
         auto state = make_state(board, 1);
         auto result = searcher.search(state);
 
-        // 终局状态 root_value 应为终局价值
-        ASSERT_FLOAT_EQ(result.root_value, 0.0f, 1e-4f);
+// 终局状态 root_value 应为终局价值（design/46 规格：胜方视角 +1.0、
+// 负方视角 -1.0；黑五连且黑视角 → +1.0）
+ASSERT_FLOAT_EQ(result.root_value, 1.0f, 1e-4f);
 
         PASS();
     } catch (const std::runtime_error& e) {

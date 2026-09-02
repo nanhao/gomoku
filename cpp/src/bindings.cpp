@@ -78,6 +78,7 @@ static void load_mcts_config(py::module_& m) {
         g_mcts_config.batch_upper_bound = get_int("batch_upper_bound", 500);
         g_mcts_config.virtual_loss      = get_double("virtual_loss", 3.0);
         g_mcts_config.use_gpu           = get_bool("use_gpu", true);
+        g_mcts_config.max_tree_expands  = get_int("max_tree_expands", 20000);
 
         py::print("[cpp_mcts] 配置已从", config_path, "加载");
     } catch (py::error_already_set&) {

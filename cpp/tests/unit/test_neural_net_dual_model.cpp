@@ -14,9 +14,11 @@ module_cache_ 缓存两个模型、forward_batch 按模型分组。
 
 #include <algorithm>
 #include <cassert>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -70,6 +72,37 @@ static bool model_file_exists(const std::string& path) {
     if (path.empty()) return false;
     std::ifstream f(path);
     return f.good();
+}
+
+/** 复制模型到系统临时目录，作为"第二个模型"的真实路径（TC-DM-05/06 共用）
+ *
+ * preload_model 的 key 语义 = 真实文件路径（实现与 Python 侧一致，
+ * 2026-09-02 修订：原测试用 path+#model2 伪 key 假设 key 可与路径解耦，
+ * 与实现矛盾导致必然失败）。双模型用例需第二个可加载路径：系统仅一个
+ * CPU 模型 → 复制到临时目录模拟（不改动真实模型文件），测试结束删除。
+ *
+ * @return 临时模型路径；复制失败返回空串
+ */
+static std::string make_second_model_copy(const std::string& src) {
+    try {
+        namespace fs = std::filesystem;
+        using namespace std::chrono;
+        long long ts = duration_cast<milliseconds>(
+            system_clock::now().time_since_epoch()).count();
+        fs::path tmp = fs::temp_directory_path() /
+                       ("nn_dual_model_" + std::to_string(ts) + ".pt");
+        fs::copy_file(src, tmp, fs::copy_options::overwrite_existing);
+        return tmp.string();
+    } catch (const std::exception&) {
+        return "";
+    }
+}
+
+/** 删除临时模型副本（静默忽略失败） */
+static void remove_model_copy(const std::string& path) {
+    if (path.empty()) return;
+    std::error_code ec;
+    std::filesystem::remove(path, ec);
 }
 
 
@@ -212,12 +245,15 @@ static void test_cache_two_models() {
         // 构造时预加载第一个模型
         NeuralNet nn(path, false);
 
-        // 预加载同一模型作为"第二个模型"（用不同路径名模拟）
-        // 实际测试中只有一个模型文件，用不同 key 模拟两个模型
-        std::string key2 = path + "#model2";
+        // 第二个模型：复制模型到临时目录获得真实可加载路径（key == 路径）；
+        // 局部对象析构时删除副本，断言失败提前返回也不会残留
+        std::string key2 = make_second_model_copy(path);
+        struct CopyCleanup {
+            std::string path;
+            ~CopyCleanup() { remove_model_copy(path); }
+        } cleanup{key2};
+        ASSERT_TRUE(!key2.empty());
 
-        // 使用同一个模型文件但不同 key 预加载
-        // 注意: preload_model 用 key 索引，所以即使指向同一文件也会缓存两份
         nn.preload_model(key2);
 
         // 两个模型各自推理
@@ -255,7 +291,13 @@ static void test_concurrent_predict_different_models() {
     try {
         NeuralNet nn(path, false);
 
-        std::string key2 = path + "#model2";
+        // 第二个模型：复制模型到临时目录获得真实可加载路径（key == 路径）
+        std::string key2 = make_second_model_copy(path);
+        struct CopyCleanup {
+            std::string path;
+            ~CopyCleanup() { remove_model_copy(path); }
+        } cleanup{key2};
+        ASSERT_TRUE(!key2.empty());
         nn.preload_model(key2);
 
         std::vector<float> encoded(675, 0.0f);

@@ -162,12 +162,18 @@ private:
     前 temp_steps 步：按 N^(1/τ) 权重采样
     temp_steps 之后：纯贪婪选择（N 最大者）
 
+    候选过滤（design/59 修复点 2）：首选 visit_counts>0 && 真实棋盘空位；
+    首选候选为空时退化为"全部空位按 N 取最大"（对齐 Python
+    _select_greedy_n 空位全集语义）；仅当棋盘满盘返回 -1。
+
     @param visit_counts 225 维访问计数
+    @param board 225 维真实棋盘（0=空,1=黑,2=白），用于空位过滤
     @param step 当前步数（从 0 开始）
     @param config 游戏配置（含 temperature 和 temp_steps）
-    @return 选中的 action 索引
+    @return 选中的 action 索引；棋盘满盘时返回 -1
     */
     static int sample_action(const std::vector<int>& visit_counts,
+                             const std::vector<int>& board,
                              int step,
                              const GameConfig& config);
 };

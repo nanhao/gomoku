@@ -7,5 +7,6 @@
     "batch_lower_bound": 16,
     "batch_upper_bound": 500,
     "virtual_loss": 3.0,
-    "use_gpu": true
+    "use_gpu": true,
+    "max_tree_expands": 20000
 }

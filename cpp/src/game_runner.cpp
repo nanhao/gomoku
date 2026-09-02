@@ -254,8 +254,28 @@ void GameRunner::run_single_game(int game_index) {
             raw_samples.back().visit_counts = mcts_result.visit_counts;
         }
 
-        // 温度采样选动作
-        int action = sample_action(mcts_result.visit_counts, move_count, config_);
+        // 温度采样选动作（候选 = visit_counts>0 && 真实棋盘空位，修复点 2）
+        int action = sample_action(mcts_result.visit_counts, board,
+                                   move_count, config_);
+
+        // 落子前防御（理论不可达，兜底防非法棋局）
+        if (action < 0) {
+            break;  // 仅棋盘满盘时才可能（不会发生）
+        }
+        if (board[action] != 0) {
+            // 防御：仍选中已占位 → 从空位取 N 最大者兑底
+            std::cout << "[GameRunner] 警告: action " << action
+                      << " 覆盖已有棋子, 回退到空位中 N 最大者" << std::endl;
+            action = -1;
+            int best_n = -1;
+            for (int i = 0; i < 225; ++i) {
+                if (board[i] == 0 && mcts_result.visit_counts[i] > best_n) {
+                    best_n = mcts_result.visit_counts[i];
+                    action = i;
+                }
+            }
+            if (action < 0) break;  // 无空位（满盘）
+        }
 
         // 落子
         board[action] = current_player;
@@ -334,7 +354,20 @@ void GameRunner::run_single_game(int game_index) {
         results_[game_index] = std::move(result);
     }
 
-    // 8. 更新完成计数
+    // 8. 打印 rebuild 诊断行（design/59 可观测性，每局一次）
+    {
+        int s1_rc = searcher1.get_rebuild_count();
+        int s2_rc = searcher2.get_rebuild_count();
+        // 按执方归并：黑/白各自的整树重建次数
+        int black_rc = (model1_color == 1) ? s1_rc : s2_rc;
+        int white_rc = (model1_color == 2) ? s1_rc : s2_rc;
+        std::cout << "[GameRunner] game=" << game_index
+                  << " rebuild: 黑=" << black_rc
+                  << " 白=" << white_rc
+                  << "（步数 " << move_count << "）" << std::endl;
+    }
+
+    // 9. 更新完成计数
     completed_count_.fetch_add(1);
 }
 
@@ -343,23 +376,35 @@ void GameRunner::run_single_game(int game_index) {
 // =====================================================================
 
 int GameRunner::sample_action(const std::vector<int>& visit_counts,
+                              const std::vector<int>& board,
                               int step,
                               const GameConfig& config)
 {
-    // 收集合法动作（visit_counts > 0 的位置）
+    // 首选候选：被搜索访问过 && 真实棋盘空位（修复点 2：
+    // 树根错位时代的高访问边（对手刚落子位）被排除，杜绝覆盖落子）
     std::vector<int> valid_actions;
     std::vector<int> valid_counts;
 
     for (int i = 0; i < 225; ++i) {
-        if (visit_counts[i] > 0) {
+        if (visit_counts[i] > 0 && board[i] == 0) {
             valid_actions.push_back(i);
             valid_counts.push_back(visit_counts[i]);
         }
     }
 
+    // 兜底（P2-1，对齐 Python _select_greedy_n）：首选候选为空
+    // （搜索空转、全部空位 N=0）→ 退化为"全部空位按 N 取最大"：
+    // N=0 的空位同样入选，全 0 时取首个空位。仅满盘才返回 -1。
     if (valid_actions.empty()) {
-        // 退化：无合法动作（不应发生，返回 -1）
-        return -1;
+        int best = -1;
+        int best_n = -1;
+        for (int i = 0; i < 225; ++i) {
+            if (board[i] == 0 && visit_counts[i] > best_n) {
+                best_n = visit_counts[i];
+                best = i;
+            }
+        }
+        return best;  // 满盘时 -1
     }
 
     bool use_temperature = (step < config.temp_steps);

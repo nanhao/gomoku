@@ -97,6 +97,13 @@ public:
     */
     bool advance_root(int action);
 
+    /** 返回整树重建累计次数（线程安全，design/59 可观测性）
+
+    每次 search 因状态不一致/展开超限销毁整树时 +1。
+    GameRunner 每局结束读取并打印诊断行。
+    */
+    int get_rebuild_count() const { return rebuild_count_.load(); }
+
 private:
     std::string model_path_;
     int num_simulations_;
@@ -127,8 +134,21 @@ private:
     // 模拟计数器（跨线程共享）
     std::atomic<int> sim_counter_{0};
 
-    // 原始策略（仅根节点存储，噪声施加前）
+    // 原始策略（根节点噪声施加前）
+    // 复用路径中从新根节点重新读取，保证与树根局面一致
     std::vector<float> root_policy_;
+
+    // --- 树根状态跟踪（design/59 修复点 1）---
+    // 与 root_ 同生命周期，供 init_search 一致性校验：
+    //   一致 → 复用；差 1 步且子边已展开 → 内部推进复用；其余 → 整树重建
+    std::vector<int> root_board_;   // 树根局面棋盘（225 维）
+    int root_player_{-1};           // 树根局面当前落子方；-1 = 无树哨兵
+
+    // --- 树规模限幅与可观测性（design/59 修复点 5）---
+    std::atomic<int> rebuild_count_{0};  // 整树重建累计次数
+    std::atomic<int> total_expands_{0};  // 树内累计展开节点数（重建/新建清零）
+    int max_tree_expands_{0};            // 展开上限（构造时从配置读取，0=不限）
+
 
     // 当前搜索的初始状态（供 worker 线程使用）
     std::vector<int> initial_board_;
@@ -141,10 +161,43 @@ private:
 
     /** 初始化搜索：创建根节点 + 狄利克雷噪声
 
+    树根一致性校验三分支（design/59 修复点 1）：
+    ① 局面一致 → 复用；② 差 1 步且子边已展开（非叶）→ 内部推进后复用；
+    ③ 其余（差多子/目标未展开叶/超展开上限）→ 整树销毁重建。
     若根状态已终局，跳过模型预测，使用均匀分布策略。
-    子树复用时保留已有子树 N 值，记录快照。
     */
     void init_search(const std::vector<int>& state);
+
+    /** 树根状态一致时的复用逻辑（快照 N + 重读策略 + 噪声）
+
+    @param board 225 维棋盘（与树根局面一致）
+    @param player 当前落子方
+    */
+    void reuse_tree(const std::vector<int>& board, int player);
+
+    /** 判定两局面是否恰差 1 子（prev_player 刚落一子于 x）
+
+    交替对弈语义：新局面 = 旧局面 + prev_player 在 x 落一子，且玩家翻转。
+
+    @param prev_board 树根局面棋盘
+    @param prev_player 树根局面当前落子方
+    @param board 新局面棋盘
+    @param player 新局面当前落子方
+    @return 落子位置 x（0~224）；不满足"恰差 1 子"时返回 -1
+    */
+    static int one_step_diff(const std::vector<int>& prev_board,
+                             int prev_player,
+                             const std::vector<int>& board,
+                             int player);
+
+    /** 持锁提升子节点为新根（公开 advance_root 与 promote 共用）
+
+    调用方须已持有 root_mutex_。流程：get_child → detach → delete 旧根
+    → 换根 → 更新树根状态记录 → flip_value 翻转新根价值视角。
+
+    @param action 要推进的动作索引（调用方须先确认子节点存在）
+    */
+    void advance_root_locked(int action);
 
     /** 对根节点施加狄利克雷噪声 */
     void add_dirichlet_noise(MctsNode* root,

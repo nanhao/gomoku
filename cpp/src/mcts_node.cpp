@@ -52,6 +52,32 @@ void MctsNode::expand(const std::vector<float>& action_priors,
 
     if (!is_leaf_) return;  // 幂等：已展开则跳过
 
+    do_expand_locked(action_priors, legal_actions);
+    is_leaf_ = false;
+}
+
+bool MctsNode::expand_with_policy(const std::vector<float>& action_priors,
+                                  const std::vector<int>& legal_actions,
+                                  const std::vector<float>& full_policy) {
+    // 展开与策略存储必须在同一临界区原子完成（P1-1）：
+    // 并发 worker 可能同时判定本节点为叶双双进入展开流程，
+    // 锁外双写 root_policy_ 属数据竞争（UB）；幂等返回决定唯一写入者。
+    std::lock_guard<std::mutex> lock(expand_lock_);
+
+    if (!is_leaf_) return false;  // 幂等：其他 worker 已完成展开
+
+    do_expand_locked(action_priors, legal_actions);
+    is_leaf_ = false;
+
+    // 存储自身局面原始策略（噪声前 225 维），使本节点被提升为
+    // 新根后 get_root_policy() 可返回正确策略（design/59 修复点 3）
+    root_policy_ = full_policy;
+    return true;
+}
+
+void MctsNode::do_expand_locked(const std::vector<float>& action_priors,
+                                const std::vector<int>& legal_actions) {
+    // 调用方须已持有 expand_lock_（expand / expand_with_policy 共用）
     for (size_t i = 0; i < legal_actions.size(); ++i) {
         int action = legal_actions[i];
         float prior = i < action_priors.size() ? action_priors[i] : 0.0f;
@@ -62,8 +88,14 @@ void MctsNode::expand(const std::vector<float>& action_priors,
         auto* child = new MctsNode(this, prior);
         children_[action] = child;
     }
+}
 
-    is_leaf_ = false;
+void MctsNode::flip_value() {
+    // 价值视角翻转：非根节点 q_sa_ 存父视角（边价值），被提升为根后
+    // 需翻转为自身视角（根节点价值口径），与后续根特判取反的新累积混同
+    // 前完成翻转，避免 root_value 向 0 漂移（design/59 修复点 4）。
+    // 调用时机无并发（搜索模拟结束后/开始前），无需加锁。
+    q_sa_ = -q_sa_;
 }
 
 void MctsNode::backup(float leaf_value) {

@@ -19,6 +19,8 @@
 
 **CNN v11 训练闭环**：样本缓冲区驱动的增量训练 + C++ MCTS 对战评估晋升（详见 [设计 50](../design/50/main_docs/overview.md)）
 
+**C++ MCTS 状态校验与落子合法性修复**：搜索树根一致性校验三分支（一致复用 / 差 1 步且已展开则 promote 复用 / 否则整树重建并计数）、落子空位过滤防御、树规模限幅（详见 [设计 59](../design/59/main_docs/overview.md)）
+
 **JSON 动态配置**：C++/Python 共享 `cpp/python/mcts_config.json` 动态加载 MCTS 参数（模拟数、线程数、PUCT 等），修改无需重新编译
 
 ---
@@ -212,7 +214,7 @@ AlphaGo Zero 风格的蒙特卡洛树搜索，支持 Batch MCTS + Virtual Loss�
 
 ### C++ MCTS 引擎（`cpp/`）
 
-基于 C++17/LibTorch 的高性能 MCTS 实现，通过 pybind11 桥接为 Python 扩展（详见 [设计 46](../design/46/main_docs/overview.md)、[设计 47](../design/47/main_docs/overview.md)、[设计 49](../design/49/main_docs/overview.md)、[设计 50](../design/50/main_docs/overview.md)、[设计 51](../design/51/main_docs/overview.md)）。
+基于 C++17/LibTorch 的高性能 MCTS 实现，通过 pybind11 桥接为 Python 扩展（详见 [设计 46](../design/46/main_docs/overview.md)、[设计 47](../design/47/main_docs/overview.md)、[设计 49](../design/49/main_docs/overview.md)、[设计 50](../design/50/main_docs/overview.md)、[设计 51](../design/51/main_docs/overview.md)、[设计 59](../design/59/main_docs/overview.md)）。
 
 **核心模块**：
 
@@ -222,9 +224,9 @@ AlphaGo Zero 风格的蒙特卡洛树搜索，支持 Batch MCTS + Virtual Loss�
 | `MctsNode` | `mcts_node.h/cpp` | 并发安全搜索树节点（PUCT/VL/Backup） |
 | `NeuralNet` | `neural_net.h/cpp` | LibTorch 异步批量推理（全局单例、GPU 共享、双模型缓存） |
 | `MctsThreadPool` | `thread_pool.h/cpp` | 全局工作线程池（支持批次屏障 + 任务队列双模式） |
-| `MctsConfig` | `mcts_config.h/cpp` | 运行时配置（模块导入时从 mcts_config.json 加载到全局 `g_mcts_config`，参数含模拟数/线程数/PUCT/狄利克雷/攒批阈值/VL/GPU） |
-| `MctsSearcher` | `mcts_searcher.h/cpp` | 多线程搜索编排（支持共享资源注入）、Dirichlet 噪声、子树复用 |
-| `GameRunner` | `game_runner.h/cpp` | 并行对局管理器（N 个 C++ 游戏线程共享全局资源）— 支持对战/自对弈双模式 |
+| `MctsConfig` | `mcts_config.h/cpp` | 运行时配置（模块导入时从 mcts_config.json 加载到全局 `g_mcts_config`，参数含模拟数/线程数/PUCT/狄利克雷/攒批阈值/VL/GPU/树展开上限） |
+| `MctsSearcher` | `mcts_searcher.h/cpp` | 多线程搜索编排（支持共享资源注入）、Dirichlet 噪声、子树复用、树根局面一致性校验与整树重建计数（design/59） |
+| `GameRunner` | `game_runner.h/cpp` | 并行对局管理器（N 个 C++ 游戏线程共享全局资源）— 支持对战/自对弈双模式；落子前空位过滤防御（design/59） |
 | `GameConfig` | `game_runner.h` | 对战配置结构体（MCTS + 温度参数） |
 | `GameResult` | `game_runner.h` | 单局对战结果结构体（含训练样本字段） |
 | `GameSample` | `game_sample.h` | AGZ 格式训练样本结构体 {state, pi, z} |
