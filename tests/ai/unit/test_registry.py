@@ -350,23 +350,43 @@ class TestModelRegistryData(unittest.TestCase):
 
 
 class TestGetHighestGen(unittest.TestCase):
-    """测试 get_highest_gen 函数"""
+    """测试 get_highest_gen 函数（临时目录隔离，不触碰真实 models 目录）"""
 
     @classmethod
     def setUpClass(cls):
-        """为 cnn_v10 创建临时 gen 目录供测试使用"""
-        from ai.models.cnn_v10.model import CNNV10Model
+        """在临时目录创建 cnn_v10 gen 目录供测试使用
+
+        patch ai.registry._MODELS_DIR 与 CNNV10Model.DEFAULT_MODEL_PATH
+        重定向到临时目录，禁止读写真实 src/ai/models/cnn_v10（曾直接
+        删除/移动真实 gen 目录，与 test_constructor_gen 同类风险）。
+        """
+        import tempfile
         import torch
-        cls._model_dir = os.path.dirname(CNNV10Model.DEFAULT_MODEL_PATH)
+        from unittest.mock import patch
+        import ai.registry as registry_module
+        from ai.models.cnn_v10.model import CNNV10Model
+
+        cls._tmp_root = tempfile.mkdtemp(prefix="reg_highest_gen_")
+        # get_highest_gen 扫描 _MODELS_DIR/{name}/gen*/，重定向到临时根目录
+        cls._patcher = patch.object(registry_module, "_MODELS_DIR", cls._tmp_root)
+        cls._patcher.start()
+        # _create_gen_dir 通过 DEFAULT_MODEL_PATH 推导 gen 目录，同步重定向
+        cls._model_dir = os.path.join(cls._tmp_root, "cnn_v10")
+        os.makedirs(cls._model_dir, exist_ok=True)  # 预建目录，供 os.listdir 类用例使用
+        cls._patcher_path = patch.object(
+            CNNV10Model, "DEFAULT_MODEL_PATH",
+            os.path.join(cls._model_dir, "cnn_v10.pth"),
+        )
+        cls._patcher_path.start()
         cls._gen_dirs_created = []
 
     @classmethod
     def tearDownClass(cls):
-        """清理 gen2+ 临时目录，保留 gen1 供其他测试使用"""
+        """停止 patch 并删除临时目录"""
         import shutil
-        for d in cls._gen_dirs_created:
-            if os.path.isdir(d):
-                shutil.rmtree(d, ignore_errors=True)
+        cls._patcher_path.stop()
+        cls._patcher.stop()
+        shutil.rmtree(cls._tmp_root, ignore_errors=True)
 
     def _create_gen_dir(self, gen_num: int) -> str:
         """创建带 .pth 文件的 gen{N}/ 目录

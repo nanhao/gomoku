@@ -16,41 +16,36 @@ import torch
 
 
 class TestCNNV11Registry(unittest.TestCase):
-    """Registry 集成测试"""
+    """Registry 集成测试（只读：不创建/删除真实模型文件）"""
 
     @classmethod
     def setUpClass(cls):
-        """创建 gen1 权重文件供测试使用"""
+        """校验前置条件：真实 cnn_v11.1（gen1）权重必须存在
+
+        缺失时跳过测试。集成用例需要真实模型文件，但禁止测试向
+        src/ai/models 写入或删除（曾 rmtree 误删真实 gen1 目录，
+        导致 cnn_v11.1 权重丢失且无法从 git 恢复）。
+        """
         from ai.registry import MODEL_REGISTRY
+        from ai.models.cnn_v11.model import CNNV11Model
 
         # 检查注册表是否包含 cnn_v11
         assert "cnn_v11" in MODEL_REGISTRY, "cnn_v11 应在 MODEL_REGISTRY 中"
 
-        # 创建临时目录和 gen1 权重
-        import tempfile
-        cls._tmp_dir = tempfile.mkdtemp()
-
-        from ai.models.cnn_v11.model import CNNV11Model
-        # 需要创建在 src/ai/models/cnn_v11/gen1/ 下
-        _root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        _model_dir = os.path.join(_root, "src", "ai", "models", "cnn_v11")
-        gen1_dir = os.path.join(_model_dir, "gen1")
-        os.makedirs(gen1_dir, exist_ok=True)
-        pth_path = os.path.join(gen1_dir, "cnn_v11.pth")
-        if not os.path.exists(pth_path):
-            tmp_model = CNNV11Model(fresh=True)
-            tmp_model.save(pth_path)
-        cls._saved_gen1_dir = gen1_dir
+        # 只读前置条件：gen1/cnn_v11.pth 存在才运行，缺失时跳过
+        gen1_pth = os.path.join(
+            os.path.dirname(CNNV11Model.DEFAULT_MODEL_PATH),
+            "gen1", "cnn_v11.pth",
+        )
+        if not os.path.isfile(gen1_pth):
+            raise unittest.SkipTest(
+                f"cnn_v11.1 (gen1) 权重不存在: {gen1_pth}，跳过集成测试"
+            )
 
     @classmethod
     def tearDownClass(cls):
-        """测试结束后清理 gen1 目录"""
-        if hasattr(cls, '_saved_gen1_dir'):
-            import shutil
-            shutil.rmtree(cls._saved_gen1_dir, ignore_errors=True)
-        if hasattr(cls, '_tmp_dir'):
-            import shutil
-            shutil.rmtree(cls._tmp_dir, ignore_errors=True)
+        """只读测试：无任何文件清理动作"""
+        pass
 
     # ---------- TC4.1 get_model — 加载 cnn_v11 模型 ----------
 
