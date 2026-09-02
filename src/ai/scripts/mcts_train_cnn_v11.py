@@ -208,7 +208,9 @@ def main() -> None:
     print()
     print("[晋升规则]")
     print(f"  晋升阈值:        对两代历史最强胜率均 >= 55%")
-    print(f"  评估对手:        当前代 best（gen N）与上一代 best（gen N-1）各 {args.eval_games} 局")
+    print(f"  评估顺序:        先 vs 当前代 best（gen N）{args.eval_games} 局；"
+          f"胜率 >= 55% 后再 vs 上一代 best（gen N-1）{args.eval_games} 局")
+    print(f"                  vs best 未达 55% 时直接失败，跳过 vs prev 评估")
     print(f"                  无上一代模型时仅单场评估")
     print(f"  停止条件:        连续 {args.max_failures} 次 < 55%")
     print()

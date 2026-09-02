@@ -207,18 +207,23 @@ class CnnV11TrainLoop:
                 )
                 print(f"胜率 = {win_rate_best:.1%}")
 
-                # 评估第 2 场：vs 上一代历史最强（prev_best，可选）
+                # 评估第 2 场：vs 上一代历史最强（prev_best，可选）。
+                # intention 60 优化：仅当 vs best 胜率已达晋升阈值（>= 55%）时
+                # 才评估 vs prev；否则直接判失败并跳过，节省整场评估对局。
                 win_rate_prev = None
                 if self._prev_best_ts_path is not None:
-                    print(f"  评估中 vs prev_best（{self._eval_games} 局）...",
-                          end=" ", flush=True)
-                    win_rate_prev = self._evaluator.evaluate(
-                        checkpoint_ts,
-                        self._prev_best_ts_path,
-                        self._eval_games,
-                        temp_steps=self._mcts_config.temp_steps,
-                    )
-                    print(f"胜率 = {win_rate_prev:.1%}")
+                    if win_rate_best >= 0.55:
+                        print(f"  评估中 vs prev_best（{self._eval_games} 局）...",
+                              end=" ", flush=True)
+                        win_rate_prev = self._evaluator.evaluate(
+                            checkpoint_ts,
+                            self._prev_best_ts_path,
+                            self._eval_games,
+                            temp_steps=self._mcts_config.temp_steps,
+                        )
+                        print(f"胜率 = {win_rate_prev:.1%}")
+                    else:
+                        print("  vs best 胜率未达 55%，跳过 vs prev_best 评估")
                 else:
                     print("  （无上一代模型，仅单场评估）")
 

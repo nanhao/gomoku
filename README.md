@@ -476,7 +476,7 @@ python src/ai/scripts/mcts_train_cnn_v11.py --model <注册名.代数> [选项]
 | `--buffer-dir` | `sample_buffer` | 样本缓冲区目录 |
 | `--batch-size` | 512 | 每个 mini-batch 的样本数 |
 | `--updates-per-checkpoint` | 50 | 多少步后触发 checkpoint 评估 |
-| `--eval-games` | 50 | checkpoint 评估单场对战局数（对当前代 best 与上一代 best 各一场） |
+| `--eval-games` | 50 | checkpoint 评估单场对战局数（顺序评估：先对当前代 best，胜率达标后再对上一代 best） |
 | `--max-failures` | 3 | 连续评估失败上限 |
 | `--simulations` | 800 | 评估时每步 MCTS 模拟次数 |
 | `--c-puct` | 2.0 | PUCT 探索系数 |
@@ -485,7 +485,7 @@ python src/ai/scripts/mcts_train_cnn_v11.py --model <注册名.代数> [选项]
 | `--device` | `cuda` | 训练设备 |
 
 > **训练闭环**：随机 mini-batch → checkpoint 保存 → TorchScript 导出 → C++ MCTS 对战评估。
-> 评估时与当前代 best（gen N）和上一代 best（gen N-1）各对弈 `--eval-games` 局，两场胜率均 ≥ 55% 才晋升到 gen{N+1} 并停止（无上一代模型时仅单场评估）；连续 3 次评估失败也停止。
+> 评估分两场顺序进行：先与当前代 best（gen N）对弈 `--eval-games` 局，胜率 ≥ 55% 后再与上一代 best（gen N-1）对弈 `--eval-games` 局，两场均 ≥ 55% 才晋升到 gen{N+1} 并停止；vs best 未达 55% 时直接失败，跳过 vs prev 评估（无上一代模型时仅单场评估）；连续 3 次评估失败也停止。
 > 评估执方按局号奇偶交替（checkpoint 偶数局执黑、奇数局执白），避免随机执方引入黑方先手优势噪声。
 > 损失函数：MSE(价值) + CrossEntropy(策略)，AdamW 优化器。
 

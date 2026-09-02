@@ -351,3 +351,6 @@ introduce batch mcts and virtual loss in mcts. But don't use multi thread.
 
 # intention_id=59
 解决 intention\report\mcts_battle_cpp_vs_gui_discrepancy_20260902.md 报告中提到的问题
+
+# intention_id=60
+现在 cnn_v11 在评估阶段，会跟当前最强和上一代最强做对弈，效率较低。应该做一个小优化，即先跟当前最强对弈，胜率达到晋升条件之后，再跟上一代最强对弈，两次对弈胜率都达到晋升条件，才最终晋升。
