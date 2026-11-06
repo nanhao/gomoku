@@ -78,6 +78,74 @@ class TestOffPolicyCliDefaults(OffPolicyCliTestBase):
         self.assertIn("cnn_v11.5", output)
 
 
+class TestOffPolicyCliLogEveryUpdates(OffPolicyCliTestBase):
+    """--log-every-updates 参数：默认值、自定义与边界校验"""
+
+    def test_log_every_updates_default_50(self):
+        """不传 --log-every-updates 时默认 50 并传入 OffPolicyTrainLoop"""
+        with tempfile.TemporaryDirectory(prefix="cli_data_") as data_dir:
+            test_args = ["mcts_train_cnn_v11_offpolicy.py", "--data-dir", data_dir]
+            with patch.object(sys, "argv", test_args):
+                with patch("ai.registry.get_highest_gen", return_value=1):
+                    with patch(
+                        "ai.scripts.mcts_train_cnn_v11_offpolicy.OffPolicyTrainLoop"
+                    ) as mock_loop:
+                        mock_result = SimpleNamespace(
+                            saved_gen=2,
+                            saved_spec="cnn_v11.2",
+                            requested_epochs=100,
+                            total_epochs=100,
+                            interrupted=False,
+                            final_total_loss=0.5,
+                            final_val_loss=None,
+                        )
+                        mock_loop.return_value.run.return_value = mock_result
+                        buf = io.StringIO()
+                        with contextlib.redirect_stdout(buf):
+                            self.cli.main()
+        call_kwargs = mock_loop.call_args.kwargs
+        self.assertEqual(call_kwargs["log_every_updates"], 50)
+        # 配置打印包含记录频率
+        self.assertIn("--log-every-updates", buf.getvalue())
+
+    def test_log_every_updates_custom_value(self):
+        """--log-every-updates 25 显式传入 OffPolicyTrainLoop"""
+        with tempfile.TemporaryDirectory(prefix="cli_data_") as data_dir:
+            test_args = [
+                "mcts_train_cnn_v11_offpolicy.py",
+                "--data-dir", data_dir,
+                "--log-every-updates", "25",
+            ]
+            with patch.object(sys, "argv", test_args):
+                with patch("ai.registry.get_highest_gen", return_value=1):
+                    with patch(
+                        "ai.scripts.mcts_train_cnn_v11_offpolicy.OffPolicyTrainLoop"
+                    ) as mock_loop:
+                        mock_loop.return_value.run.return_value = SimpleNamespace(
+                            saved_gen=2,
+                            saved_spec="cnn_v11.2",
+                            requested_epochs=100,
+                            total_epochs=100,
+                            interrupted=False,
+                            final_total_loss=0.5,
+                            final_val_loss=None,
+                        )
+                        buf = io.StringIO()
+                        with contextlib.redirect_stdout(buf):
+                            self.cli.main()
+        self.assertEqual(mock_loop.call_args.kwargs["log_every_updates"], 25)
+
+    def test_log_every_updates_negative_rejected(self):
+        """--log-every-updates -1 打印"必须 >= 0"并退出"""
+        args = self.cli.build_parser().parse_args(["--log-every-updates", "-1"])
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            with self.assertRaises(SystemExit) as ctx:
+                self.cli.validate_args(args)
+        self.assertNotEqual(ctx.exception.code, 0)
+        self.assertIn("必须 >= 0", err.getvalue())
+
+
 class TestOffPolicyCliValidate(OffPolicyCliTestBase):
     """TC-CLI-02~06：参数边界与类型校验"""
 

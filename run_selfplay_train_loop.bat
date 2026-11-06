@@ -15,7 +15,7 @@ echo   Self-play + Training Loop
 echo   Start time: %date% %time%
 echo ========================================
 echo.
-echo [Config] Games per round: --games 10 --workers 10
+echo [Config] Games per round: --games 30 --workers 10
 echo [Config] Checkpoint interval: --updates-per-checkpoint 15
 echo [Config] Model auto-detect: cnn_v11 highest generation
 echo [Config] Stop condition: stops if any step fails
@@ -33,7 +33,7 @@ echo.
 
 REM ---- Step 1: Start self-play sampling ----
 echo [INFO] Starting self-play sampling...
-python src/ai/scripts/mcts_sample_buffer.py --games 10 --workers 10 --temp-steps 20
+python src/ai/scripts/mcts_sample_buffer.py --games 30 --workers 10 --temp-steps 20
 if errorlevel 1 (
     echo.
     echo [ERROR] Round !ROUND!: self-play failed, stopping loop.

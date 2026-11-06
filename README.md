@@ -526,8 +526,10 @@ python src/ai/scripts/mcts_train_cnn_v11_offpolicy.py --model <注册名.代数>
 | `--lr` | 0.001 | 学习率 |
 | `--weight-decay` | 1e-4 | AdamW 权重衰减 |
 | `--device` | `cuda` | 训练设备（cuda 不可用时自动回退 cpu 并警告） |
+| `--log-every-updates` | 50 | 每 N 次 update 记录一次 loss 用于高密度曲线（0 为仅 epoch 级记录） |
 
 > **训练闭环**：`--model`（或最高代数）→ 加载样本（manifest.json 优先，兼容 sample.json）→ 按 `--validate-set` 划分训练/验证集 → 每 epoch shuffle + mini-batch 切分 + 逐批 `_train_step` + 验证集评估 + 打印汇总（含 grad_norm）→ 自动生成曲线图（`mcts_loss_logs/cnn_v11_{ts}.png`）→ 保存 gen{N+1}（`cnn_v11.pth` + `cnn_v11_torchscript.pt`）。
+> 曲线粒度：默认每 50 次 update 记录一次窗口均值，X 轴为累计 update 序号（train_loss 高密度，val_total_loss 仍每 epoch 评估一次、画在各 epoch 的 end_step 位置）；`--log-every-updates 0` 恢复 epoch 级曲线。
 > Ctrl+C 优雅中断：先完成曲线图，中断后仍保存模型，结果标记 interrupted。
 > 损坏 JSON 跳过并警告、缺字段/维度不符样本跳过并计数，无有效样本时报错退出。
 

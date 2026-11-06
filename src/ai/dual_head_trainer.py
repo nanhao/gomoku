@@ -211,6 +211,7 @@ class DualHeadTrainer(ABC):
         val_split: float = 0.0,
         shuffle: bool = True,
         verbose: bool = True,
+        log_every_updates: int = 0,
     ) -> List[Dict[str, float]]:
         """执行完整训练（设计文档 §9.3 E1-E6）
 
@@ -224,9 +225,12 @@ class DualHeadTrainer(ABC):
             val_split: 验证集比例，默认 0（无验证集）
             shuffle: 是否打乱数据，默认 True
             verbose: 是否输出训练日志
+            log_every_updates: 每 N 次 update 记录一次窗口均值用于高密度曲线，
+                默认 0（关闭，仅 epoch 级记录，行为向后兼容）
 
         Returns:
-            epoch history 列表，每项含 value_loss, policy_loss, total_loss
+            epoch history 列表，每项含 value_loss, policy_loss, total_loss，
+            另含 end_step（该 epoch 结束时的累计 update 次数）
         """
         # L1-L5: 加载数据
         all_states, all_pi, all_z = self._load_samples(sample_dirs)
@@ -262,6 +266,15 @@ class DualHeadTrainer(ABC):
         self.model.network.train()
         history = []
 
+        # update 级窗口记录（log_every_updates > 0 时启用，用于高密度 loss 曲线）
+        update_history: List[Dict[str, float]] = []
+        global_step = 0
+        window_value = 0.0
+        window_policy = 0.0
+        window_total = 0.0
+        window_grad = 0.0
+        window_count = 0
+
         try:
             for epoch in range(epochs):
                 # E2: 每 epoch 重新 shuffle
@@ -296,9 +309,28 @@ class DualHeadTrainer(ABC):
                     epoch_policy_loss += result["policy_loss"]
                     epoch_total_loss += result["total_loss"]
                     # 聚合当前 batch 的 grad_norms dict 为标量（sum of all param norms）
+                    batch_grad_sum = 0.0
                     if "grad_norms" in result:
-                        epoch_grad_sum += sum(result["grad_norms"].values())
+                        batch_grad_sum = sum(result["grad_norms"].values())
+                    epoch_grad_sum += batch_grad_sum
                     n_batches += 1
+
+                    # update 级窗口累积：每 log_every_updates 次 update 记录一次均值
+                    global_step += 1
+                    if log_every_updates > 0:
+                        window_value += result["value_loss"]
+                        window_policy += result["policy_loss"]
+                        window_total += result["total_loss"]
+                        window_grad += batch_grad_sum
+                        window_count += 1
+                        if window_count >= log_every_updates:
+                            update_history.append(self._make_update_entry(
+                                global_step, window_value, window_policy,
+                                window_total, window_grad, window_count,
+                            ))
+                            window_value = window_policy = 0.0
+                            window_total = window_grad = 0.0
+                            window_count = 0
 
                 # E4: 聚合 epoch 均值
                 avg_value_loss = epoch_value_loss / n_batches if n_batches > 0 else 0.0
@@ -306,8 +338,19 @@ class DualHeadTrainer(ABC):
                 avg_total_loss = epoch_total_loss / n_batches if n_batches > 0 else 0.0
                 avg_grad_norm = epoch_grad_sum / n_batches if n_batches > 0 else 0.0
 
+                # E4.5: flush update 级残留窗口（epoch 结尾不足 log_every_updates 的尾部）
+                if log_every_updates > 0 and window_count > 0:
+                    update_history.append(self._make_update_entry(
+                        global_step, window_value, window_policy,
+                        window_total, window_grad, window_count,
+                    ))
+                    window_value = window_policy = 0.0
+                    window_total = window_grad = 0.0
+                    window_count = 0
+
                 epoch_result = {
                     "epoch": epoch + 1,
+                    "end_step": global_step,
                     "value_loss": avg_value_loss,
                     "policy_loss": avg_policy_loss,
                     "total_loss": avg_total_loss,
@@ -339,9 +382,40 @@ class DualHeadTrainer(ABC):
             print("\n[中断] 检测到 Ctrl+C，正在生成图表...")
         finally:
             # 训练结束后（正常或中断）自动生成损失曲线图
-            self._plot_loss_curve(history)
+            # update_history 为空时传 None，保持默认的 epoch 级绘制行为
+            self._plot_loss_curve(history, update_history or None)
 
         return history
+
+    @staticmethod
+    def _make_update_entry(
+        step: int,
+        window_value: float,
+        window_policy: float,
+        window_total: float,
+        window_grad: float,
+        count: int,
+    ) -> Dict[str, float]:
+        """构造 update 级记录条目（窗口均值）
+
+        Args:
+            step: 截至当前的累计 update 次数
+            window_value: 窗口内累积的 value_loss
+            window_policy: 窗口内累积的 policy_loss
+            window_total: 窗口内累积的 total_loss
+            window_grad: 窗口内累积的 grad_norm
+            count: 窗口内 update 次数
+
+        Returns:
+            {"step", "value_loss", "policy_loss", "total_loss", "grad_norm"}
+        """
+        return {
+            "step": step,
+            "value_loss": window_value / count,
+            "policy_loss": window_policy / count,
+            "total_loss": window_total / count,
+            "grad_norm": window_grad / count,
+        }
 
     # ---------- 模型保存 ----------
 
@@ -403,8 +477,16 @@ class DualHeadTrainer(ABC):
 
     # ---------- 图表生成 ----------
 
-    def _plot_loss_curve(self, history: List[Dict[str, float]]) -> str:
+    def _plot_loss_curve(
+        self,
+        history: List[Dict[str, float]],
+        update_history: Optional[List[Dict[str, float]]] = None,
+    ) -> str:
         """生成双 Y 轴损失曲线图并保存为 PNG（设计文档-25 §3）
+
+        update_history 提供时 X 轴使用累计 update 序号（高密度曲线），
+        val_total_loss 按各 epoch 的 end_step 定位；
+        否则保持 epoch 级绘制（X 轴为 epoch 序号）。
 
         左 Y 轴（Loss）：
         - total_loss (蓝实线)
@@ -416,7 +498,8 @@ class DualHeadTrainer(ABC):
         - grad_norm (红实线)
 
         Args:
-            history: train_epochs 返回的训练历史记录列表
+            history: train_epochs 返回的 epoch 级历史记录列表
+            update_history: update 级记录列表（None 或空时按 epoch 级绘制）
 
         Returns:
             PNG 文件路径；history 为空或 matplotlib 不可用时返回 None
@@ -437,15 +520,33 @@ class DualHeadTrainer(ABC):
         model_name = self.model_name
         output_path = os.path.join(output_dir, f"{model_name}_{timestamp}.png")
 
-        # 提取各指标
-        epochs = [entry["epoch"] for entry in history]
-        total_losses = [entry["total_loss"] for entry in history]
-        value_losses = [entry["value_loss"] for entry in history]
-        policy_losses = [entry["policy_loss"] for entry in history]
-        grad_norms = [entry.get("grad_norm", 0.0) for entry in history]
+        # 提取各指标：update 级（高密度）或 epoch 级
+        if update_history:
+            x_values = [entry["step"] for entry in update_history]
+            total_losses = [entry["total_loss"] for entry in update_history]
+            value_losses = [entry["value_loss"] for entry in update_history]
+            policy_losses = [entry["policy_loss"] for entry in update_history]
+            grad_norms = [entry.get("grad_norm", 0.0) for entry in update_history]
+            x_label = "Update"
+            granularity = f"Update Level, {len(update_history)} updates"
+        else:
+            x_values = [entry["epoch"] for entry in history]
+            total_losses = [entry["total_loss"] for entry in history]
+            value_losses = [entry["value_loss"] for entry in history]
+            policy_losses = [entry["policy_loss"] for entry in history]
+            grad_norms = [entry.get("grad_norm", 0.0) for entry in history]
+            x_label = "Epoch"
+            granularity = f"Epoch Level, {len(history)} epochs"
 
         # 判断是否有验证集数据
         has_val = all("val_total_loss" in entry for entry in history)
+
+        # val 曲线的 X 位置：update 级时按 epoch 的 end_step 定位，兜底 epoch 序号
+        if has_val and update_history:
+            val_x_values = [entry.get("end_step", entry["epoch"])
+                            for entry in history]
+        else:
+            val_x_values = x_values
 
         try:
             # 创建双 Y 轴图
@@ -453,26 +554,26 @@ class DualHeadTrainer(ABC):
             ax2 = ax1.twinx()
 
             # 左轴：损失曲线
-            ax1.plot(epochs, total_losses, 'b-', label='total_loss',
+            ax1.plot(x_values, total_losses, 'b-', label='total_loss',
                      linewidth=1.5)
-            ax1.plot(epochs, value_losses, '--', color='#17becf',
+            ax1.plot(x_values, value_losses, '--', color='#17becf',
                      label='value_loss', linewidth=1.0, alpha=0.8)
-            ax1.plot(epochs, policy_losses, '--', color='#ff7f0e',
+            ax1.plot(x_values, policy_losses, '--', color='#ff7f0e',
                      label='policy_loss', linewidth=1.0, alpha=0.8)
 
             if has_val:
                 val_total_losses = [entry["val_total_loss"]
                                     for entry in history]
-                ax1.plot(epochs, val_total_losses, 'g-',
+                ax1.plot(val_x_values, val_total_losses, 'g-',
                          label='val_total_loss', linewidth=1.5,
                          marker='o', markersize=3)
 
             # 右轴：梯度范数
-            ax2.plot(epochs, grad_norms, 'r-', label='grad_norm',
+            ax2.plot(x_values, grad_norms, 'r-', label='grad_norm',
                      linewidth=1.0, alpha=0.7)
 
             # 轴标签与颜色
-            ax1.set_xlabel("Epoch")
+            ax1.set_xlabel(x_label)
             ax1.set_ylabel("Loss", color='b')
             ax2.set_ylabel("Gradient Norm", color='r')
             ax1.tick_params(axis='y', labelcolor='b')
@@ -485,10 +586,7 @@ class DualHeadTrainer(ABC):
                        loc='upper right')
 
             # 标题与网格
-            ax1.set_title(
-                f"Loss Curve - {model_name} "
-                f"(Epoch Level, {len(history)} epochs)"
-            )
+            ax1.set_title(f"Loss Curve - {model_name} ({granularity})")
             ax1.grid(True, linestyle='--', alpha=0.7)
 
             plt.tight_layout()

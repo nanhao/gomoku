@@ -3,6 +3,10 @@
 对静态样本集（如 renjunet_samples 人类棋谱）做多 epoch 全量 mini-batch 监督训练：
 加载指定 gen 模型 → 全量遍历样本训练 → 保存 gen{N+1}（pth + TorchScript）。
 
+loss 曲线默认每 50 次 update 记录一次窗口均值（--log-every-updates 可调，
+0 恢复 epoch 级记录），X 轴为累计 update 序号；
+val_total_loss 仍每 epoch 评估一次。
+
 用法示例：
     python -m ai.scripts.mcts_train_cnn_v11_offpolicy
     python -m ai.scripts.mcts_train_cnn_v11_offpolicy --model cnn_v11.1
@@ -95,6 +99,12 @@ def build_parser() -> argparse.ArgumentParser:
         default="cuda",
         help="训练设备（默认: cuda，cuda 不可用时自动回退 cpu 并警告）",
     )
+    parser.add_argument(
+        "--log-every-updates",
+        type=int,
+        default=50,
+        help="每 N 次 update 记录一次 loss 用于高密度曲线（默认: 50，0 为仅 epoch 级）",
+    )
 
     return parser
 
@@ -127,6 +137,9 @@ def validate_args(args: argparse.Namespace) -> None:
 
     if args.weight_decay < 0:
         errors.append("--weight-decay 必须 >= 0")
+
+    if args.log_every_updates < 0:
+        errors.append("--log-every-updates 必须 >= 0")
 
     if errors:
         print("参数校验失败:", file=sys.stderr)
@@ -169,6 +182,8 @@ def main() -> None:
     print(f"  学习率:          {args.lr}")
     print(f"  权重衰减:        {args.weight_decay}")
     print(f"  训练设备:        {args.device}")
+    print(f"  记录频率:        每 {args.log_every_updates} 次 update"
+          f"（--log-every-updates，0 为仅 epoch 级）")
     print()
     print("=" * 60)
 
@@ -183,6 +198,7 @@ def main() -> None:
             lr=args.lr,
             weight_decay=args.weight_decay,
             device=args.device,
+            log_every_updates=args.log_every_updates,
         )
     except ValueError as exc:
         print(f"错误: {exc}", file=sys.stderr)

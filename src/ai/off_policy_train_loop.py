@@ -1,8 +1,12 @@
 """CNN v11 off-policy 监督训练编排器模块
 
 将 OffPolicyTrainer 组合为完整训练闭环：
-加载模型 → 预检样本 → train_epochs 全量多 epoch 训练（epoch 级打印 + 曲线图）
-→ 保存 gen{N+1}（pth + TorchScript）。
+加载模型 → 预检样本 → train_epochs 全量多 epoch 训练（epoch 级打印 + update 级
+高密度曲线图）→ 保存 gen{N+1}（pth + TorchScript）。
+
+loss 曲线默认每 log_every_updates（默认 50）次 update 记录一次窗口均值，
+X 轴为累计 update 序号；val_total_loss 仍每 epoch 评估一次，
+画在各 epoch 的 end_step 位置。
 
 Ctrl+C 由 train_epochs 优雅捕获（先生成曲线图），中断后仍保存模型，
 结果通过 OffPolicyTrainResult 标记 interrupted。
@@ -59,6 +63,8 @@ class OffPolicyTrainLoop:
         lr: 学习率
         weight_decay: AdamW 权重衰减
         device: 训练设备（"cuda" 或 "cpu"），cuda 不可用时自动回退 cpu 并警告
+        log_every_updates: 每 N 次 update 记录一次 loss 用于高密度曲线，
+            默认 0（关闭，仅 epoch 级记录）
 
     Raises:
         ValueError: model_spec 非 cnn_v11、未指定代数或模型不存在
@@ -74,6 +80,7 @@ class OffPolicyTrainLoop:
         lr: float = 0.001,
         weight_decay: float = 1e-4,
         device: str = "cuda",
+        log_every_updates: int = 0,
     ):
         # 解析并校验模型 spec
         parsed = registry._parse_model_spec(model_spec)
@@ -111,6 +118,7 @@ class OffPolicyTrainLoop:
         self._batch_size: int = batch_size
         self._epochs: int = epochs
         self._val_split: float = val_split
+        self._log_every_updates: int = log_every_updates
 
     # ---------- 公开方法 ----------
 
@@ -148,6 +156,7 @@ class OffPolicyTrainLoop:
             val_split=self._val_split,
             shuffle=True,
             verbose=True,
+            log_every_updates=self._log_every_updates,
         )
 
         # 保存 gen{N+1}（覆盖时打印提示）
