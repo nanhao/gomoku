@@ -48,6 +48,34 @@ class TestCNNV10Trainer(unittest.TestCase):
             json.dump(samples, f)
         return path
 
+    def _make_learnable_sample_json(self, tmp_dir: str, n_samples: int = 10):
+        """在临时目录中创建「可学习」的 sample.json（仅供 loss 下降类用例使用）
+
+        与 _make_sample_json 的区别：每条样本的 state 互不相同，且 z 与该 state
+        的符号一一对应，价值头因此能够真正拟合 ±1 目标，loss 才会稳定下降。
+
+        为何不能复用 _make_sample_json：它生成的 state 全为 [0]*226（输入完全
+        相同），z 交替 +1/-1。价值头输出经 tanh 后，对同一输入只能给出同一常数
+        v，此时 MSE = (v-1)^2/2 + (v+1)^2/2 = v^2 + 1 恒 >= 1，不存在可学信号，
+        “后 3 epoch 均值 < 前 3 epoch 均值” 会完全由随机初始化的 |v| 大小决定，
+        实测约 1/5 概率失败。
+
+        Args:
+            tmp_dir: 临时目录路径
+            n_samples: 样本数量
+        """
+        samples = []
+        for i in range(n_samples):
+            # 每条样本在棋盘向量上占据一个互不相同的位置，符号即目标 z
+            sign = 1 if i % 2 == 0 else -1
+            state = [0] * 226
+            state[i % 225] = sign
+            samples.append({"state": state, "z": sign})
+        path = os.path.join(tmp_dir, "sample.json")
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(samples, f)
+        return path
+
     def test_constructor_with_model(self):
         """TC-TRN-01: 构造器接受 model 实例"""
         from ai.models.cnn_v10.trainer import CNNV10Trainer
@@ -183,12 +211,17 @@ class TestCNNV10Trainer(unittest.TestCase):
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
     def test_train_epochs_loss_decreases(self):
-        """多次 epoch 训练 loss 整体呈下降趋势"""
+        """多次 epoch 训练 loss 整体呈下降趋势
+
+        使用 _make_learnable_sample_json 而非 _make_sample_json：后者所有样本的
+        state 完全相同，价值头对同一输入只能给出同一常数预测，MSE 下界恒为 1，
+        loss 无下降空间，断言会随随机初始化偶发失败。
+        """
         from ai.models.cnn_v10.trainer import CNNV10Trainer
 
         tmp_dir = tempfile.mkdtemp()
         try:
-            self._make_sample_json(tmp_dir, n_samples=50)
+            self._make_learnable_sample_json(tmp_dir, n_samples=50)
             trainer = CNNV10Trainer(model=self.model)
             history = trainer.train_epochs(
                 [tmp_dir], epochs=10, batch_size=8,
