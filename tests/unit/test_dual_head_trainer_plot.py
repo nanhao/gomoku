@@ -6,6 +6,9 @@
 - 验证集指标渲染
 - matplotlib 不可用时优雅降级
 - KeyboardInterrupt 中断后仍生成图表
+
+会调 train_epochs 的测试类在 setUp 里把 config.mcts.MCTS_LOSS_LOG_DIR
+重定向到临时目录，避免把损失曲线图写进仓库真实的 mcts_loss_logs/ 目录。
 """
 
 import sys
@@ -41,6 +44,18 @@ class TestGradNormAggregation(unittest.TestCase):
         if self.DualHeadTrainer is None:
             self.skipTest("DualHeadTrainer 尚未实现")
         self.ConcreteTrainer = _make_concrete_trainer(self.DualHeadTrainer)
+
+        # 本类的用例会调 train_epochs，它在返回前无条件调用 _plot_loss_curve
+        # 把曲线图落盘到 MCTS_LOSS_LOG_DIR（默认为仓库下的 mcts_loss_logs/），
+        # 故重定向到临时目录，避免测试污染真实目录。
+        import config.mcts as mcts_config
+
+        self._plot_dir = tempfile.mkdtemp()
+        original_plot_dir = mcts_config.MCTS_LOSS_LOG_DIR
+        mcts_config.MCTS_LOSS_LOG_DIR = self._plot_dir
+        # addCleanup 按 LIFO 执行：先恢复模块常量，再删除临时目录
+        self.addCleanup(shutil.rmtree, self._plot_dir, ignore_errors=True)
+        self.addCleanup(setattr, mcts_config, "MCTS_LOSS_LOG_DIR", original_plot_dir)
 
     def _to_device(self, trainer, *tensors):
         return tuple(t.to(trainer.device) for t in tensors)

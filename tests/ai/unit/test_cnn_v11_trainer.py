@@ -3,6 +3,10 @@
 验证 CNNV11Trainer 的构造、样本加载、训练流程、模型保存。
 使用临时目录隔离所有文件操作，不修改真实数据。
 
+setUp 会把 config.mcts.MCTS_LOSS_LOG_DIR 重定向到临时目录：
+train_epochs 结束时必定调用 _plot_loss_curve 落盘 PNG，若不重定向
+会写进仓库真实的 mcts_loss_logs/ 目录（违反测试不得污染真实文件的规范）。
+
 测试覆盖 TC3.1 ~ TC3.10（设计文档 test_cases.md 三）。
 """
 
@@ -27,8 +31,24 @@ class TestCNNV11Trainer(unittest.TestCase):
         cls.ModelCls = CNNV11Model
 
     def setUp(self):
-        """每个测试前创建 fresh 模型"""
+        """每个测试前创建 fresh 模型，并把 loss 曲线图输出重定向到临时目录
+
+        为何需要重定向：train_epochs 在 finally 中无条件调用 _plot_loss_curve，
+        会把损失曲线图写进 config.mcts.MCTS_LOSS_LOG_DIR（默认为仓库下的
+        mcts_loss_logs/）。测试不得向真实目录写文件，故统一指向临时目录。
+        """
         self.model = self.ModelCls(fresh=True)
+
+        import shutil
+
+        import config.mcts as mcts_config
+
+        self._plot_dir = tempfile.mkdtemp()
+        original_plot_dir = mcts_config.MCTS_LOSS_LOG_DIR
+        mcts_config.MCTS_LOSS_LOG_DIR = self._plot_dir
+        # addCleanup 按 LIFO 执行：先恢复模块常量，再删除临时目录
+        self.addCleanup(shutil.rmtree, self._plot_dir, ignore_errors=True)
+        self.addCleanup(setattr, mcts_config, "MCTS_LOSS_LOG_DIR", original_plot_dir)
 
     @staticmethod
     def _make_sample_json(tmp_dir: str, n_samples: int = 10):

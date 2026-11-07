@@ -1,6 +1,11 @@
 """value_train 脚本单元测试
 
 验证参数解析、辅助函数。
+
+TestValueTrainIntegration 的 setUp 会把 config.mcts.MCTS_LOSS_LOG_DIR
+重定向到临时目录：run_train 最终会调 trainer.train_epochs，它返回前
+无条件调用 _plot_loss_curve 落盘 PNG，若不重定向会写进仓库真实的
+mcts_loss_logs/ 目录（违反测试不得污染真实文件的规范）。
 """
 
 import json
@@ -67,6 +72,24 @@ class TestValueTrainHelpers(unittest.TestCase):
 
 class TestValueTrainIntegration(unittest.TestCase):
     """value_train 集成测试"""
+
+    def setUp(self):
+        """把 loss 曲线图输出重定向到临时目录
+
+        为何需要重定向：run_train 内部走 trainer.train_epochs，它在 finally 中
+        无条件调用 _plot_loss_curve，会把曲线图写进 config.mcts.MCTS_LOSS_LOG_DIR
+        （默认为仓库下的 mcts_loss_logs/）。测试不得向真实目录写文件。
+        """
+        import shutil
+
+        import config.mcts as mcts_config
+
+        self._plot_dir = tempfile.mkdtemp()
+        original_plot_dir = mcts_config.MCTS_LOSS_LOG_DIR
+        mcts_config.MCTS_LOSS_LOG_DIR = self._plot_dir
+        # addCleanup 按 LIFO 执行：先恢复模块常量，再删除临时目录
+        self.addCleanup(shutil.rmtree, self._plot_dir, ignore_errors=True)
+        self.addCleanup(setattr, mcts_config, "MCTS_LOSS_LOG_DIR", original_plot_dir)
 
     def test_run_train_end_to_end(self):
         """端到端训练流程"""
