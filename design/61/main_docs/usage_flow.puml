@@ -1,0 +1,75 @@
+@startuml
+!theme plain
+
+' 中文字体配置（Windows）
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam classFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title cnn_v12 — 权重冷启动与按代数加载关键流程
+
+actor User
+
+participant "registry\nget_model / get_trainer" as Reg
+participant "CNNV12Model" as Model
+participant "CNNV12Network" as Net
+database "src/ai/models/cnn_v12\ngenN/" as ModelDir
+
+== 阶段一：手工冷启动（一次性，本次不提供脚本） ==
+
+User -> Model : ① CNNV12Model(fresh=True)
+activate Model
+Model -> Net : ② 构建 128 通道 / 4 残差块网络
+activate Net
+Net --> Model : 随机初始化权重（1,346,541 参数）
+deactivate Net
+
+User -> Model : ③ save(".../cnn_v12/gen1/cnn_v12.pth")
+Model -> ModelDir : ④ 写入 gen1/cnn_v12.pth\n（save 自动创建目录）
+ModelDir --> User : gen1 就绪
+deactivate Model
+
+opt 需要 C++ MCTS 对战
+    User -> ModelDir : ⑤ 写入 gen1/cnn_v12_torchscript.pt\n（由 torch.jit.script 导出，网络可脚本化）
+end
+
+== 阶段二：按代数加载 ==
+
+User -> Reg : ⑥ get_model("cnn_v12.1")
+activate Reg
+Reg -> Reg : ⑦ 解析 spec\n得到 name=cnn_v12, gen=1
+Reg -> Reg : ⑧ 查 MODEL_REGISTRY，命中 cnn_v12 条目
+Reg -> Model : ⑨ CNNV12Model(gen=1)
+activate Model
+Model -> Model : DEFAULT_MODEL_PATH\n改写为 gen1/cnn_v12.pth
+Model -> ModelDir : 读取权重
+alt 权重存在
+    ModelDir --> Model : state_dict
+    Model --> Reg : CNNV12Model(gen=1)
+else 权重缺失
+    ModelDir --> Model : 文件不存在
+    Model --> Reg : FileNotFoundError
+end
+deactivate Model
+Reg --> User : ⑩ CNNV12Model 实例
+deactivate Reg
+
+== 阶段三：推理 ==
+
+User -> Model : ⑪ predict(board_vector 226 维)
+activate Model
+Model -> Net : ⑫ forward((1, 3, 15, 15))
+activate Net
+Net --> Model : (policy, value)
+deactivate Net
+Model --> User : ⑬ ModelPredict(policy_value)\npolicy: 225 维概率, value: [-1, 1]
+deactivate Model
+
+note over User, ModelDir
+  范围说明：本流程不含自动化训练产物生成。
+  cnn_v12 的 gen2 及以后代数，
+  以及 mcts_train_cnn_v11 / offpolicy 两条训练链，
+  均不在意图 61 的交付范围内。
+end note
+
+@enduml

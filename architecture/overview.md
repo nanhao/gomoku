@@ -21,6 +21,8 @@
 
 **C++ MCTS 状态校验与落子合法性修复**：搜索树根一致性校验三分支（一致复用 / 差 1 步且已展开则 promote 复用 / 否则整树重建并计数）、落子空位过滤防御、树规模限幅（详见 [设计 59](../design/59/main_docs/overview.md)）
 
+**CNN v12 轻量模型**：cnn_v11 的等比例瘦身版（128 通道 / 4 残差块，约 135 万参，为 v11 的 16%），仅新增模型本体与 registry 注册，训练/评估闭环未泛化（详见 [设计 61](../design/61/main_docs/overview.md)）
+
 **JSON 动态配置**：C++/Python 共享 `cpp/python/mcts_config.json` 动态加载 MCTS 参数（模拟数、线程数、PUCT 等），修改无需重新编译
 
 ---
@@ -100,7 +102,7 @@ src/
 │   │   ├── searcher.py       PUCT选择·评估·回传·子树复用
 │   │   └── search_logger.py  结构化日志（JSON，支持验收验证）
 │   │
-│   ├── models/            11 种模型实现（每种独立子目录）
+│   ├── models/            14 种模型实现（每种独立子目录）
 │   │   ├── random/      纯随机
 │   │   ├── fc_v1/       全连接（226→1000×5→225）
 │   │   ├── cnn_v1/      卷积 v1（3→32→64→128）
@@ -115,9 +117,12 @@ src/
 │   │   ├── cnn_v10/     价值头残差（仅价值，~10万参）★
 │   │   │   ├── model.py       CNNV10Network + CNNV10Model
 │   │   │   └── trainer.py     CNNV10Trainer（MSE 训练）
-│   │   └── cnn_v11/     双头残差（策略+价值，~843万参）★
-│   │       ├── model.py       CNNV11Network + CNNV11Model
-│   │       └── trainer.py     CNNV11Trainer（MSE+CrossEntropy）
+│   │   ├── cnn_v11/     双头残差（策略+价值，~843万参）★
+│   │   │   ├── model.py       CNNV11Network + CNNV11Model
+│   │   │   └── trainer.py     CNNV11Trainer（MSE+CrossEntropy）
+│   │   └── cnn_v12/     轻量双头残差（策略+价值，~135万参，v11 的 16%）★
+│   │       ├── model.py       CNNV12Network + CNNV12Model
+│   │       └── trainer.py     CNNV12Trainer（MSE+CrossEntropy）
 │   │
 │   ├── game_manager.py    AI 对战管理（PvE + AI内战 + 温度采样编排）
 │   ├── data_recorder.py   对战数据记录
@@ -251,7 +256,7 @@ AlphaGo Zero 风格的蒙特卡洛树搜索，支持 Batch MCTS + Virtual Loss�
 | 引擎 | 适用模型 | 决策方式 | 用途 |
 |------|---------|---------|------|
 | `SinglePolicyAiEngine` | random, fc_v1, cnn_v1~v6 | 模型 softmax → argmax/sampling | 传统 AI、PvE |
-| `PolicyValueAiEngine` | cnn_v7, cnn_v8, cnn_v9, cnn_v11 | MCTS 搜索 → 温度采样 | AlphaGo Zero 训练 |
+| `PolicyValueAiEngine` | cnn_v7, cnn_v8, cnn_v9, cnn_v11, cnn_v12 | MCTS 搜索 → 温度采样 | AlphaGo Zero 训练 |
 | `ValueOnlyAiEngine` | cnn_v10 | 枚举候选+模型评估+softmax → argmax/sampling | 价值头模型对战 |
 
 ### 5. 模型层次结构
@@ -269,12 +274,13 @@ BaseModel (ABC)
     │   └── CNNV8Model              # 双头+FC隐藏层: LogSoftmax(225) + Tanh(1) ★
     │       └── CNNV9Model          # 双头+48通道: LogSoftmax(225) + Tanh(1) ★
     │           └── CNNV11Model     # 双头+256通道+7残差块: LogSoftmax(225) + Tanh(1) ★
+    │               └── CNNV12Model # 双头+128通道+4残差块: LogSoftmax(225) + Tanh(1) ★
     └── CNNV10Model                 # 价值头: Tanh(1) ★
 ```
 
 输入编码差异：
 - **CNN v1~v6**：绝对视角（通道=黑棋/白棋/当前方颜色指示）
-- **CNN v7/v8/v9/v10/v11**：相对视角（通道=我方/对方/我方颜色），保证颜色互换不变性
+- **CNN v7/v8/v9/v10/v11/v12**：相对视角（通道=我方/对方/我方颜色），保证颜色互换不变性
 
 ### 6. 训练体系
 

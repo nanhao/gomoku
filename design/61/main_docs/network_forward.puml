@@ -1,0 +1,75 @@
+@startuml
+!theme plain
+
+' 中文字体配置（Windows）
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam classFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam sequenceMessageFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+
+title cnn_v12 — forward() 前向传播关键流程
+
+participant "调用方\npredict / predict_batch" as Caller
+participant "CNNV12Network" as Net
+participant "Stem\nConv1 + BN1 + ReLU1" as Stem
+participant "ResBlock(128) × 4" as Tower
+participant "策略头" as Policy
+participant "价值头" as Value
+
+== 输入 ==
+
+Caller -> Net : ① forward(x)\nx: (B, 3, 15, 15)
+activate Net
+
+== 共享卷积体 ==
+
+Net -> Stem : ② 传入 x
+activate Stem
+Stem --> Net : (B, 128, 15, 15)
+deactivate Stem
+
+Net -> Tower : ③ 传入 128 通道特征图
+activate Tower
+note right of Tower
+  每个 ResBlock 内部：
+  Conv(128->128, 3x3, p=1) -> BN -> ReLU
+  -> Conv(128->128, 3x3, p=1) -> BN
+  -> 加上 shortcut -> ReLU
+  4 块串联；通道恒 128，空间恒 15x15
+end note
+Tower --> Net : 共享特征 (B, 128, 15, 15)
+deactivate Tower
+
+== 双头分支 ==
+
+Net -> Policy : ④ 传入共享特征
+activate Policy
+note right of Policy
+  conv_out(128->2, 1x1) -> BN(2) -> ReLU
+  -> Flatten(450) -> FC(450->225)
+  -> LogSoftmax
+end note
+Policy --> Net : policy (B, 225)，全部 <= 0
+deactivate Policy
+
+Net -> Value : ⑤ 传入共享特征
+activate Value
+note right of Value
+  value_conv_out(128->1, 1x1) -> BN(1) -> ReLU
+  -> Flatten(225) -> FC(225->256) -> ReLU
+  -> FC(256->1) -> Tanh
+  FC 隐藏层保持 256，不随通道数减半
+end note
+Value --> Net : value (B, 1)，值域 [-1, 1]
+deactivate Value
+
+== 输出 ==
+
+Net --> Caller : ⑥ (policy, value)
+deactivate Net
+
+note over Caller, Value
+  训练侧：CrossEntropy(exp(policy), pi) + MSE(value, z)
+  推理侧：ModelPredict(policy = exp(policy), value = value)
+end note
+
+@enduml
