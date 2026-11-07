@@ -1,0 +1,52 @@
+﻿@startuml
+!theme plain
+
+' 中文字体配置（Windows）
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam classFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam componentFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam componentStyle rectangle
+
+title cnn_v12 — 依赖关系图
+
+package "ai.models.cnn_v12 （本次新增）" #LightGreen {
+  component "model.py\nCNNV12Network / CNNV12Model" as V12Model
+  component "trainer.py\nCNNV12Trainer" as V12Trainer
+  component "__init__.py\n导出三个类" as V12Init
+}
+
+package "ai.models.cnn_v11 （既有，零改动）" {
+  component "model.py\nCNNV11Network / CNNV11Model / ResBlock" as V11Model
+  component "trainer.py\nCNNV11Trainer" as V11Trainer
+}
+
+package "ai 基础设施 （既有，零改动）" {
+  component "base_model.py\nNeuralNetworkModel / ModelPredict\nboard_vector_to_cnn_tensor_relative" as BaseModel
+  component "dual_head_trainer.py\nDualHeadTrainer" as DualHead
+  component "registry.py\nMODEL_REGISTRY" as Registry
+}
+
+V12Model --> V11Model : 继承 CNNV11Model\n复用 ResBlock(channels=128)
+V12Trainer --> V11Trainer : 继承 CNNV11Trainer
+V12Model --> BaseModel : 间接继承 NeuralNetworkModel
+V12Trainer --> DualHead : 间接继承 DualHeadTrainer
+V12Init ..> V12Model : 导入导出
+V12Init ..> V12Trainer : 导入导出
+
+Registry ..> V12Model : 懒加载 model_class_path
+Registry ..> V12Trainer : 懒加载 trainer_class_path
+
+note right of V12Model
+  单向依赖：cnn_v12 -> cnn_v11
+  反向无依赖，cnn_v11 行为逐位不变
+  代价：删除 cnn_v11 包会同时破坏 cnn_v12
+end note
+
+note bottom of Registry
+  仅在 MODEL_REGISTRY 增加一行
+  cnn_v12: RegistryEntry(..., True)
+  get_model / get_trainer / get_highest_gen
+  / list_models_with_full_name 均无需修改
+end note
+
+@enduml

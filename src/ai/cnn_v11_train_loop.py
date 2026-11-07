@@ -185,7 +185,9 @@ class CnnV11TrainLoop:
                     self._checkpoint_dir, "checkpoint.pth"
                 )
                 self._trainer.save_model(checkpoint_pth)
-                print("pth ✓", end=" ", flush=True)
+                # 注：输出串里不要使用对勾/叉号等非 GBK 字符，Windows 中文控制台
+                # 在 pytest -s（关闭捕获）下会抛 UnicodeEncodeError
+                print("pth ok", end=" ", flush=True)
 
                 # 导出 checkpoint TorchScript
                 checkpoint_ts = os.path.join(
@@ -194,7 +196,7 @@ class CnnV11TrainLoop:
                 self._export_torchscript(
                     self._trainer.model.network, checkpoint_ts
                 )
-                print("pt ✓")
+                print("pt ok")
 
                 # 评估第 1 场：vs 当前代历史最强（best）
                 print(f"  评估中 vs best（{self._eval_games} 局）...",
@@ -243,7 +245,7 @@ class CnnV11TrainLoop:
                 )
 
                 # 打印本轮状态
-                status = "✓ 通过" if passed else "✗ 未通过"
+                status = "PASS" if passed else "FAIL"
                 if win_rate_prev is not None:
                     print(f"  {status}  |  vs best: {win_rate_best:.1%}"
                           f"  vs prev: {win_rate_prev:.1%}"

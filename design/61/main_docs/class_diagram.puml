@@ -1,0 +1,103 @@
+﻿@startuml
+!theme plain
+
+' 中文字体配置（Windows）
+skinparam defaultFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam classFontName Microsoft YaHei,SimHei,SimSun,sans-serif
+skinparam classAttributeIconSize 0
+
+title cnn_v12 — 类图（绿色为本次新增）
+
+class "torch.nn.Module" as NNModule
+abstract class BaseModel {
+  +name : str
+  +full_name : str
+  +predict(board_vector : List[int]) : ModelPredict
+  +save(model_path : str) : str
+  +load(model_path : str)
+}
+
+abstract class NeuralNetworkModel {
+  +network : torch.nn.Module
+  +DEFAULT_MODEL_PATH : str
+  +move_to_device(device) : torch.device
+}
+
+class CNNV11Model {
+  +name = "cnn_v11"
+  +predict(board_vector) : ModelPredict
+  +predict_batch(board_vectors) : List[ModelPredict]
+}
+
+class CNNV12Model <<new>> #LightGreen {
+  +DEFAULT_MODEL_PATH : str
+  +name = "cnn_v12"
+}
+
+class CNNV11Network {
+  +forward(x : Tensor) : (policy, value)
+}
+
+class CNNV12Network <<new>> #LightGreen {
+  +CHANNELS : int = 128
+  +NUM_RES_BLOCKS : int = 4
+  +forward(x : Tensor) : (policy, value)
+}
+
+class ResBlock {
+  +__init__(channels : int = 256)
+  +forward(x : Tensor) : Tensor
+}
+
+abstract class DualHeadTrainer {
+  +model_name : str
+  +train_epochs(...) : List[Dict]
+  +save_model(output_path : str) : str
+}
+
+class CNNV11Trainer {
+  +model_name = "cnn_v11"
+}
+
+class CNNV12Trainer <<new>> #LightGreen {
+  +model_name = "cnn_v12"
+}
+
+class ModelPredict {
+  +policy : List[float]
+  +value : float
+  +type : str
+}
+
+' ---------- 继承关系 ----------
+BaseModel <|-- NeuralNetworkModel
+NeuralNetworkModel <|-- CNNV11Model
+CNNV11Model <|-- CNNV12Model
+
+NNModule <|-- CNNV11Network
+NNModule <|-- CNNV12Network
+NNModule <|-- ResBlock
+
+DualHeadTrainer <|-- CNNV11Trainer
+CNNV11Trainer <|-- CNNV12Trainer
+
+' ---------- 组合与使用关系 ----------
+CNNV12Model *-- CNNV12Network : 创建并持有
+CNNV12Network *-- "4" ResBlock : ModuleList
+
+CNNV11Model ..> ModelPredict : 返回
+CNNV12Trainer ..> CNNV12Model : 创建
+
+note bottom of CNNV12Model
+  仅覆盖 3 处：
+  DEFAULT_MODEL_PATH / name / _create_network
+  predict、predict_batch、_prepare_input 全部继承
+end note
+
+note bottom of CNNV12Trainer
+  仅覆盖 2 处：
+  model_name / _create_model
+  train_epochs、save_model、_convert_inputs 全部继承
+end note
+
+@enduml

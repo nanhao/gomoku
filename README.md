@@ -81,7 +81,12 @@ python src/ai/battle.py --ai1 <AI指定> --ai2 <AI指定> [--games <局数>] [�
 | `--temp-side` | 温度采样作用方：`black` / `white` / `both` / `random` | `both` |
 | `--temp-seed` | 温度采样随机种子（用于复现对战结果） | None（不可复现） |
 
-**可用 AI：** `random` / `fc_v1` / `cnn_v1` / `cnn_v2` / `cnn_v3.1` / `cnn_v4.1` / `cnn_v5.1` / `cnn_v6.1` / `cnn_v7.1` / `cnn_v8.1` / `cnn_v9.1` / `cnn_v10.1` / `cnn_v11.1` ...
+**可用 AI：** `random` / `fc_v1` / `cnn_v1` / `cnn_v2` / `cnn_v3.1` / `cnn_v4.1` / `cnn_v5.1` / `cnn_v6.1` / `cnn_v7.1` / `cnn_v8.1` / `cnn_v9.1` / `cnn_v10.1` / `cnn_v11.1` / `cnn_v12.1` ...
+
+> **`cnn_v12` 说明**：`cnn_v12` 是 `cnn_v11` 的轻量版（128 通道 / 4 残差块，约 135 万参，为 v11 的 16%），
+> 已注册到 registry，但仓库**未预置权重**。必须先手工生成
+> `src/ai/models/cnn_v12/gen1/cnn_v12.pth`（详见 [design/61](design/61/main_docs/overview.md)），
+> 否则 `cnn_v12.1` 会抛 `FileNotFoundError`。当前也不支持用 `mcts_train_cnn_v11*.py` 训练它。
 
 > **多代模型说明**：`cnn_v3` 支持多代模型，使用 `模型名.代数` 格式指定（如 `cnn_v3.1`、`cnn_v3.2`），不同代数的模型权重存储在 `src/ai/models/cnn_v3/gen{i}/` 目录下。非多代模型（如 `fc_v1`、`cnn_v1`）直接使用模型名称。
 

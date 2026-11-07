@@ -354,3 +354,8 @@ introduce batch mcts and virtual loss in mcts. But don't use multi thread.
 
 # intention_id=60
 现在 cnn_v11 在评估阶段，会跟当前最强和上一代最强做对弈，效率较低。应该做一个小优化，即先跟当前最强对弈，胜率达到晋升条件之后，再跟上一代最强对弈，两次对弈胜率都达到晋升条件，才最终晋升。
+
+# intention-61
+add a new model cnn_v12. It's:
+- 3 less layers of the redidual tower from cnn_v11 (7 -> 4)
+- half numbers of channels (256 -> 128)
